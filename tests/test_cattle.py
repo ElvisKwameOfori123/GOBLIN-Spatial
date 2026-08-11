@@ -3,12 +3,15 @@
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 from goblin_spatial.cattle import add_cattle_cohorts, build_cattle_panel
 from goblin_spatial.cattle.cohorts import FINAL_21_COHORTS
 from goblin_spatial.cattle.panel import AGE_SEX_COLS
 from goblin_spatial.config import load_config
 
+
+pytestmark = pytest.mark.full_data
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "configs/ireland_2015_2025.yaml"
