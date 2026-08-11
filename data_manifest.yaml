@@ -1,10 +1,11 @@
-manifest_version: "0.2.0"
+manifest_version: "0.2.1"
 release: "ireland-2015-2025-dev"
 status: "development"
 
 # During development the core working inputs are versioned directly in GitHub.
-# If these files become too large, the same manifest can later point to a
-# versioned Zenodo/official-source snapshot without changing the module API.
+# The Git commit itself pins the exact bytes. If these files later move to
+# Zenodo/official URLs, SHA256 checksums will be required for those external
+# downloads without changing the scientific module API.
 
 datasets:
   cso_ed_2020:
@@ -12,7 +13,7 @@ datasets:
     description: "Fixed 2020 CSO Electoral Division agricultural baseline."
     source: "git"
     path: "data/raw/cattle/CSO_ED_2020.csv.xz"
-    sha256: "f7827d7913779e0778a165f112b2bfffc57f3199b41ae731e756432bdeb40214"
+    git_tracked: true
     required: true
 
   cso_cattle_county_2015_2025:
@@ -20,7 +21,7 @@ datasets:
     description: "Annual CSO county cattle controls for 2015-2025."
     source: "git"
     path: "data/raw/cattle/CSO_county_WIDE_2015_2025.csv.xz"
-    sha256: "ed89ecc661d6723da61dd15248e2a64405c7b2902d637012ec17128d49723710"
+    git_tracked: true
     required: true
 
   cso_sheep_county_2015_2025:
@@ -28,7 +29,7 @@ datasets:
     description: "County sheep controls used by the validated hierarchy."
     source: "git"
     path: "data/raw/sheep/CSO_Sheep_County_WIDE_2015_2025.csv.xz"
-    sha256: "d4997cd417eb397b6b9b2670259b15d664961f31d6033eca227035ed535999a9"
+    git_tracked: true
     required: true
 
   cso_sheep_region_2015_2025:
@@ -36,7 +37,7 @@ datasets:
     description: "Regional sheep controls used by the validated hierarchy."
     source: "git"
     path: "data/raw/sheep/CSO_Sheep_Region_WIDE_2015_2025.csv.xz"
-    sha256: "706b4819b08849a1ae671c7cf3bf90aaa63148861f360f3751f7508e47a97f4f"
+    git_tracked: true
     required: true
 
   cso_sheep_source_workbook:
@@ -44,7 +45,7 @@ datasets:
     description: "Combined county and region sheep source/audit workbook."
     source: "git"
     path: "data/raw/sheep/CSO_Sheep_County_and_Region_WIDE_2015_2025.xlsx"
-    sha256: "64d4f36639090a62b95b4cae69fdade6a171f63a7008fb2c8dff02c3ec12dd11"
+    git_tracked: true
     required: false
 
   cso_land_aqa06_2013_2025:
@@ -52,7 +53,7 @@ datasets:
     description: "AQA06 annual regional land-use controls in tidy form."
     source: "git"
     path: "data/raw/land/AQA06_Unpivoted_2013_2025.csv.xz"
-    sha256: "5420d79dcdf08fc6330c71566d8e84a9821385ca272077c67b57b34ac0d8adb9"
+    git_tracked: true
     required: true
 
   goblin_cohort_relationships:
@@ -80,7 +81,7 @@ datasets:
     required: true
 
 # These two validated sheep-composition inputs are the next source files to be
-# added directly under data/raw/sheep during the sheep-module migration.
+# added under data/raw/sheep during the sheep-module migration.
 pending_inputs:
   - "05A_DAFM_Sheep_Breed_Anchors_2016_2020_2022_2025.csv"
   - "05A_DAFM_County_Sheep_Composition_2015_2025.csv"
