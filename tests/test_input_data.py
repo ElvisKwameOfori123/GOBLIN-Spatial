@@ -3,13 +3,15 @@
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.mark.full_data
 def test_cso_ed_2020_contract() -> None:
-    path = ROOT / "data/raw/cattle/CSO_ED_2020.csv.xz"
+    path = ROOT / "data/raw/cattle/CSO_ED_2020.csv"
     frame = pd.read_csv(path)
 
     assert len(frame) == 2857
@@ -92,8 +94,9 @@ def test_dafm_sheep_breed_anchor_contract() -> None:
     ).all()
 
 
+@pytest.mark.full_data
 def test_land_control_contract() -> None:
-    frame = pd.read_csv(ROOT / "data/raw/land/AQA06_Unpivoted_2013_2025.csv.xz")
+    frame = pd.read_csv(ROOT / "data/raw/land/AQA06_Unpivoted_2013_2025.csv")
 
     assert set(range(2013, 2026)).issubset(set(frame["Year"].unique()))
     required_land_types = {
