@@ -35,6 +35,12 @@ def merge_livestock(
     Cattle supplies the shared ED/static baseline context. If a sheep field also
     exists on the cattle-side copy of the 2020 baseline, the sheep module is
     authoritative and replaces that stale/static field.
+
+    ``LSU`` is intentionally removed here. In the historical ED source it is a
+    static 2020 context field copied into annual cattle rows, whereas the frozen
+    validated final 2015-2025 master does not treat it as an annual reconstructed
+    indicator. A future pressure/LSU module can calculate scenario-consistent LSU
+    explicitly rather than carrying the 2020 value through time.
     """
 
     for label, frame in (("cattle", cattle), ("sheep", sheep)):
@@ -50,7 +56,9 @@ def merge_livestock(
         set(cattle.columns).intersection(sheep.columns) - set(MERGE_KEYS)
     )
     replace_from_sheep = sorted(overlap - SHARED_IDENTIFIERS)
-    cattle_base = cattle.drop(columns=replace_from_sheep, errors="ignore")
+    cattle_base = cattle.drop(
+        columns=[*replace_from_sheep, "LSU"], errors="ignore"
+    )
     sheep_keep = [
         column
         for column in sheep.columns
@@ -68,6 +76,8 @@ def merge_livestock(
         raise AssertionError(
             "cattle/sheep merge did not preserve the complete panel"
         )
+    if "LSU" in merged.columns:
+        raise AssertionError("stale baseline LSU survived livestock merge")
     return merged
 
 
