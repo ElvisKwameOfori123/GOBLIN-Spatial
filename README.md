@@ -1,12 +1,49 @@
 # GOBLIN-Spatial
 
-**A constraint-preserving framework for spatialising national livestock and land-use pathways.**
+**A modular, constraint-preserving framework for translating national GOBLIN livestock and land-use pathways to fine-scale spatial data.**
 
-GOBLIN-Spatial is a reproducible research workflow that expresses official Irish agricultural statistics at Electoral Division (ED) level in the GOBLIN livestock cohort structure while preserving the underlying official population and land controls.
+GOBLIN-Spatial extends the national GOBLIN modelling approach by providing a reproducible way to represent livestock, land use and selected farm structural indicators at Electoral Division (ED) level in Ireland. Rather than replacing the national model, it provides the spatial layer needed to examine where national livestock and land-use pathways occur.
 
-## Current release scope
+The package is designed so that researchers can regenerate the same spatial dataset from the underlying inputs, update individual data sources as new years become available, improve individual modules independently, and reproduce the final validated outputs.
 
-The validated baseline covers:
+## Why GOBLIN-Spatial?
+
+GOBLIN provides a national AFOLU modelling framework and a biologically detailed livestock cohort structure. National results are essential for maintaining internally consistent agricultural and land-use pathways, but national totals alone cannot show how change is distributed across local agricultural areas.
+
+GOBLIN-Spatial addresses that gap by translating national and higher-level official controls to **2,857 Electoral Divisions**, a fine-grained local administrative geography used here as the spatial unit for the Irish agricultural application.
+
+The framework therefore links:
+
+```text
+National GOBLIN / official agricultural controls
+                    |
+                    v
+      Constraint-preserving reconciliation
+                    |
+                    v
+       Electoral Division representation
+                    |
+                    v
+ Livestock cohorts + land + farm structure
+```
+
+The result is a spatial representation that remains consistent with the national and higher-level statistics from which it is derived.
+
+## Core principle
+
+GOBLIN-Spatial separates three roles:
+
+1. **Fine-scale official statistics determine spatial pattern.**
+2. **Coarser official annual statistics determine temporal totals and composition.**
+3. **The GOBLIN cohort structure determines biological livestock disaggregation.**
+
+These roles are deliberately kept separate.
+
+The package does **not** run an independent national herd model inside every ED. Instead, it takes the official ED livestock population as the spatial population to be represented and disaggregates that fixed population into the GOBLIN cohort structure while preserving ED, county, regional and national accounting constraints.
+
+## Current Irish implementation
+
+The validated baseline currently covers:
 
 - **2,857 Electoral Divisions**
 - **2015–2025**
@@ -14,23 +51,144 @@ The validated baseline covers:
 - **21 GOBLIN cattle cohorts**
 - **10 GOBLIN sheep cohorts**
 - annual cattle and sheep populations
-- farm structure indicators
-- holder-age indicators
-- annual land-use indicators
+- cattle age-sex structure
+- sheep demographic and type structure
+- agricultural holdings
+- average holding size
+- mean and median holder age
+- farmed area
+- grassland
+- cereals
+- other crop area
 
-The **2020 Census of Agriculture ED dataset is the fixed fine-scale spatial anchor**. Annual official statistics provide temporal controls, while the GOBLIN cohort structure provides biological disaggregation.
+The **2020 Census of Agriculture ED dataset is the fixed fine-scale spatial anchor**. Annual official statistics provide temporal controls around that baseline, while the GOBLIN cohort structure provides biological disaggregation.
 
-## Core methodological rule
+## Package objective
 
-GOBLIN-Spatial separates three roles:
+GOBLIN-Spatial is being developed as a reusable research software and data-generation package, not simply as a collection of analysis scripts.
 
-1. **Fine-scale official statistics determine geography.**
-2. **Coarser official annual statistics determine temporal totals and composition.**
-3. **GOBLIN determines biological cohort structure.**
+A user should ultimately be able to:
 
-The workflow does not run a national herd model independently inside each ED. Instead, the already-controlled ED livestock population is expressed in the GOBLIN cohort structure while preserving ED, county and national accounting constraints.
+```bash
+pip install -e .
+goblin-spatial build --config configs/ireland_2015_2025.yaml
+```
 
-## Final validated data product
+and regenerate the validated spatial dataset from the required input data.
+
+The modular structure will allow, for example:
+
+- a new year of CSO cattle data to be added without rewriting the cohort module;
+- sheep composition methods to be improved independently;
+- new land controls to be incorporated without changing livestock accounting;
+- additional socioeconomic indicators to be added as separate modules;
+- validation rules to run automatically after every build;
+- the Irish application to remain one implementation of a broader national-to-local spatialisation framework.
+
+## Planned package architecture
+
+```text
+GOBLIN-Spatial/
+├── pyproject.toml
+├── README.md
+├── CITATION.cff
+├── LICENSE
+│
+├── src/
+│   └── goblin_spatial/
+│       ├── io/
+│       ├── reconciliation/
+│       ├── cattle/
+│       ├── sheep/
+│       ├── cohorts/
+│       ├── land/
+│       ├── socioeconomic/
+│       ├── validation/
+│       ├── export/
+│       └── pipeline.py
+│
+├── configs/
+│   └── ireland_2015_2025.yaml
+│
+├── data/
+│   ├── raw/
+│   ├── controls/
+│   ├── interim/
+│   └── processed/
+│
+├── tests/
+├── examples/
+└── docs/
+```
+
+Raw inputs will be retained separately from generated data. Where redistribution is permitted, required CSV/input files can be stored with the package. Where redistribution is restricted, the repository will document how to obtain the source data and where the package expects them to be placed.
+
+## Reconciliation framework
+
+The package uses hierarchical reconciliation so that fine-scale spatial weights and higher-level official controls remain consistent.
+
+Reusable reconciliation tools include:
+
+- proportional allocation;
+- Hamilton / largest-remainder integer allocation;
+- iterative proportional fitting where row and column controls must both be satisfied;
+- structural-zero preservation;
+- exact accounting validation.
+
+These methods are shared across livestock, land and farm-structure modules rather than duplicated in separate scripts.
+
+## Livestock representation
+
+### Cattle
+
+The final cattle population is represented using **21 GOBLIN cattle cohorts**. GOBLIN cohort relationships determine DxD, DxB and BxB biological composition, while the CSO ED population remains the controlling spatial population.
+
+For every ED-year:
+
+```text
+sum(21 GOBLIN cattle cohorts) = TOTAL_CATTLE
+```
+
+### Sheep
+
+The sheep population is reconciled through a region-to-county-to-ED hierarchy and represented using **10 GOBLIN sheep cohorts**.
+
+For every ED-year:
+
+```text
+sum(10 GOBLIN sheep cohorts) = TOTAL_SHEEP
+```
+
+## Land and farm structure
+
+The spatial dataset also contains annual farmed area, grassland, cereals and other crop area, together with agricultural holdings, average holding size and holder-age indicators.
+
+Land accounting satisfies for every ED-year:
+
+```text
+AREA_FARMED = ALL_GRASSLAND + TOTAL_CEREALS + OTHER_CROPS_HA
+```
+
+with no negative land components.
+
+## 2020 spatial anchor
+
+The 2020 ED values are locked as the baseline spatial representation. Higher-level annual statistics are used as temporal-change controls rather than replacement ED totals.
+
+The protected 2020 variables include:
+
+- `AVERAGE_SIZE_OF_HOLDINGS`
+- `AGRICULTURAL_HOLDINGS`
+- `AVERAGE_AGE_OF_HOLDER`
+- `MEDIAN_AGE_OF_HOLDER`
+- `AREA_FARMED`
+- `ALL_GRASSLAND`
+- `TOTAL_CEREALS`
+- `OTHER_CROPS_HA`
+
+This distinction is important: non-2020 ED values are reconstructed annual spatial estimates constrained by official statistics, while the 2020 ED baseline is directly retained.
+
+## Current validated output
 
 The current workflow produces:
 
@@ -45,112 +203,42 @@ with four clean sheets:
 | `CSO_2020` | 2020 | Exact 2020 CSO ED snapshot |
 | `GOBLIN_2020` | 2020 | Exact 2020 GOBLIN cohort snapshot |
 
-The clean workbook contains substantive indicators only. Model diagnostics, reconciliation flags, intermediate targets and provenance-control fields are retained in the reproducible workflow rather than the presentation sheets.
+The presentation workbook contains substantive indicators only. Diagnostics, reconciliation controls and validation information remain part of the reproducible build process.
 
-## Pipeline
+## Validation philosophy
 
-```text
-Official CSO / DAFM / GOBLIN inputs
-        |
-        v
-Script 01  2020 cattle reconciliation and age-sex structure
-        |
-Script 02  Annual ED cattle panel, 2015–2025
-        |
-Script 03A Region-to-county sheep controls
-        |
-Script 03B County-to-ED sheep panel
-        |
-Script 04  Cattle + sheep ED livestock master
-        |
-Script 05A DAFM sheep composition controls
-        |
-Script 05B ED sheep breed/type enrichment
-        |
-Script 05C 21 GOBLIN cattle cohorts
-        |
-Script 05D 10 GOBLIN sheep cohorts / final 31 cohorts
-        |
-Script 06  Annual land + farm-structure + holder-age enrichment
-        |
-Script 07  Final clean four-sheet workbook
-```
+A build is considered valid only if the package reproduces the accounting constraints of the validated reference workflow.
 
-## Accounting constraints
-
-For every ED-year, the final cattle cohorts satisfy:
+Core tests include:
 
 ```text
-sum(21 GOBLIN cattle cohorts) = TOTAL_CATTLE
-```
-
-and the sheep cohorts satisfy:
-
-```text
-sum(10 GOBLIN sheep cohorts) = TOTAL_SHEEP
-```
-
-Land accounting satisfies:
-
-```text
+2020 final values = 2020 baseline values exactly
+sum(21 cattle cohorts) = TOTAL_CATTLE
+sum(10 sheep cohorts) = TOTAL_SHEEP
 AREA_FARMED = ALL_GRASSLAND + TOTAL_CEREALS + OTHER_CROPS_HA
+no negative land components
+no unintended change to official livestock controls
 ```
 
-with no negative land components.
-
-## 2020 anchor
-
-The 2020 ED values are locked. Annual controls are used to reconstruct change around this baseline rather than overwrite it.
-
-This applies to:
-
-- `AVERAGE_SIZE_OF_HOLDINGS`
-- `AGRICULTURAL_HOLDINGS`
-- `AVERAGE_AGE_OF_HOLDER`
-- `MEDIAN_AGE_OF_HOLDER`
-- `AREA_FARMED`
-- `ALL_GRASSLAND`
-- `TOTAL_CEREALS`
-- `OTHER_CROPS_HA`
-
-## Repository structure
-
-```text
-GOBLIN-Spatial/
-├── README.md
-├── requirements.txt
-├── .gitignore
-├── scripts/
-├── data/
-│   ├── controls/
-│   └── README.md
-└── docs/
-    ├── methodology.md
-    ├── data_dictionary.md
-    └── validation.md
-```
-
-Large raw-source files and generated outputs are intentionally excluded from normal Git history. Release-ready datasets can be distributed separately through GitHub Releases and/or an archival repository such as Zenodo.
+The modular package will be regression-tested against the already validated reference pipeline before a stable release is declared.
 
 ## Data sources
 
-The workflow integrates official and model-derived information including:
+The current Irish implementation integrates information from:
 
-- Central Statistics Office Ireland (CSO), Census of Agriculture and agricultural statistical tables
-- CSO annual cattle, sheep and land-use controls
-- Department of Agriculture, Food and the Marine (DAFM) sheep composition information
-- GOBLIN cohort structure for biological livestock disaggregation
+- Central Statistics Office Ireland (CSO), including Census of Agriculture and annual agricultural statistics;
+- Department of Agriculture, Food and the Marine (DAFM) sheep composition information;
+- the GOBLIN cohort structure and associated biological relationships.
 
-Detailed source attribution and variable provenance will be documented in `docs/methodology.md` and `docs/data_dictionary.md`.
+Detailed source attribution, redistribution status and variable provenance will be maintained in the documentation and data-control files.
 
 ## Status
 
-**Validated baseline workflow complete for 2015–2025.**
+**Validated Irish baseline complete for 2015–2025. Modular package development in progress.**
 
-The next repository step is to migrate the validated scripts to portable relative paths without changing any calculations or outputs.
+The current development task is to refactor the validated workflow into reusable package modules while requiring the modular implementation to reproduce the existing validated outputs.
 
 ## Author
 
-**Elvis Kwame Ofori**
-
+**Elvis Kwame Ofori**  
 University of Galway
