@@ -69,6 +69,29 @@ def test_sheep_control_contract() -> None:
     assert set(region["Year"].unique()) == set(range(2015, 2026))
 
 
+def test_dafm_sheep_breed_anchor_contract() -> None:
+    path = ROOT / "data/raw/sheep/DAFM_Sheep_Breed_Anchors_2016_2020_2022_2025.zip"
+    frame = pd.read_csv(path)
+
+    assert len(frame) == 26 * 4 * 3
+    assert frame["County"].nunique() == 26
+    assert set(frame["YEAR"].unique()) == {2016, 2020, 2022, 2025}
+    assert set(frame["CATEGORY"].unique()) == {"EWES", "RAMS", "OTHER"}
+
+    count_columns = [
+        "MOUNTAIN_COUNT",
+        "MOUNTAIN_CROSS_COUNT",
+        "LOWLAND_COUNT",
+        "LOWLAND_CROSS_COUNT",
+    ]
+    assert frame[count_columns].notna().all().all()
+    assert (frame[count_columns] >= 0).all().all()
+    assert (
+        frame[count_columns].sum(axis=1).astype(int)
+        == frame["TOTAL_DAFM"].astype(int)
+    ).all()
+
+
 def test_land_control_contract() -> None:
     frame = pd.read_csv(ROOT / "data/raw/land/AQA06_Unpivoted_2013_2025.csv.xz")
 
