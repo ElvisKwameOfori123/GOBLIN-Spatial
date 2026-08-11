@@ -27,6 +27,14 @@ SHARED_IDENTIFIERS = {
 }
 
 
+def _canonical_order(frame: pd.DataFrame) -> pd.DataFrame:
+    """Return the stable YEAR-CSOED order used by the frozen reference pipeline."""
+
+    return frame.sort_values(
+        ["YEAR", "CSOED"], kind="stable"
+    ).reset_index(drop=True)
+
+
 def merge_livestock(
     cattle: pd.DataFrame, sheep: pd.DataFrame
 ) -> pd.DataFrame:
@@ -42,6 +50,9 @@ def merge_livestock(
     indicator. A future pressure/LSU module can calculate scenario-consistent LSU
     explicitly rather than carrying the 2020 value through time.
     """
+
+    cattle = _canonical_order(cattle)
+    sheep = _canonical_order(sheep)
 
     for label, frame in (("cattle", cattle), ("sheep", sheep)):
         missing = [key for key in MERGE_KEYS if key not in frame.columns]
@@ -70,6 +81,7 @@ def merge_livestock(
         sheep[sheep_keep],
         on=MERGE_KEYS,
         how="inner",
+        sort=False,
         validate="one_to_one",
     )
     if len(merged) != len(cattle) or len(merged) != len(sheep):
@@ -78,6 +90,8 @@ def merge_livestock(
         )
     if "LSU" in merged.columns:
         raise AssertionError("stale baseline LSU survived livestock merge")
+
+    merged = _canonical_order(merged)
     return merged
 
 
@@ -95,6 +109,10 @@ def build(config: str | Path | SpatialConfig) -> pd.DataFrame:
     One call executes cattle, sheep, livestock merge, land, SE, validation and
     final export. The scientific modules remain callable independently for
     development, while normal users need only ``goblin-spatial build``.
+
+    Row ordering is aligned deliberately with the frozen reference stages.
+    This matters only for deterministic largest-remainder tie-breaking, but it
+    ensures exact ED-level regression rather than merely exact aggregate totals.
     """
 
     cfg = (
@@ -106,11 +124,22 @@ def build(config: str | Path | SpatialConfig) -> pd.DataFrame:
     cfg.interim_dir.mkdir(parents=True, exist_ok=True)
     cfg.processed_dir.mkdir(parents=True, exist_ok=True)
 
-    cattle = add_cattle_cohorts(build_cattle_panel(cfg), cfg)
-    sheep = add_sheep_cohorts(build_sheep_panel(cfg), cfg)
+    # Script 2 order is retained while cattle cohort allocation is performed;
+    # frozen Script 5C then canonicalised the completed cattle output.
+    cattle_panel = build_cattle_panel(cfg)
+    cattle = add_cattle_cohorts(cattle_panel, cfg)
+    cattle = _canonical_order(cattle)
+
+    # Frozen Script 3B sorted YEAR-CSOED before 5A/5B/5D enrichment. Apply the
+    # same canonical order before sheep breed and GOBLIN cohort allocation.
+    sheep_panel = _canonical_order(build_sheep_panel(cfg))
+    sheep = add_sheep_cohorts(sheep_panel, cfg)
+    sheep = _canonical_order(sheep)
+
     master = merge_livestock(cattle, sheep)
     master = add_land(master, cfg)
     master = add_se(master, cfg)
+    master = _canonical_order(master)
 
     validation = validate_master(master, cfg)
 
