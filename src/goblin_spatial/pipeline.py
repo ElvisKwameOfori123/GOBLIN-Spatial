@@ -8,93 +8,121 @@ import pandas as pd
 
 from goblin_spatial.cattle import add_cattle_cohorts, build_cattle_panel
 from goblin_spatial.config import SpatialConfig, load_config
+from goblin_spatial.export import export_clean_workbook
 from goblin_spatial.land import add_land
 from goblin_spatial.se import add_se
 from goblin_spatial.sheep import add_sheep_cohorts, build_sheep_panel
+from goblin_spatial.validation import validate_master
 
 
 MERGE_KEYS = ["YEAR", "CSOED"]
+SHARED_IDENTIFIERS = {
+    "ELECTORAL_DIVISIONS",
+    "ED",
+    "County",
+    "EDID",
+    "CSOED_RAW",
+    "EDNAME",
+    "COUNTYNAME",
+}
 
 
-def merge_livestock(cattle: pd.DataFrame, sheep: pd.DataFrame) -> pd.DataFrame:
-    """Merge independently constructed cattle and sheep ED panels."""
+def merge_livestock(
+    cattle: pd.DataFrame, sheep: pd.DataFrame
+) -> pd.DataFrame:
+    """Merge independently constructed cattle and sheep ED panels.
+
+    Cattle supplies the shared ED/static baseline context. If a sheep field also
+    exists on the cattle-side copy of the 2020 baseline, the sheep module is
+    authoritative and replaces that stale/static field.
+    """
 
     for label, frame in (("cattle", cattle), ("sheep", sheep)):
         missing = [key for key in MERGE_KEYS if key not in frame.columns]
         if missing:
             raise ValueError(f"{label} panel missing merge keys: {missing}")
         if frame[MERGE_KEYS].duplicated().any():
-            raise ValueError(f"{label} panel contains duplicate YEAR-CSOED rows")
+            raise ValueError(
+                f"{label} panel contains duplicate YEAR-CSOED rows"
+            )
 
-    overlapping = [
-        column
-        for column in cattle.columns
-        if column in sheep.columns and column not in MERGE_KEYS
-    ]
-
-    # Shared identifiers are retained from cattle. Sheep-specific substantive
-    # indicators are appended. Conflicting substantive column names are not
-    # silently accepted.
-    allowed_shared = {
-        "ELECTORAL_DIVISIONS",
-        "ED",
-        "County",
-        "EDID",
-        "CSOED_RAW",
-        "EDNAME",
-        "COUNTYNAME",
-    }
-    conflicts = [column for column in overlapping if column not in allowed_shared]
-    if conflicts:
-        raise ValueError(f"cattle/sheep merge has unexpected shared columns: {conflicts}")
-
+    overlap = (
+        set(cattle.columns).intersection(sheep.columns) - set(MERGE_KEYS)
+    )
+    replace_from_sheep = sorted(overlap - SHARED_IDENTIFIERS)
+    cattle_base = cattle.drop(columns=replace_from_sheep, errors="ignore")
     sheep_keep = [
         column
         for column in sheep.columns
-        if column in MERGE_KEYS or column not in overlapping
+        if column in MERGE_KEYS or column not in SHARED_IDENTIFIERS
     ]
+    sheep_keep = list(dict.fromkeys(sheep_keep))
 
-    merged = cattle.merge(
+    merged = cattle_base.merge(
         sheep[sheep_keep],
         on=MERGE_KEYS,
         how="inner",
         validate="one_to_one",
     )
-
     if len(merged) != len(cattle) or len(merged) != len(sheep):
-        raise AssertionError("cattle/sheep merge did not preserve the complete panel")
-
+        raise AssertionError(
+            "cattle/sheep merge did not preserve the complete panel"
+        )
     return merged
+
+
+def _output_path(
+    config: SpatialConfig, key: str, default: str
+) -> Path:
+    value = config.raw.get("outputs", {}).get(key, default)
+    path = Path(value)
+    return path if path.is_absolute() else config.project_root / path
 
 
 def build(config: str | Path | SpatialConfig) -> pd.DataFrame:
     """Run the complete GOBLIN-Spatial data-generation workflow.
 
-    One call executes the four scientific modules in dependency order:
-
-    1. cattle
-    2. sheep
-    3. land
-    4. SE (social-economic)
-
-    Cattle and sheep are developed independently, then merged. Land and SE are
-    added to the merged livestock master. Each module is responsible for its
-    own accounting constraints and may also be run independently by developers.
+    One call executes cattle, sheep, livestock merge, land, SE, validation and
+    final export. The scientific modules remain callable independently for
+    development, while normal users need only ``goblin-spatial build``.
     """
 
-    cfg = load_config(config) if not isinstance(config, SpatialConfig) else config
+    cfg = (
+        load_config(config)
+        if not isinstance(config, SpatialConfig)
+        else config
+    )
 
     cfg.interim_dir.mkdir(parents=True, exist_ok=True)
     cfg.processed_dir.mkdir(parents=True, exist_ok=True)
 
-    cattle = build_cattle_panel(cfg)
-    cattle = add_cattle_cohorts(cattle, cfg)
-
-    sheep = build_sheep_panel(cfg)
-    sheep = add_sheep_cohorts(sheep, cfg)
-
+    cattle = add_cattle_cohorts(build_cattle_panel(cfg), cfg)
+    sheep = add_sheep_cohorts(build_sheep_panel(cfg), cfg)
     master = merge_livestock(cattle, sheep)
     master = add_land(master, cfg)
     master = add_se(master, cfg)
+
+    validation = validate_master(master, cfg)
+
+    master_path = _output_path(
+        cfg,
+        "enriched_master",
+        "data/processed/goblin_spatial_master_2015_2025.csv",
+    )
+    workbook_path = _output_path(
+        cfg,
+        "clean_workbook",
+        "data/processed/GOBLIN_Spatial_Final_Clean_Data_2015_2025.xlsx",
+    )
+    master_path.parent.mkdir(parents=True, exist_ok=True)
+    master.to_csv(master_path, index=False)
+    export_clean_workbook(master, workbook_path, base_year=cfg.base_year)
+
+    validation_path = cfg.processed_dir / "validation_summary.csv"
+    pd.DataFrame([validation]).to_csv(validation_path, index=False)
+
+    print(f"Validated master: {master_path}")
+    print(f"Clean workbook: {workbook_path}")
+    print(f"Validation summary: {validation_path}")
 
     return master
