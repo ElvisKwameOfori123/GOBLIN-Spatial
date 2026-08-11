@@ -11,15 +11,20 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Large raw data and generated outputs
-outputs/
+# Downloaded, intermediate and generated data
 data/raw/
+data/interim/
+data/processed/
+outputs/
+
+# Large/binary archives and spreadsheets
 *.zip
 *.parquet
-
-# Generated Excel workbooks
 *.xlsx
 *.xls
 
-# Keep small control files under data/controls/
+# Small reproducibility controls and tiny test fixtures remain versioned
+!data/controls/
 !data/controls/*.csv
+!tests/data/
+!tests/data/*.csv
