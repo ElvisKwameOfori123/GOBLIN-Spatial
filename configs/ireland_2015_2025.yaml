@@ -1,0 +1,31 @@
+study:
+  name: Ireland ED baseline
+  country: Ireland
+  spatial_unit: Electoral Division
+  start_year: 2015
+  end_year: 2025
+  base_year: 2020
+  expected_eds: 2857
+
+paths:
+  raw: data/raw
+  controls: data/controls
+  interim: data/interim
+  processed: data/processed
+
+files:
+  cso_ed_2020: data/raw/cso/CSO_ED_2020.csv
+  cso_cattle_county: data/raw/cso/CSO_county_WIDE_2015_2025.csv
+  cso_sheep: data/raw/cso/CSO_Sheep_County_and_Region_WIDE_2015_2025.xlsx
+  cso_land: data/raw/cso/AQA06.xlsx
+  goblin_cohorts: data/raw/goblin/cohort2012-2020.csv
+  sheep_breed_anchors: data/controls/05A_DAFM_Sheep_Breed_Anchors_2016_2020_2022_2025.csv
+  se_controls: data/controls/06_SE_Data_Controls.csv
+
+outputs:
+  cattle_panel: data/interim/cattle_ed_2015_2025.csv
+  sheep_panel: data/interim/sheep_ed_2015_2025.csv
+  livestock_master: data/interim/livestock_ed_2015_2025.csv
+  cohort_master: data/interim/goblin_31_cohort_master_2015_2025.csv
+  enriched_master: data/processed/goblin_spatial_master_2015_2025.csv
+  clean_workbook: data/processed/GOBLIN_Spatial_Final_Clean_Data_2015_2025.xlsx
