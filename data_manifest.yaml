@@ -1,4 +1,4 @@
-manifest_version: "0.3.0"
+manifest_version: "0.3.1"
 release: "ireland-2015-2025-dev"
 status: "development"
 
@@ -64,9 +64,9 @@ datasets:
     description: "AQA06 annual regional land-use controls in tidy form."
     source: "external"
     destination: "data/raw/land/AQA06_Unpivoted_2013_2025.csv"
-    sha256: "df8a147dc2aa07815bd4bf68a33d29798d972388f938df9c69c0eec9fa5f8719"
+    sha256: "873de22c6215847d4a39654c62ac9aff77e96c195dcfedd6609222a4d7124545"
     required: true
-    note: "Full-data input. A Zenodo/official URL will be added before public release."
+    note: "Full-data input generated directly from the AQA06 Unpivoted sheet; row ordering does not affect the land algorithm. A Zenodo/official URL will be added before public release."
 
   goblin_cohort_relationships:
     module: [cattle, sheep]
