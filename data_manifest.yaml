@@ -1,22 +1,24 @@
-manifest_version: "0.3.1"
+manifest_version: "0.3.2"
 release: "ireland-2015-2025-dev"
 status: "development"
 
 # Development rule:
-# - compact, auditable inputs are versioned directly in GitHub;
-# - the two larger full-data inputs are kept external and pinned by SHA256.
-# Their URLs can be added after the development bundle is published on Zenodo
-# without changing any cattle, sheep, land or SE module code.
+# - the complete Ireland 2015-2025 baseline input bundle is currently
+#   versioned directly in GitHub for simple, reproducible development;
+# - SHA256 checksums pin the two principal full-data CSV inputs;
+# - before a public v1.0 release, large/raw source files can be moved to
+#   Zenodo or official download endpoints without changing the scientific
+#   cattle, sheep, land or SE module logic.
 
 datasets:
   cso_ed_2020:
     module: [cattle, land, se]
     description: "Fixed 2020 CSO Electoral Division agricultural baseline."
-    source: "external"
-    destination: "data/raw/cattle/CSO_ED_2020.csv"
+    source: "git"
+    path: "data/raw/cattle/CSO_ED_2020.csv"
+    git_tracked: true
     sha256: "bc93d1f9747809aed79ea7e7160f5853265d73e5056cceaae0353ee2fc63a657"
     required: true
-    note: "Full-data input. A Zenodo/official URL will be added before public release."
 
   cso_cattle_county_2015_2025:
     module: [cattle]
@@ -62,11 +64,12 @@ datasets:
   cso_land_aqa06_2013_2025:
     module: [land]
     description: "AQA06 annual regional land-use controls in tidy form."
-    source: "external"
-    destination: "data/raw/land/AQA06_Unpivoted_2013_2025.csv"
+    source: "git"
+    path: "data/raw/land/AQA06_Unpivoted_2013_2025.csv"
+    git_tracked: true
     sha256: "873de22c6215847d4a39654c62ac9aff77e96c195dcfedd6609222a4d7124545"
     required: true
-    note: "Full-data input generated directly from the AQA06 Unpivoted sheet; row ordering does not affect the land algorithm. A Zenodo/official URL will be added before public release."
+    note: "Generated directly from the AQA06 Unpivoted sheet; row ordering does not affect the land algorithm."
 
   goblin_cohort_relationships:
     module: [cattle, sheep]
