@@ -1,9 +1,8 @@
-"""Fetch and verify the datasets required by GOBLIN-Spatial.
+"""Locate, fetch and verify datasets required by GOBLIN-Spatial.
 
-The manifest is the reproducibility contract between the GitHub software
-package and external research-data records such as Zenodo. Small controls can
-remain local to the repository, while raw/binary datasets are downloaded into
-``data/raw`` and checked against pinned SHA256 hashes.
+During package development the core working inputs can be tracked directly in
+Git. The same manifest also supports external sources later if the data bundle
+moves to Zenodo or stable official download URLs.
 """
 
 from __future__ import annotations
@@ -14,6 +13,9 @@ from typing import Any
 
 import pooch
 import yaml
+
+
+LOCAL_SOURCES = {"git", "local"}
 
 
 def sha256_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
@@ -27,7 +29,7 @@ def sha256_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
 
 
 def load_manifest(path: str | Path = "data_manifest.yaml") -> tuple[Path, dict[str, Any]]:
-    """Load a data manifest and return ``(project_root, manifest)``."""
+    """Load the data manifest and return ``(project_root, manifest)``."""
 
     manifest_path = Path(path).expanduser().resolve()
     with manifest_path.open("r", encoding="utf-8") as handle:
@@ -40,10 +42,12 @@ def load_manifest(path: str | Path = "data_manifest.yaml") -> tuple[Path, dict[s
 
 
 def _resolved_path(project_root: Path, info: dict[str, Any]) -> Path:
-    if info.get("source") == "local":
+    source = str(info.get("source", "local")).lower()
+
+    if source in LOCAL_SOURCES:
         value = info.get("path")
         if not value:
-            raise ValueError("local dataset entry is missing 'path'")
+            raise ValueError(f"{source} dataset entry is missing 'path'")
     else:
         value = info.get("destination")
         if not value:
@@ -53,19 +57,26 @@ def _resolved_path(project_root: Path, info: dict[str, Any]) -> Path:
     return path if path.is_absolute() else project_root / path
 
 
-def _verify_one(name: str, path: Path, expected_sha256: str | None) -> tuple[bool, str]:
+def _verify_one(
+    name: str,
+    path: Path,
+    expected_sha256: str | None,
+    *,
+    git_tracked: bool = False,
+) -> tuple[bool, str]:
     if not path.exists():
         return False, f"MISSING  {name}: {path}"
 
+    # Small controls already receive exact versioning from Git. A SHA256 may
+    # still be supplied, but is not mandatory when git_tracked is true.
     if not expected_sha256:
+        if git_tracked:
+            return True, f"OK       {name}: {path} [Git-tracked]"
         return False, f"NO HASH  {name}: manifest has no SHA256"
 
     actual = sha256_file(path)
     if actual.lower() != expected_sha256.lower():
-        return (
-            False,
-            f"BAD HASH {name}: expected {expected_sha256}, got {actual}",
-        )
+        return False, f"BAD HASH {name}: expected {expected_sha256}, got {actual}"
 
     return True, f"OK       {name}: {path}"
 
@@ -75,27 +86,10 @@ def fetch_data(
     *,
     verify_only: bool = False,
 ) -> dict[str, Path]:
-    """Fetch or verify all datasets declared in the manifest.
+    """Locate, download where necessary, and verify declared datasets.
 
-    Parameters
-    ----------
-    manifest_path:
-        Path to ``data_manifest.yaml``.
-    verify_only:
-        If ``True``, never download. Existing local files are checked against
-        the pinned SHA256 values and missing required inputs cause failure.
-
-    Returns
-    -------
-    dict
-        Mapping from dataset key to the resolved local file path.
-
-    Notes
-    -----
-    During development, an external entry may have ``url: null`` while the
-    first Zenodo record is being prepared. In that case the canonical file can
-    be placed manually at its declared destination and ``--verify-only`` can be
-    used to prove that it is the expected file.
+    Git-tracked and local inputs are simply checked in place. External entries
+    can be downloaded with ``pooch`` when a URL and checksum are supplied.
     """
 
     project_root, manifest = load_manifest(manifest_path)
@@ -106,15 +100,23 @@ def fetch_data(
     for name, info in datasets.items():
         path = _resolved_path(project_root, info)
         resolved[name] = path
+
+        source = str(info.get("source", "local")).lower()
         expected = info.get("sha256")
         required = bool(info.get("required", True))
+        git_tracked = bool(info.get("git_tracked", source == "git"))
 
-        ok, message = _verify_one(name, path, expected)
+        ok, message = _verify_one(
+            name,
+            path,
+            expected,
+            git_tracked=git_tracked,
+        )
         if ok:
             print(message)
             continue
 
-        if info.get("source") == "local" or verify_only:
+        if source in LOCAL_SOURCES or verify_only:
             print(message)
             if required:
                 failures.append(message)
@@ -124,7 +126,7 @@ def fetch_data(
         if not url:
             message = (
                 f"NO URL   {name}: place the canonical file at {path} or "
-                "populate its Zenodo/official URL in data_manifest.yaml"
+                "populate its external URL in data_manifest.yaml"
             )
             print(message)
             if required:
@@ -141,7 +143,12 @@ def fetch_data(
             progressbar=False,
         )
 
-        ok, message = _verify_one(name, path, expected)
+        ok, message = _verify_one(
+            name,
+            path,
+            expected,
+            git_tracked=False,
+        )
         print(message)
         if not ok and required:
             failures.append(message)
