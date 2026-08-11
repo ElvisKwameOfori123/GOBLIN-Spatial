@@ -2,15 +2,13 @@
 
 **A modular, constraint-preserving framework for translating national GOBLIN livestock and land-use pathways to fine-scale spatial data.**
 
-GOBLIN-Spatial extends the national GOBLIN modelling approach by providing a reproducible way to represent livestock, land use and selected farm structural indicators at Electoral Division (ED) level in Ireland. Rather than replacing the national model, it provides the spatial layer needed to examine where national livestock and land-use pathways occur.
+GOBLIN-Spatial extends the national GOBLIN modelling approach by providing a reproducible way to represent livestock, land use and selected farm structural indicators at Electoral Division (ED) level in Ireland. It does not replace the national model. It provides the spatial layer needed to examine where nationally consistent livestock and land-use pathways are represented locally.
 
 The package is designed so that researchers can regenerate the same spatial dataset from the underlying inputs, update individual data sources as new years become available, improve individual modules independently, and reproduce the final validated outputs.
 
 ## Why GOBLIN-Spatial?
 
-GOBLIN provides a national AFOLU modelling framework and a biologically detailed livestock cohort structure. National results are essential for maintaining internally consistent agricultural and land-use pathways, but national totals alone cannot show how change is distributed across local agricultural areas.
-
-GOBLIN-Spatial addresses that gap by translating national and higher-level official controls to **2,857 Electoral Divisions**, a fine-grained local administrative geography used here as the spatial unit for the Irish agricultural application.
+GOBLIN provides a national AFOLU modelling framework and a biologically detailed livestock cohort structure. GOBLIN-Spatial translates national and higher-level official controls to **2,857 Electoral Divisions**, a fine-grained local administrative geography used here as the spatial unit for the Irish agricultural application.
 
 ```text
 National GOBLIN / official agricultural controls
@@ -27,21 +25,19 @@ National GOBLIN / official agricultural controls
 
 ## Four scientific modules
 
-The public scientific structure is deliberately simple:
-
 1. **`cattle`**: 2020 cattle baseline, annual ED cattle panel and 21 GOBLIN cattle cohorts.
 2. **`sheep`**: region-to-county-to-ED sheep reconciliation, composition enrichment and 10 GOBLIN sheep cohorts.
 3. **`land`**: annual ED farmed area, grassland, cereals and other crop area.
 4. **`se`**: social-economic farm structure indicators, currently agricultural holdings, average holding size, mean holder age and median holder age.
 
-Cattle and sheep are built independently and then merged. Land and SE are subsequently attached to the merged livestock master. Shared reconciliation, validation and export utilities support these modules but are not separate scientific components.
+Cattle and sheep are built independently and then merged. Land and SE are attached to the merged livestock master. Shared reconciliation, validation and export utilities support the four scientific modules.
 
 ## Current Irish implementation
 
 The validated baseline covers:
 
 - **2,857 Electoral Divisions**
-- **2015–2025**
+- **2015-2025**
 - **31,427 ED-year observations**
 - **21 GOBLIN cattle cohorts**
 - **10 GOBLIN sheep cohorts**
@@ -54,37 +50,34 @@ The validated baseline covers:
 
 The **2020 Census of Agriculture ED dataset is the fixed fine-scale spatial anchor**. Annual official statistics provide temporal controls around that baseline, while the GOBLIN cohort structure provides biological disaggregation.
 
-## Data architecture
+## Core methodological principle
 
-GitHub stores the software, configuration, documentation, tests and small control tables that are useful to version with the code. Raw or binary source datasets are kept outside normal Git history and are obtained through the package data-fetch layer.
+GOBLIN-Spatial separates three roles:
+
+1. **Fine-scale official statistics determine spatial pattern.**
+2. **Coarser official annual statistics determine temporal totals and composition.**
+3. **The GOBLIN cohort structure determines biological livestock disaggregation.**
+
+The package does not run an independent national herd model inside every ED. It takes the controlled ED livestock population as the spatial population to be represented and expresses it in the GOBLIN cohort structure while preserving ED, county, regional and national accounting constraints.
+
+## Development data layout
+
+For the current development phase, the core working input datasets are kept directly in GitHub because they are small enough to version conveniently. This makes the package easy to clone, test and improve without a separate data-download step.
 
 ```text
-GitHub repository
-      |
-      |  goblin-spatial fetch-data
-      v
-Zenodo / official source snapshot
-      |
-      v
- data/raw/              (ignored by Git)
-      |
-      |  goblin-spatial build
-      v
-CATTLE -> SHEEP -> MERGE -> LAND -> SE -> VALIDATE -> EXPORT
-      |
-      v
- data/processed/        (ignored by Git)
+data/
+├── raw/
+│   ├── cattle/
+│   ├── sheep/
+│   └── land/
+├── controls/
+├── interim/       # generated, ignored by Git
+└── processed/     # generated, ignored by Git
 ```
 
-`data_manifest.yaml` records the exact filename, destination and SHA256 checksum of every required input. This makes each release reproducible even when official source websites later change.
+Tracked working inputs currently include the 2020 ED baseline, annual cattle controls, sheep county/region controls, the sheep source workbook, annual land controls, GOBLIN cohort relationships, SE controls and the county-region mapping. Compressed `.csv.xz` files are read directly by pandas and do not need to be manually unpacked.
 
-Small package controls remain versioned under `data/controls/`, including social-economic controls, sheep composition anchors and GOBLIN cohort relationships.
-
-### Current data-release status
-
-The external-data layer is currently in **development mode**. The canonical files and checksums are fixed, but the first Zenodo snapshot has not yet been published. Until permanent Zenodo URLs are inserted into `data_manifest.yaml`, developers can place the canonical files manually at the manifest destinations and run `goblin-spatial fetch-data --verify-only` to confirm that they are the exact expected inputs.
-
-Once the Zenodo record is published, no package logic needs to change. Only the external URLs and DOI in the manifest need to be completed.
+If the input bundle becomes large, these same paths can later be backed by Zenodo or official download URLs without changing the scientific module structure.
 
 ## Install
 
@@ -92,29 +85,15 @@ Once the Zenodo record is published, no package logic needs to change. Only the 
 pip install -e .
 ```
 
-## Fetch data
+## Build
 
-After the external data URLs are configured:
-
-```bash
-goblin-spatial fetch-data
-```
-
-The command downloads the pinned raw inputs into `data/raw/` and verifies each file against its SHA256 checksum. Existing files with the correct checksum are reused.
-
-During development, canonical files may be placed manually and checked with:
-
-```bash
-goblin-spatial fetch-data --verify-only
-```
-
-## Build the complete dataset
+The intended normal-user interface is one command:
 
 ```bash
 goblin-spatial build --config configs/ireland_2015_2025.yaml
 ```
 
-A complete build executes:
+which executes:
 
 ```text
 CATTLE
@@ -132,17 +111,7 @@ VALIDATE
 EXPORT
 ```
 
-Modularity is for development and maintenance. A normal user runs one command for the complete build, while a developer can improve or test an individual module independently.
-
-## Core methodological principle
-
-GOBLIN-Spatial separates three roles:
-
-1. **Fine-scale official statistics determine spatial pattern.**
-2. **Coarser official annual statistics determine temporal totals and composition.**
-3. **The GOBLIN cohort structure determines biological livestock disaggregation.**
-
-The package does **not** run an independent national herd model inside every ED. It takes the controlled ED livestock population as the spatial population to be represented and expresses it in the GOBLIN cohort structure while preserving ED, county, regional and national accounting constraints.
+Modularity is for development and maintenance. A developer can improve one module independently, while a normal user rebuilds the complete dataset at once.
 
 ## Accounting constraints
 
@@ -166,10 +135,13 @@ GOBLIN-Spatial/
 ├── configs/
 │   └── ireland_2015_2025.yaml
 ├── data/
-│   ├── controls/          # small versioned controls
-│   ├── raw/               # downloaded, not versioned
-│   ├── interim/           # generated, not versioned
-│   └── processed/         # generated, not versioned
+│   ├── raw/
+│   │   ├── cattle/
+│   │   ├── sheep/
+│   │   └── land/
+│   ├── controls/
+│   ├── interim/
+│   └── processed/
 ├── src/goblin_spatial/
 │   ├── cattle/
 │   ├── sheep/
@@ -189,16 +161,16 @@ The reference workflow produces `07_GOBLIN_Spatial_Final_Clean_Data_2015_2025.xl
 
 | Sheet | Coverage | Content |
 |---|---|---|
-| `CSO_All_Years` | 2015–2025 | CSO-controlled livestock, farm structure, holder age and land indicators |
-| `GOBLIN_All_Years` | 2015–2025 | 31 GOBLIN livestock cohorts plus farm structure, holder age and land indicators |
+| `CSO_All_Years` | 2015-2025 | CSO-controlled livestock, farm structure, holder age and land indicators |
+| `GOBLIN_All_Years` | 2015-2025 | 31 GOBLIN livestock cohorts plus farm structure, holder age and land indicators |
 | `CSO_2020` | 2020 | Exact 2020 CSO ED snapshot |
 | `GOBLIN_2020` | 2020 | Exact 2020 GOBLIN cohort snapshot |
 
-The modular package will be regression-tested against this already validated reference output before a stable v1.0 release is declared.
+The modular package will be regression-tested against this validated reference output before a stable v1.0 release is declared.
 
 ## Status
 
-**Validated Irish baseline complete for 2015–2025. Modular package and reproducible data-fetch layer under active development.**
+**Validated Irish baseline complete for 2015-2025. Modular package implementation in progress.**
 
 ## Author
 
