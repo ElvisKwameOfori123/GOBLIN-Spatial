@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.venv/
+venv/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Large raw data and generated outputs
+outputs/
+data/raw/
+*.zip
+*.parquet
+
+# Generated Excel workbooks
+*.xlsx
+*.xls
+
+# Keep small control files under data/controls/
+!data/controls/*.csv
