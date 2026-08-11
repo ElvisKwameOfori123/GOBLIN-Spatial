@@ -29,3 +29,6 @@ where = ["src"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+markers = [
+  "full_data: integration tests requiring the external 2020 ED baseline and/or AQA06 full-data inputs",
+]
