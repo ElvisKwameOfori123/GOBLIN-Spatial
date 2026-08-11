@@ -30,3 +30,23 @@ jobs:
 
       - name: Run compact-data tests
         run: pytest -q -m "not full_data"
+
+      - name: Detect complete full-data bundle
+        id: full_data
+        shell: bash
+        run: |
+          if [[ -f data/raw/cattle/CSO_ED_2020.csv && -f data/raw/land/AQA06_Unpivoted_2013_2025.csv ]]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            echo "Complete full-data inputs detected."
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "Full-data inputs not yet present; full regression will be skipped."
+          fi
+
+      - name: Verify complete input manifest
+        if: steps.full_data.outputs.available == 'true'
+        run: goblin-spatial fetch-data --verify-only
+
+      - name: Run full 2015-2025 regression
+        if: steps.full_data.outputs.available == 'true'
+        run: pytest -q -m full_data
