@@ -16,10 +16,15 @@ data/interim/
 data/processed/
 outputs/
 
+# Full-data inputs kept outside Git during development
+# They are pinned in data_manifest.yaml and will be supplied by Zenodo/official URLs.
+data/raw/cattle/CSO_ED_2020.csv
+data/raw/land/AQA06_Unpivoted_2013_2025.csv
+
 # Temporary/archive formats not used as tracked source inputs
 *.parquet
 *.tmp
 *.bak
 
-# data/raw/ is intentionally versioned during package development.
+# Other compact data/raw inputs are intentionally versioned during development.
 # Small controls and test fixtures are also versioned.
