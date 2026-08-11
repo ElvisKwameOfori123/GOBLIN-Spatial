@@ -15,7 +15,7 @@ paths:
 
 files:
   # CATTLE
-  cso_ed_2020: data/raw/cattle/CSO_ED_2020.csv.xz
+  cso_ed_2020: data/raw/cattle/CSO_ED_2020.csv
   cso_cattle_county: data/raw/cattle/CSO_county_WIDE_2015_2025.csv.xz
 
   # SHEEP
@@ -25,7 +25,7 @@ files:
   sheep_breed_anchors: data/raw/sheep/DAFM_Sheep_Breed_Anchors_2016_2020_2022_2025.zip
 
   # LAND
-  cso_land: data/raw/land/AQA06_Unpivoted_2013_2025.csv.xz
+  cso_land: data/raw/land/AQA06_Unpivoted_2013_2025.csv
 
   # GOBLIN + SE CONTROLS
   goblin_cohorts: data/controls/cohort2012-2020.csv
