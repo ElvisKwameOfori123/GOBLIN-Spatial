@@ -28,7 +28,12 @@ def _parser() -> argparse.ArgumentParser:
     fetch_parser.add_argument(
         "--verify-only",
         action="store_true",
-        help="Do not download; verify existing files against pinned SHA256 hashes.",
+        help="Do not download; verify existing files.",
+    )
+    fetch_parser.add_argument(
+        "--tracked-only",
+        action="store_true",
+        help="Check only Git/local inputs and skip external full-data inputs.",
     )
 
     build_parser = sub.add_parser(
@@ -48,7 +53,11 @@ def main() -> None:
     args = _parser().parse_args()
 
     if args.command == "fetch-data":
-        resolved = fetch_data(Path(args.manifest), verify_only=args.verify_only)
+        resolved = fetch_data(
+            Path(args.manifest),
+            verify_only=args.verify_only,
+            tracked_only=args.tracked_only,
+        )
         print(f"GOBLIN-Spatial data check complete: {len(resolved)} inputs")
         return
 
