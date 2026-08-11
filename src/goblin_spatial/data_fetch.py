@@ -1,8 +1,8 @@
 """Locate, fetch and verify datasets required by GOBLIN-Spatial.
 
-During package development the core working inputs can be tracked directly in
-Git. The same manifest also supports external sources later if the data bundle
-moves to Zenodo or stable official download URLs.
+During package development compact working inputs can be tracked directly in
+Git. Larger full-data inputs can be declared as external and later served from
+Zenodo or stable official download URLs without changing the scientific API.
 """
 
 from __future__ import annotations
@@ -67,8 +67,6 @@ def _verify_one(
     if not path.exists():
         return False, f"MISSING  {name}: {path}"
 
-    # Small controls already receive exact versioning from Git. A SHA256 may
-    # still be supplied, but is not mandatory when git_tracked is true.
     if not expected_sha256:
         if git_tracked:
             return True, f"OK       {name}: {path} [Git-tracked]"
@@ -85,11 +83,19 @@ def fetch_data(
     manifest_path: str | Path = "data_manifest.yaml",
     *,
     verify_only: bool = False,
+    tracked_only: bool = False,
 ) -> dict[str, Path]:
     """Locate, download where necessary, and verify declared datasets.
 
-    Git-tracked and local inputs are simply checked in place. External entries
-    can be downloaded with ``pooch`` when a URL and checksum are supplied.
+    Parameters
+    ----------
+    manifest_path:
+        Path to ``data_manifest.yaml``.
+    verify_only:
+        Verify files already present but do not download anything.
+    tracked_only:
+        Restrict verification to Git/local inputs. This is useful for continuous
+        integration before the external full-data deposit URLs are published.
     """
 
     project_root, manifest = load_manifest(manifest_path)
@@ -98,10 +104,15 @@ def fetch_data(
     failures: list[str] = []
 
     for name, info in datasets.items():
+        source = str(info.get("source", "local")).lower()
+
+        if tracked_only and source not in LOCAL_SOURCES:
+            print(f"SKIP     {name}: external full-data input")
+            continue
+
         path = _resolved_path(project_root, info)
         resolved[name] = path
 
-        source = str(info.get("source", "local")).lower()
         expected = info.get("sha256")
         required = bool(info.get("required", True))
         git_tracked = bool(info.get("git_tracked", source == "git"))
