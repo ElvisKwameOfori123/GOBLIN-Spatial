@@ -56,7 +56,7 @@ The **2020 Census of Agriculture ED dataset is the fixed fine-scale spatial anch
 
 ## Data architecture
 
-GitHub stores the software, configuration, documentation, tests and small control tables that are useful to version with the code. Raw/binary source datasets are kept outside normal Git history and are obtained through the package data-fetch layer.
+GitHub stores the software, configuration, documentation, tests and small control tables that are useful to version with the code. Raw or binary source datasets are kept outside normal Git history and are obtained through the package data-fetch layer.
 
 ```text
 GitHub repository
@@ -84,7 +84,7 @@ Small package controls remain versioned under `data/controls/`, including social
 
 The external-data layer is currently in **development mode**. The canonical files and checksums are fixed, but the first Zenodo snapshot has not yet been published. Until permanent Zenodo URLs are inserted into `data_manifest.yaml`, developers can place the canonical files manually at the manifest destinations and run `goblin-spatial fetch-data --verify-only` to confirm that they are the exact expected inputs.
 
-Once the Zenodo record is published, no package logic needs to change. Only the external URLs/DOI in the manifest will be completed.
+Once the Zenodo record is published, no package logic needs to change. Only the external URLs and DOI in the manifest need to be completed.
 
 ## Install
 
