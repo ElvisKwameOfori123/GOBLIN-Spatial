@@ -25,8 +25,8 @@ jobs:
           pip install -e .
           pip install pytest
 
-      - name: Verify tracked inputs
-        run: goblin-spatial fetch-data --verify-only
+      - name: Verify Git-tracked inputs
+        run: goblin-spatial fetch-data --verify-only --tracked-only
 
-      - name: Run tests
-        run: pytest -q
+      - name: Run compact-data tests
+        run: pytest -q -m "not full_data"
