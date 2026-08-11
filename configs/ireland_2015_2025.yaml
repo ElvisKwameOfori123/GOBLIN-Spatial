@@ -14,14 +14,27 @@ paths:
   processed: data/processed
 
 files:
-  cso_ed_2020: data/raw/cso/CSO_ED_2020.csv
-  cso_cattle_county: data/raw/cso/CSO_county_WIDE_2015_2025.csv
-  cso_sheep: data/raw/cso/CSO_Sheep_County_and_Region_WIDE_2015_2025.xlsx
-  cso_land: data/raw/cso/AQA06.20260811T170823.xlsx
+  # CATTLE
+  cso_ed_2020: data/raw/cattle/CSO_ED_2020.csv.xz
+  cso_cattle_county: data/raw/cattle/CSO_county_WIDE_2015_2025.csv.xz
+
+  # SHEEP
+  cso_sheep_county: data/raw/sheep/CSO_Sheep_County_WIDE_2015_2025.csv.xz
+  cso_sheep_region: data/raw/sheep/CSO_Sheep_Region_WIDE_2015_2025.csv.xz
+  cso_sheep_workbook: data/raw/sheep/CSO_Sheep_County_and_Region_WIDE_2015_2025.xlsx
+
+  # LAND
+  cso_land: data/raw/land/AQA06_Unpivoted_2013_2025.csv.xz
+
+  # GOBLIN + SE CONTROLS
   goblin_cohorts: data/controls/cohort2012-2020.csv
-  sheep_breed_anchors: data/controls/05A_DAFM_Sheep_Breed_Anchors_2016_2020_2022_2025.csv
   se_controls: data/controls/06_SE_Data_Controls.csv
   county_region_map: data/controls/county_region_map.csv
+
+  # Sheep breed controls will be added to data/raw/sheep as the modular
+  # sheep stage is migrated from the validated reference implementation.
+  sheep_breed_anchors: data/raw/sheep/05A_DAFM_Sheep_Breed_Anchors_2016_2020_2022_2025.csv.xz
+  sheep_composition: data/raw/sheep/05A_DAFM_County_Sheep_Composition_2015_2025.csv.xz
 
 outputs:
   cattle_panel: data/interim/cattle_ed_2015_2025.csv
