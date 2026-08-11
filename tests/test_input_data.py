@@ -62,8 +62,8 @@ def test_sheep_control_contract() -> None:
         "Mid-West",
         "South-East",
         "South-West",
-        "Mid-East and Dublin",
-        "Midlands",
+        "Dublin and Mid-East",
+        "Midland",
     }
     assert detailed.issubset(set(region["Region"]))
     assert set(region["Year"].unique()) == set(range(2015, 2026))
