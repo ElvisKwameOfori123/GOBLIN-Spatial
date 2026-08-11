@@ -1,25 +1,29 @@
-# Scripts
+# Reference workflow
 
-The validated workflow consists of seven sequential stages.
+The original research implementation was developed and validated as sequential Scripts 01–07. These scripts define the numerical reference that the modular `goblin_spatial` package must reproduce.
 
-| Stage | Purpose |
+The package itself is now organised around four scientific modules: `cattle`, `sheep`, `land`, and `se`.
+
+| Reference stage | Modular destination |
 |---|---|
-| `01` | Reconcile the 2020 cattle baseline and construct cattle age-sex controls |
-| `02` | Construct the 2015–2025 ED cattle panel from annual official controls |
-| `03A` | Reconcile annual sheep controls from region to county |
-| `03B` | Allocate annual county sheep controls to EDs |
-| `04` | Merge cattle and sheep into the annual ED livestock master |
-| `05A` | Prepare annual DAFM sheep-composition controls |
-| `05B` | Enrich ED sheep with Lowland/Mountain-type composition |
-| `05C` | Express fixed CSO ED cattle populations in the 21 GOBLIN cattle cohorts |
-| `05D` | Express fixed sheep populations in the 10 GOBLIN sheep cohorts and form the final 31-cohort master |
-| `06` | Add annual land, agricultural holdings and holder-age characteristics |
-| `07` | Export the clean four-sheet research workbook |
+| `01` 2020 cattle reconciliation and age-sex controls | `cattle` |
+| `02` annual ED cattle panel | `cattle` |
+| `03A` region-to-county sheep controls | `sheep` |
+| `03B` county-to-ED sheep panel | `sheep` |
+| `04` cattle/sheep merge | top-level pipeline |
+| `05A` DAFM sheep composition controls | `sheep` |
+| `05B` ED sheep type enrichment | `sheep` |
+| `05C` 21 GOBLIN cattle cohorts | `cattle` |
+| `05D` 10 GOBLIN sheep cohorts / 31-cohort master | `sheep` + pipeline |
+| `06` land enrichment | `land` |
+| `06` farm structure and holder age | `se` |
+| `07` clean workbook | export layer |
 
-## Portability rule
+The legacy scripts are not intended to become the public package API. They are retained as the regression reference until the modular implementation reproduces every validated control and output.
 
-The research versions of these scripts currently reflect the validated local workflow. Before the scripts are committed here, their hard-coded local Windows paths will be replaced by repository-relative paths only. The calculations, controls and validation rules will not be altered during that portability step.
+Normal users should ultimately run:
 
-## Execution order
-
-Run scripts in numerical order. Each stage validates its inputs and outputs before the next stage is used.
+```bash
+goblin-spatial fetch-data
+goblin-spatial build --config configs/ireland_2015_2025.yaml
+```
