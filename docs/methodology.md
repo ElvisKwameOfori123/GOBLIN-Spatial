@@ -2,7 +2,11 @@
 
 ## Overview
 
-GOBLIN-Spatial is a hierarchical reconciliation framework for constructing an Electoral Division (ED) representation of livestock and agricultural land while preserving official statistical controls.
+GOBLIN-Spatial is a constraint-preserving spatialisation framework that connects the national GOBLIN AFOLU modelling approach to fine-scale local agricultural geography.
+
+GOBLIN operates at national scale and provides the internally consistent livestock and land-use logic needed for pathway analysis. GOBLIN-Spatial adds the spatial layer by expressing those national and higher-level controls at Electoral Division (ED) level while preserving the official population, composition and land accounting constraints from which the spatial representation is derived.
+
+The current Irish implementation uses **2,857 Electoral Divisions** as the fine local spatial unit. The objective is not to create 2,857 independent national models. Instead, the framework translates a nationally consistent agricultural system into a locally resolved representation.
 
 The framework separates three distinct functions:
 
@@ -12,11 +16,53 @@ The framework separates three distinct functions:
 
 These roles are not interchangeable.
 
+## Relationship to national GOBLIN
+
+GOBLIN remains the parent national AFOLU framework. It governs national pathway consistency and the biological structure of the livestock system.
+
+GOBLIN-Spatial governs the spatial response. It answers where the nationally controlled livestock and land-use system is represented across EDs, subject to the official spatial and statistical controls available for Ireland.
+
+The conceptual relationship is therefore:
+
+```text
+National GOBLIN / official agricultural controls
+                    |
+                    v
+      Constraint-preserving reconciliation
+                    |
+                    v
+       Electoral Division representation
+                    |
+                    v
+ Livestock cohorts + land + farm structure
+```
+
+This separation allows national scenario logic to remain coherent while enabling analysis of local livestock structure, land availability, spatial exposure and future land-use opportunity.
+
 ## Spatial anchor
 
 The 2020 Census of Agriculture ED dataset is the fixed fine-scale baseline. It provides the authoritative ED geography and 2020 agricultural structure used by the workflow.
 
 Annual non-2020 ED values are reconstructed around that baseline using official higher-level controls. They should therefore be described as reconstructed annual ED estimates rather than independently observed ED statistics.
+
+Higher-level controls are used to move the ED system through time without replacing the fixed 2020 spatial anchor.
+
+## Hierarchical reconciliation
+
+GOBLIN-Spatial uses hierarchical reconciliation to combine statistical products published at different geographical scales.
+
+The governing rule is simple:
+
+```text
+fine-scale data provide spatial weights
+coarser official data provide population and composition controls
+```
+
+Depending on the variable, reconciliation may operate through national, regional, county and ED levels.
+
+Reusable allocation methods include proportional reconciliation, Hamilton/largest-remainder integer allocation and iterative proportional fitting where both row and column constraints must be satisfied.
+
+The same reconciliation machinery is intended to be shared across package modules rather than reimplemented separately for each dataset.
 
 ## Livestock
 
@@ -28,7 +74,9 @@ For every ED-year:
 
 `sum(21 GOBLIN cattle cohorts) = TOTAL_CATTLE`
 
-GOBLIN cohort relationships inform DxD, DxB and BxB biological composition but do not replace the CSO livestock population.
+The GOBLIN cohort relationships inform DxD, DxB and BxB biological composition but do not replace the CSO livestock population.
+
+Biological dependency should not be interpreted as geographical co-location. For example, cohort relationships may depend biologically on dairy or beef cows even where cattle move between holdings or areas. Spatial allocation is therefore controlled by the official ED population and the reconciliation framework, not by assuming that all biologically related cohorts must occupy the same ED.
 
 ### Sheep
 
@@ -46,13 +94,15 @@ For every ED-year:
 
 `AREA_FARMED = ALL_GRASSLAND + TOTAL_CEREALS + OTHER_CROPS_HA`
 
-The reconciliation prevents negative land components.
+`AREA_FARMED` is the controlling land total. The reconciliation prevents negative land components and preserves exact accounting between the land categories.
 
 ## Farm structure
 
 Agricultural holdings are reconstructed around the locked 2020 ED distribution using official Farm Structure Survey and Census controls.
 
 The 2020 ED values are not replaced by national survey totals. Official higher-level statistics are used as temporal-change controls around the ED baseline.
+
+Average holding size is reconstructed around the exact reported 2020 ED value using annual change in farmed area and agricultural holdings.
 
 ## Holder age
 
@@ -65,3 +115,20 @@ These values represent reconstructed ED structural characteristics, not longitud
 ## Constraint preservation
 
 The framework is designed so that biological or spatial enrichment does not alter the official population being represented. Reconciliation and integer allocation are used where required to preserve exact count controls.
+
+The principal validation identities are:
+
+```text
+2020 final values = 2020 baseline values exactly
+sum(21 GOBLIN cattle cohorts) = TOTAL_CATTLE
+sum(10 GOBLIN sheep cohorts) = TOTAL_SHEEP
+AREA_FARMED = ALL_GRASSLAND + TOTAL_CEREALS + OTHER_CROPS_HA
+```
+
+A package build should fail rather than silently continue if a protected accounting constraint is violated.
+
+## Generalisation
+
+Ireland is the current demonstration of GOBLIN-Spatial rather than the methodological boundary of the framework.
+
+The intended package architecture separates generic reconciliation and validation routines from country-specific geography, mappings and statistical inputs. This allows the same national-to-local logic to be adapted where another jurisdiction provides a suitable fine-scale agricultural baseline and higher-level temporal controls.
