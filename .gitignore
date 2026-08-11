@@ -11,20 +11,15 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Downloaded, intermediate and generated data
-data/raw/
+# Generated data and outputs
 data/interim/
 data/processed/
 outputs/
 
-# Large/binary archives and spreadsheets
-*.zip
+# Temporary/archive formats not used as tracked source inputs
 *.parquet
-*.xlsx
-*.xls
+*.tmp
+*.bak
 
-# Small reproducibility controls and tiny test fixtures remain versioned
-!data/controls/
-!data/controls/*.csv
-!tests/data/
-!tests/data/*.csv
+# data/raw/ is intentionally versioned during package development.
+# Small controls and test fixtures are also versioned.
