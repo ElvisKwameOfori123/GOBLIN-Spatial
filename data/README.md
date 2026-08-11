@@ -1,19 +1,38 @@
 # Data
 
-This repository separates **small reproducibility controls** from **large/raw source data** and **generated outputs**.
+GOBLIN-Spatial separates versioned package controls from downloaded raw source data and generated outputs.
 
 ## `data/controls/`
 
-Small, auditable control tables used directly by the workflow may be versioned here. These should contain official control values, not large source extracts.
+Small, auditable files that are part of the package logic are versioned with the code. Current examples include:
 
-## Raw data
+- social-economic controls used by the SE module;
+- DAFM sheep composition anchors;
+- GOBLIN cohort relationships;
+- county-to-region mappings used by the Irish implementation.
 
-Large raw CSO, DAFM and other source files are intentionally not committed to the normal Git history. The repository documentation will identify each required input, its expected filename, source, and role in the workflow.
+These files are small enough for Git and benefit from line-by-line version history.
 
-## Generated data
+## `data/raw/`
 
-Generated CSV and Excel outputs are also excluded from normal Git history. Stable public versions should be distributed through a versioned release/archive rather than repeatedly committed as binary files.
+Raw or binary source datasets are **not stored in normal Git history**. The package obtains them using `data_manifest.yaml` and the command:
+
+```bash
+goblin-spatial fetch-data
+```
+
+Each external file is pinned by SHA256 checksum. This prevents a later update to an official website or data repository from silently changing a historical GOBLIN-Spatial build.
+
+The first Irish data snapshot is being prepared for a versioned Zenodo record. Until that record is published, developers may place the required files manually at the destinations listed in `data_manifest.yaml`; `fetch-data` will verify the checksums before accepting them.
+
+## `data/interim/`
+
+Intermediate module outputs are generated automatically. They are not source data and are not committed to Git.
+
+## `data/processed/`
+
+Final generated CSV and Excel outputs are written here. Stable public releases can be archived separately with a DOI.
 
 ## 2020 principle
 
-The 2020 CSO Electoral Division agricultural baseline is treated as the fixed fine-scale spatial anchor. Coarser annual statistics are used as temporal controls around that baseline rather than to overwrite it.
+The 2020 CSO Electoral Division agricultural baseline is the fixed fine-scale spatial anchor. Coarser annual statistics provide temporal controls around that baseline rather than replacing it.
