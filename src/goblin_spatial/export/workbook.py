@@ -39,7 +39,6 @@ CSO_LIVESTOCK = [
     "RAMS",
     "OTHER_SHEEP",
     "BREEDING_SHEEP",
-    "LSU",
 ]
 SE_LAND = [
     "AVERAGE_SIZE_OF_HOLDINGS",
@@ -66,6 +65,7 @@ BANNED_TOKENS = [
     "STRUCTURAL_BASE_YEAR",
     "COHORT_TOTAL",
     "TOTAL_CATTLE_PLUS_SHEEP",
+    "LSU",
 ]
 
 
@@ -93,7 +93,13 @@ def _check_clean(frame: pd.DataFrame, name: str) -> None:
 def build_clean_sheets(
     master: pd.DataFrame, base_year: int = 2020
 ) -> dict[str, pd.DataFrame]:
-    """Return the exact four clean data tables used by the final workbook."""
+    """Return the exact four clean tables used by the validated workbook.
+
+    ``LSU`` is intentionally excluded from the current baseline export because
+    the historical source field is a static 2020 context value, not an annual
+    reconstructed indicator. Scenario-consistent LSU belongs in a later
+    pressure/scenario module.
+    """
 
     ids = _existing(master, IDENTIFIERS)
     cso_columns = list(
@@ -106,7 +112,7 @@ def build_clean_sheets(
     goblin_columns = list(
         dict.fromkeys(
             ids
-            + _existing(master, ["TOTAL_CATTLE", "TOTAL_SHEEP", "LSU"])
+            + _existing(master, ["TOTAL_CATTLE", "TOTAL_SHEEP"])
             + GOBLIN_31
             + _existing(master, SE_LAND)
         )
@@ -196,7 +202,6 @@ def _format_sheet(
         "ALL_GRASSLAND",
         "TOTAL_CEREALS",
         "OTHER_CROPS_HA",
-        "LSU",
     }
     age_names = {"AVERAGE_AGE_OF_HOLDER", "MEDIAN_AGE_OF_HOLDER"}
 
