@@ -18,16 +18,16 @@ SOUTH_EAST_COUNTIES = {
 }
 ALL_IRISH_COUNTIES = BMW_COUNTIES | SOUTH_EAST_COUNTIES
 
-# The IFS SOC2020 workbook uses the historic two-region FADN coding for Ireland.
-# 381 is Border, Midland and Western; 382 is Southern and Eastern.
+# Historic two-region coding used by the Irish SOC2020 table.
 FADN_REGION_LABELS = {
     "381": "Border, Midland and Western",
     "382": "Southern and Eastern",
 }
 
-# EU/IFS Standard Output product codes used to value the existing 31 GOBLIN
-# livestock cohorts. Genetics does not change the SO coefficient when the IFS
-# product class is defined by age/sex rather than breeding origin.
+# Product-code crosswalk retained as an explicit scientific contract and for
+# validation against the source IFS SOC table. Runtime valuation uses the
+# Git-tracked GOBLIN_SO_mapping.csv so model variables, coefficients and
+# imputation flags live in one auditable control file.
 COHORT_PRODUCT_CODE = {
     "dairy_cows": "A2300F",
     "suckler_cows": "A2300G",
@@ -51,7 +51,7 @@ COHORT_PRODUCT_CODE = {
     "DxB_steers_more_2_yr": "A2130",
     "BxB_steers_more_2_yr": "A2130",
     "Lowland ewes": "A4110K",
-    "Upland ewes": "A4100",
+    "Upland ewes": "A4110K",
     "Lowland lamb_less_1_yr": "A4120",
     "Lowland male_less_1_yr": "A4120",
     "Lowland lamb_more_1_yr": "A4120",
@@ -68,10 +68,9 @@ CEREAL_PRODUCT_CODES = {
     "oats": "C1400T",
 }
 
-# 2020 Census of Agriculture cereal areas aligned to the historic Irish FADN
-# regions. BMW is Border + West + Midland + Louth. Southern & Eastern is the
-# residual State area. These areas are used only to build a transparent fixed
-# composite €/ha coefficient for the aggregate TOTAL_CEREALS field.
+# 2020 Census of Agriculture cereal areas aligned to the historic Irish SO
+# regions. These are used only to reproduce/validate the aggregate cereal
+# composite in the model mapping CSV.
 CEREAL_AREAS_2020_HA = {
     "381": {"wheat": 8061.0, "barley": 39399.0, "oats": 5167.0},
     "382": {"wheat": 38909.0, "barley": 153787.0, "oats": 20241.0},
@@ -85,6 +84,14 @@ DEFAULT_CONTROL_PATH = (
     / "IFS_SOC2020_IE_model_controls.csv"
 )
 
+DEFAULT_MAPPING_PATH = (
+    Path(__file__).resolve().parents[3]
+    / "data"
+    / "controls"
+    / "standard_output"
+    / "GOBLIN_SO_mapping.csv"
+)
+
 
 def normalise_county(value: object) -> str:
     """Return a canonical uppercase Irish county label."""
@@ -95,18 +102,18 @@ def normalise_county(value: object) -> str:
 
 
 def fadn_region_for_county(value: object) -> str:
-    """Map one county to the correct Irish SOC2020 FADN region code."""
+    """Map one county to the historic Irish SOC2020 region code."""
 
     county = normalise_county(value)
     if county in BMW_COUNTIES:
         return "381"
     if county in SOUTH_EAST_COUNTIES:
         return "382"
-    raise ValueError(f"unknown Irish county for FADN region assignment: {value!r}")
+    raise ValueError(f"unknown Irish county for SO region assignment: {value!r}")
 
 
 def add_fadn_region(frame: pd.DataFrame, county_col: str = "County") -> pd.DataFrame:
-    """Attach FADN region code and label without modifying the input frame."""
+    """Attach historic SO region code and label without modifying the input."""
 
     if county_col not in frame.columns:
         raise KeyError(f"missing county column: {county_col}")
@@ -117,12 +124,7 @@ def add_fadn_region(frame: pd.DataFrame, county_col: str = "County") -> pd.DataF
 
 
 def load_soc2020_controls(path: str | Path | None = None) -> pd.DataFrame:
-    """Load and validate the Irish 2020 SO controls needed by the model.
-
-    ``path`` may be the original ``IFS_T_MAIN_SOC_2020.xlsx`` workbook or the
-    compact Git-tracked model-control extract. Only Ireland, 2020, and the
-    product codes used by GOBLIN-Spatial are retained.
-    """
+    """Load and validate the Irish 2020 source SO controls used for audit."""
 
     source = Path(path) if path is not None else DEFAULT_CONTROL_PATH
     if not source.exists():
@@ -151,7 +153,7 @@ def load_soc2020_controls(path: str | Path | None = None) -> pd.DataFrame:
     controls = controls.loc[controls["CD_PRODUCT"].isin(needed)].copy()
 
     if set(controls["FADN_REGION"]) != {"381", "382"}:
-        raise AssertionError("Irish SOC controls must contain FADN regions 381 and 382")
+        raise AssertionError("Irish SOC controls must contain regions 381 and 382")
     if controls.duplicated(["CD_PRODUCT", "FADN_REGION"]).any():
         raise AssertionError("duplicate SOC product-region controls")
 
@@ -168,10 +170,121 @@ def load_soc2020_controls(path: str | Path | None = None) -> pd.DataFrame:
     ).reset_index(drop=True)
 
 
+def load_model_mapping(path: str | Path | None = None) -> pd.DataFrame:
+    """Load the direct GOBLIN variable -> fixed-2020 SO mapping control.
+
+    This is the runtime control used by baseline/pathway valuation. The original
+    IFS extract remains separately available through ``load_soc2020_controls``
+    for source auditing.
+    """
+
+    source = Path(path) if path is not None else DEFAULT_MAPPING_PATH
+    if not source.exists():
+        raise FileNotFoundError(source)
+    mapping = pd.read_csv(source)
+
+    required = {
+        "MODEL_VARIABLE",
+        "DOMAIN",
+        "IFS_PRODUCT_CODE",
+        "SOC_EUR_381",
+        "SOC_EUR_382",
+        "APPLY_IN_SO",
+        "IMPUTED",
+        "SENSITIVITY_SOC_EUR_381",
+        "SENSITIVITY_SOC_EUR_382",
+    }
+    missing = sorted(required - set(mapping.columns))
+    if missing:
+        raise ValueError(f"SO mapping missing columns: {missing}")
+
+    mapping["MODEL_VARIABLE"] = mapping["MODEL_VARIABLE"].astype(str).str.strip()
+    mapping["DOMAIN"] = mapping["DOMAIN"].astype(str).str.strip().str.upper()
+    mapping["IFS_PRODUCT_CODE"] = mapping["IFS_PRODUCT_CODE"].fillna("").astype(str).str.strip()
+    mapping["APPLY_IN_SO"] = mapping["APPLY_IN_SO"].astype(str).str.strip().str.upper()
+    mapping["IMPUTED"] = mapping["IMPUTED"].astype(str).str.strip().str.upper()
+
+    if mapping["MODEL_VARIABLE"].duplicated().any():
+        duplicates = mapping.loc[
+            mapping["MODEL_VARIABLE"].duplicated(keep=False), "MODEL_VARIABLE"
+        ].tolist()
+        raise AssertionError(f"duplicate SO mapping variables: {duplicates}")
+
+    expected_cohorts = set(COHORT_PRODUCT_CODE)
+    livestock = mapping.loc[mapping["DOMAIN"].isin(["CATTLE", "SHEEP"])].copy()
+    actual_cohorts = set(livestock["MODEL_VARIABLE"])
+    if actual_cohorts != expected_cohorts:
+        missing_cohorts = sorted(expected_cohorts - actual_cohorts)
+        extra_cohorts = sorted(actual_cohorts - expected_cohorts)
+        raise AssertionError(
+            f"SO livestock mapping mismatch; missing={missing_cohorts}, extra={extra_cohorts}"
+        )
+
+    actual_codes = livestock.set_index("MODEL_VARIABLE")["IFS_PRODUCT_CODE"]
+    for cohort, code in COHORT_PRODUCT_CODE.items():
+        if actual_codes.loc[cohort] != code:
+            raise AssertionError(
+                f"SO mapping product mismatch for {cohort}: "
+                f"{actual_codes.loc[cohort]!r} != {code!r}"
+            )
+
+    if "A4100" in set(livestock["IFS_PRODUCT_CODE"]):
+        raise AssertionError("detailed GOBLIN sheep cohorts must not use parent code A4100")
+    if actual_codes.loc["Lowland ewes"] != "A4110K":
+        raise AssertionError("Lowland ewes must map to A4110K")
+    if actual_codes.loc["Upland ewes"] != "A4110K":
+        raise AssertionError("Upland ewes must map to A4110K")
+
+    required_land = {"TOTAL_CEREALS", "OTHER_CROPS_HA"}
+    land_apply = set(
+        mapping.loc[
+            (mapping["DOMAIN"] == "LAND") & (mapping["APPLY_IN_SO"] == "YES"),
+            "MODEL_VARIABLE",
+        ]
+    )
+    if not required_land.issubset(land_apply):
+        raise AssertionError(
+            f"SO mapping missing valued land variables: {sorted(required_land - land_apply)}"
+        )
+
+    valued = mapping.loc[mapping["APPLY_IN_SO"] == "YES"].copy()
+    for column in ("SOC_EUR_381", "SOC_EUR_382"):
+        valued[column] = pd.to_numeric(valued[column], errors="raise")
+        if (valued[column] < 0).any():
+            raise AssertionError(f"negative coefficients in {column}")
+
+    for column in ("SENSITIVITY_SOC_EUR_381", "SENSITIVITY_SOC_EUR_382"):
+        mapping[column] = pd.to_numeric(mapping[column], errors="coerce")
+
+    return mapping.reset_index(drop=True)
+
+
+def model_coefficient_lookup(
+    mapping: pd.DataFrame | None = None,
+    *,
+    sensitivity: bool = False,
+) -> dict[tuple[str, str], float]:
+    """Return ``(MODEL_VARIABLE, region) -> EUR/head-or-ha``."""
+
+    table = load_model_mapping() if mapping is None else mapping
+    column_by_region = {
+        "381": "SENSITIVITY_SOC_EUR_381" if sensitivity else "SOC_EUR_381",
+        "382": "SENSITIVITY_SOC_EUR_382" if sensitivity else "SOC_EUR_382",
+    }
+    lookup: dict[tuple[str, str], float] = {}
+    for row in table.loc[table["APPLY_IN_SO"] == "YES"].itertuples(index=False):
+        for region, column in column_by_region.items():
+            raw = getattr(row, column)
+            if pd.isna(raw):
+                raw = getattr(row, f"SOC_EUR_{region}")
+            lookup[(str(row.MODEL_VARIABLE), region)] = float(raw)
+    return lookup
+
+
 def coefficient_lookup(
     controls: pd.DataFrame | None = None,
 ) -> dict[tuple[str, str], float]:
-    """Return ``(product, region) -> SOC_EUR``."""
+    """Return source ``(product, region) -> SOC_EUR`` for audit/reproduction."""
 
     table = load_soc2020_controls() if controls is None else controls
     return {
@@ -183,14 +296,14 @@ def coefficient_lookup(
 def cereal_composite_coefficients(
     controls: pd.DataFrame | None = None,
 ) -> dict[str, float]:
-    """Return fixed 2020 aggregate-cereal SO coefficients by FADN region."""
+    """Reproduce the fixed 2020 aggregate-cereal SO coefficients by region."""
 
     lookup = coefficient_lookup(controls)
     out: dict[str, float] = {}
     for region, areas in CEREAL_AREAS_2020_HA.items():
         total_area = float(sum(areas.values()))
         if total_area <= 0:
-            raise AssertionError(f"zero cereal area for FADN region {region}")
+            raise AssertionError(f"zero cereal area for SO region {region}")
         total_so = 0.0
         for crop, area in areas.items():
             total_so += float(area) * lookup[(CEREAL_PRODUCT_CODES[crop], region)]
