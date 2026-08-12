@@ -1,19 +1,15 @@
 """Spatialise fixed national livestock reductions across EDs.
 
-This is the first scenario layer. It does not construct a new ED population from
-scratch. It always starts from the selected 2020 or 2025 ED baseline, calculates
-the national number of animals to remove, allocates that reduction across the
-animals already present in EDs, and subtracts the allocated reduction from the
-baseline.
-
-In other words::
+The selected 2020 or 2025 ED baseline is always the authority. GOBLIN supplies
+(or implies) the national endpoint. GOBLIN-Spatial converts that endpoint into
+a number of animals to remove, allocates only that reduction across animals
+already present in EDs, and subtracts the allocated reduction from each ED.
 
     national reduction = baseline national total - scenario national target
     scenario ED count = baseline ED count - ED allocated reduction
 
-Young cattle are not yet rebuilt here. A subsequent biological response step
-will translate adult changes into national GOBLIN/COHORTS follower targets and
-spatialise those cohort changes across breeding and receiver/rearing EDs.
+The allocation rule changes *where the reduction lands*. It never changes the
+national reduction itself and never seeds livestock into a new ED footprint.
 """
 
 from __future__ import annotations
@@ -33,6 +29,8 @@ CATEGORY_COLUMNS = {
 
 
 def _normalise_score(series: pd.Series) -> np.ndarray:
+    """Min-max normalise a pre-scenario indicator to [0, 1]."""
+
     x = pd.to_numeric(series, errors="coerce").to_numpy(dtype=float)
     finite = np.isfinite(x)
     if not finite.any():
@@ -44,6 +42,37 @@ def _normalise_score(series: pd.Series) -> np.ndarray:
     out = np.full(len(x), 0.5, dtype=float)
     out[finite] = (x[finite] - lo) / (hi - lo)
     return np.clip(out, 0.0, 1.0)
+
+
+def _rank_score(series: pd.Series) -> np.ndarray:
+    """Return a monotonic 0-1 score without allowing a single outlier to dominate."""
+
+    x = pd.to_numeric(series, errors="raise").astype(float)
+    if (x < 0).any() or (~np.isfinite(x)).any():
+        raise ValueError("rank score requires finite non-negative values")
+    if len(x) == 0:
+        return np.array([], dtype=float)
+    if float(x.max()) <= 0:
+        return np.zeros(len(x), dtype=float)
+
+    positive = x > 0
+    score = pd.Series(0.0, index=x.index, dtype=float)
+    if positive.any():
+        ranks = x.loc[positive].rank(method="average", pct=True)
+        if len(ranks) == 1:
+            score.loc[positive] = 1.0
+        else:
+            lo = float(ranks.min())
+            hi = float(ranks.max())
+            score.loc[positive] = (ranks - lo) / (hi - lo)
+    return score.to_numpy(dtype=float)
+
+
+def _protection_multiplier(score: np.ndarray, strength: float) -> np.ndarray:
+    """Convert higher protection score into lower cut weight."""
+
+    score = np.clip(np.asarray(score, dtype=float), 0.0, 1.0)
+    return 1.0 - float(strength) * score
 
 
 def _bounded_integer_allocate(
@@ -103,18 +132,90 @@ def _bounded_integer_allocate(
     return floors
 
 
+def _rule_cut_weights(
+    baseline: pd.DataFrame,
+    base: np.ndarray,
+    scenario: ScenarioDefinition,
+) -> tuple[np.ndarray, np.ndarray | None]:
+    """Return ED cut weights and an optional protection-score diagnostic.
+
+    High protection score means a smaller proportional cut. DairyProtection is
+    defined from the selected baseline itself: EDs with larger dairy-cow herds
+    receive higher protection scores and therefore less reduction pressure.
+    """
+
+    base = np.asarray(base, dtype=np.int64)
+    raw = base.astype(float)
+    rule = scenario.allocation_rule
+    strength = float(scenario.protection_strength)
+
+    if rule == AllocationRule.PRORATA:
+        return raw, None
+
+    if rule == AllocationRule.DAIRY_PROTECTION:
+        score = _rank_score(baseline["DAIRY_COW"])
+        return raw * _protection_multiplier(score, strength), score
+
+    if rule == AllocationRule.SCORE_WEIGHTED:
+        if scenario.score_column not in baseline.columns:
+            raise ValueError(
+                f"score column not found in selected baseline: {scenario.score_column}"
+            )
+        score = _normalise_score(baseline[scenario.score_column])
+        return raw * _protection_multiplier(score, strength), score
+
+    if rule == AllocationRule.PRODUCTIVITY_PROTECTION:
+        column = scenario.productivity_score_column
+        if column not in baseline.columns:
+            raise ValueError(f"productivity score column not found: {column}")
+        score = _normalise_score(baseline[column])
+        return raw * _protection_multiplier(score, strength), score
+
+    if rule == AllocationRule.VULNERABILITY_PROTECTION:
+        column = scenario.vulnerability_score_column
+        if column not in baseline.columns:
+            raise ValueError(f"vulnerability score column not found: {column}")
+        score = _normalise_score(baseline[column])
+        return raw * _protection_multiplier(score, strength), score
+
+    if rule == AllocationRule.HYBRID_BALANCED:
+        p_col = scenario.productivity_score_column
+        v_col = scenario.vulnerability_score_column
+        if p_col not in baseline.columns:
+            raise ValueError(f"productivity score column not found: {p_col}")
+        if v_col not in baseline.columns:
+            raise ValueError(f"vulnerability score column not found: {v_col}")
+
+        p_score = _normalise_score(baseline[p_col])
+        d_score = _rank_score(baseline["DAIRY_COW"])
+        v_score = _normalise_score(baseline[v_col])
+        w_prorata, w_productivity, w_dairy, w_vulnerability = scenario.hybrid_weights
+
+        p_cut = raw * _protection_multiplier(p_score, strength)
+        d_cut = raw * _protection_multiplier(d_score, strength)
+        v_cut = raw * _protection_multiplier(v_score, strength)
+        cut_weights = (
+            float(w_prorata) * raw
+            + float(w_productivity) * p_cut
+            + float(w_dairy) * d_cut
+            + float(w_vulnerability) * v_cut
+        )
+        combined_score = (
+            float(w_productivity) * p_score
+            + float(w_dairy) * d_score
+            + float(w_vulnerability) * v_score
+        ) / max(float(w_productivity + w_dairy + w_vulnerability), 1e-12)
+        return cut_weights, np.clip(combined_score, 0.0, 1.0)
+
+    raise ValueError(f"unsupported allocation rule: {rule}")
+
+
 def _allocate_reduction(
     base: np.ndarray,
     reduction_fraction: float,
-    rule: AllocationRule,
-    score: np.ndarray | None,
-) -> tuple[np.ndarray, int]:
-    """Subtract an allocated national reduction from an existing ED baseline.
-
-    The scenario endpoint is used only to determine the national reduction that
-    must be removed. The ED scenario population is never rebuilt independently
-    from the target total.
-    """
+    cut_weights: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, int]:
+    """Allocate the number to remove, then subtract it from the baseline."""
 
     base = np.asarray(base, dtype=np.int64)
     if (base < 0).any():
@@ -126,30 +227,14 @@ def _allocate_reduction(
     reduction_total = base_total - target_total
 
     if reduction_total == 0:
-        return base.copy(), target_total
+        reductions = np.zeros(len(base), dtype=np.int64)
+        return base.copy(), reductions, target_total
     if target_total == 0:
-        return np.zeros(len(base), dtype=np.int64), target_total
+        reductions = base.copy()
+        return np.zeros(len(base), dtype=np.int64), reductions, target_total
 
-    if rule == AllocationRule.PRORATA:
-        # Allocate the number to REMOVE, proportional to the animals already
-        # present in each ED, then subtract. This makes the baseline the
-        # explicit authority rather than reconstructing a target distribution.
-        cut_weights = base.astype(float)
-        reductions = _bounded_integer_allocate(cut_weights, base, reduction_total)
-        scenario = base - reductions
-    elif rule == AllocationRule.SCORE_WEIGHTED:
-        if score is None:
-            raise ValueError("SCORE_WEIGHTED allocation requires an ED score")
-        score = np.asarray(score, dtype=float)
-        if len(score) != len(base):
-            raise ValueError("score length differs from ED baseline")
-        # High score = more protected. The 0.05 floor prevents an ED becoming
-        # mathematically untouchable while retaining a strong protection signal.
-        cut_weights = base.astype(float) * (0.05 + (1.0 - np.clip(score, 0.0, 1.0)))
-        reductions = _bounded_integer_allocate(cut_weights, base, reduction_total)
-        scenario = base - reductions
-    else:
-        raise ValueError(f"unsupported allocation rule: {rule}")
+    reductions = _bounded_integer_allocate(cut_weights, base, reduction_total)
+    scenario = base - reductions
 
     if int(reductions.sum()) != reduction_total:
         raise AssertionError("national reduction failed exact closure")
@@ -161,7 +246,7 @@ def _allocate_reduction(
         raise AssertionError("ED scenario count is outside baseline reduction bounds")
     if ((base == 0) & (scenario > 0)).any():
         raise AssertionError("scenario seeded livestock into a zero-footprint ED")
-    return scenario.astype(np.int64), target_total
+    return scenario.astype(np.int64), reductions.astype(np.int64), target_total
 
 
 def allocate_adult_livestock_scenario(
@@ -173,18 +258,12 @@ def allocate_adult_livestock_scenario(
     """Allocate national adult-cattle/sheep reductions from an ED baseline.
 
     The selected 2020 or 2025 ED state is the authority. For each livestock
-    category the function:
+    category the function reads the baseline counts, calculates the national
+    number to remove, allocates only that reduction under the selected rule,
+    and subtracts the ED reduction from the ED baseline.
 
-    1. reads the baseline ED counts;
-    2. calculates the national number to remove;
-    3. allocates only that reduction across EDs under the selected rule; and
-    4. subtracts each ED reduction from its own baseline count.
-
-    The returned table therefore makes the geography of destocking directly
-    observable. Young cattle are deliberately not changed here. A subsequent
-    biological response step will translate adult changes into national
-    GOBLIN/COHORTS follower targets and then spatialise those cohort changes
-    across breeding and receiver/rearing EDs.
+    The returned table is therefore a spatial incidence table of destocking.
+    Young cattle are handled by the separate biological cohort-response layer.
     """
 
     baseline = select_baseline_year(
@@ -200,15 +279,6 @@ def allocate_adult_livestock_scenario(
     out.insert(2, "SCENARIO_TARGET_YEAR", scenario.target_year)
     out.insert(3, "SCENARIO_ALLOCATION_RULE", scenario.allocation_rule.value)
 
-    score = None
-    if scenario.allocation_rule == AllocationRule.SCORE_WEIGHTED:
-        if scenario.score_column not in baseline.columns:
-            raise ValueError(
-                f"score column not found in selected baseline: {scenario.score_column}"
-            )
-        score = _normalise_score(baseline[scenario.score_column])
-        out["SCENARIO_ALLOCATION_SCORE"] = score
-
     national_targets: dict[str, int] = {}
     for column, reduction_attr in CATEGORY_COLUMNS.items():
         values = pd.to_numeric(baseline[column], errors="raise").to_numpy(dtype=float)
@@ -216,33 +286,33 @@ def allocate_adult_livestock_scenario(
         if np.max(np.abs(values - rounded)) > 1e-8 or (rounded < 0).any():
             raise AssertionError(f"{column} must contain non-negative integer counts")
 
-        scenario_values, target_total = _allocate_reduction(
+        cut_weights, protection_score = _rule_cut_weights(baseline, rounded, scenario)
+        scenario_values, reductions, target_total = _allocate_reduction(
             rounded,
             float(getattr(scenario, reduction_attr)),
-            scenario.allocation_rule,
-            score,
+            cut_weights,
         )
         national_targets[column] = target_total
 
         out[f"BASE_{column}"] = rounded
         out[f"SCENARIO_{column}"] = scenario_values
-        out[f"REDUCTION_{column}"] = rounded - scenario_values
+        out[f"REDUCTION_{column}"] = reductions
         out[f"REDUCTION_PCT_{column}"] = np.where(
             rounded > 0,
-            100.0 * (rounded - scenario_values) / rounded,
+            100.0 * reductions / rounded,
             0.0,
         )
+        out[f"CUT_WEIGHT_{column}"] = cut_weights
+        if protection_score is not None:
+            out[f"PROTECTION_SCORE_{column}"] = protection_score
 
         national_reduction = int(rounded.sum()) - target_total
-        if int(out[f"REDUCTION_{column}"].sum()) != national_reduction:
+        if int(reductions.sum()) != national_reduction:
             raise AssertionError(f"national reduction failed for {column}")
-        if not np.array_equal(
-            out[f"BASE_{column}"].to_numpy(dtype=np.int64)
-            - out[f"REDUCTION_{column}"].to_numpy(dtype=np.int64),
-            out[f"SCENARIO_{column}"].to_numpy(dtype=np.int64),
-        ):
+        if not np.array_equal(rounded - reductions, scenario_values):
             raise AssertionError(f"baseline-minus-reduction identity failed for {column}")
 
+    out["BASE_ADULT_COWS"] = out["BASE_DAIRY_COW"] + out["BASE_OTHER_COW"]
     out["REDUCTION_ADULT_COWS"] = (
         out["REDUCTION_DAIRY_COW"] + out["REDUCTION_OTHER_COW"]
     )
