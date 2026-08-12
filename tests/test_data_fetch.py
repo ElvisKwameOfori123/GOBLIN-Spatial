@@ -51,6 +51,54 @@ def test_fetch_data_verifies_and_extracts_local_zip(tmp_path: Path) -> None:
     assert expected.read_bytes() == b"fixed spatial fixture"
 
 
+def test_fetch_data_canonicalises_single_shapefile_bundle(tmp_path: Path) -> None:
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    source_stem = source_dir / "Electoral_Divisions(1)"
+    payloads = {
+        ".shp": b"shp-bytes",
+        ".shx": b"shx-bytes",
+        ".dbf": b"dbf-bytes",
+        ".prj": b"prj-bytes",
+    }
+    for suffix, payload in payloads.items():
+        source_stem.with_suffix(suffix).write_bytes(payload)
+
+    archive = tmp_path / "bundle.zip"
+    with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for suffix in payloads:
+            member = source_stem.with_suffix(suffix)
+            zf.write(member, arcname=member.name)
+
+    canonical_stem = Path("external/Electoral_Divisions")
+    manifest = {
+        "datasets": {
+            "fixture": {
+                "source": "local",
+                "path": "bundle.zip",
+                "known_hash": f"md5:{_digest(archive, 'md5')}",
+                "archive": "zip",
+                "extract_to": "external",
+                "primary_path": str(canonical_stem.with_suffix(".shp")),
+                "primary_sha256": _digest(source_stem.with_suffix(".shp"), "sha256"),
+                "required_members": [
+                    str(canonical_stem.with_suffix(suffix)) for suffix in payloads
+                ],
+                "required": True,
+            }
+        }
+    }
+    manifest_path = tmp_path / "data_manifest.yaml"
+    manifest_path.write_text(yaml.safe_dump(manifest), encoding="utf-8")
+
+    resolved = fetch_data(manifest_path)
+
+    primary = tmp_path / canonical_stem.with_suffix(".shp")
+    assert resolved["fixture"] == primary
+    for suffix, payload in payloads.items():
+        assert (tmp_path / canonical_stem.with_suffix(suffix)).read_bytes() == payload
+
+
 def test_verify_only_does_not_unpack_missing_archive_members(tmp_path: Path) -> None:
     member = tmp_path / "member.txt"
     member.write_text("fixture", encoding="utf-8")
