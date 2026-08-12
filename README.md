@@ -1,10 +1,12 @@
 # GOBLIN-Spatial
 
-**A modular, constraint-preserving framework for translating national GOBLIN livestock and land-use pathways to fine-scale spatial data.**
+**A modular, constraint-preserving framework for reconstructing and representing nationally controlled agricultural systems at fine spatial resolution.**
 
-GOBLIN-Spatial extends the national GOBLIN modelling approach with a reproducible spatial layer for livestock, land use and selected farm structural indicators. The current implementation demonstrates the framework for Ireland at Electoral Division (ED) level.
+GOBLIN-Spatial provides the spatial layer connecting the national GOBLIN AFOLU modelling framework with local agricultural geography. It reconstructs livestock, land-use and selected farm-structure information at Electoral Division (ED) level while preserving the statistical and biological totals from which those local representations are derived.
 
-GOBLIN remains the national AFOLU framework. **GOBLIN-Spatial governs the spatial representation of that system.**
+The current Irish implementation produces a validated annual agricultural baseline for **2,857 EDs from 2015 to 2025**, anchored to the 2020 Census of Agriculture and expressed in both official agricultural categories and GOBLIN-compatible livestock cohorts.
+
+GOBLIN remains the national AFOLU framework. **GOBLIN-Spatial governs the spatial representation of that system.** The validated baseline can subsequently support spatialisation of national GOBLIN pathways and other place-based agricultural analyses.
 
 ```text
 National GOBLIN / official agricultural controls
@@ -156,6 +158,8 @@ Additional safeguards require:
 
 The final validator also reports the difference between the preserved reported average holding size and the mechanically implied `AREA_FARMED / AGRICULTURAL_HOLDINGS` ratio as a diagnostic. It does not force the two measures to be identical.
 
+**Exact closure validates the accounting and reconciliation constraints of the spatialisation. It should not be interpreted as independent empirical validation of every reconstructed non-2020 ED value.**
+
 ## Outputs
 
 A successful build writes:
@@ -177,6 +181,20 @@ The clean workbook contains four sheets:
 | `GOBLIN_2020` | 2020 | Exact 2020 subset of `GOBLIN_All_Years` |
 
 For the validated reference build, the CSO sheets contain **35 columns**, the GOBLIN sheets contain **50 columns**, and each 2020 sheet contains **2,857 rows**.
+
+## What GOBLIN-Spatial can support
+
+The validated 2015-2025 spatial baseline is the principal output of the current package. Because it links nationally controlled agricultural populations with fine-scale geography, it can subsequently support applications including:
+
+- spatialisation of national GOBLIN pathways;
+- local livestock-pressure analysis;
+- potential grassland-release analysis;
+- catchment-scale agricultural analysis;
+- soil and land-suitability overlays;
+- place-based transition analysis;
+- spatial inputs to synthetic-farm, microsimulation and agent-based modelling workflows.
+
+These are **applications of the spatial framework**, rather than assumptions required to construct the validated baseline.
 
 ## Repository structure
 
@@ -216,7 +234,9 @@ The complete input bundle is now Git-tracked, and GitHub Actions automatically r
 
 ## Status
 
-**Validated Irish 2015-2025 baseline complete. Modular Python package implemented. Complete input bundle Git-tracked and full-data CI regression active.**
+**Validated Ireland 2015-2025 spatial agricultural baseline complete. Modular Python package implemented. Complete input bundle Git-tracked and full-data CI regression active.**
+
+The current package should be regarded as a validated spatial baseline and data-generation framework. Future extensions can use this foundation to allocate national GOBLIN pathways and analyse their local agricultural and land-use consequences.
 
 ## Author
 
