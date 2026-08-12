@@ -72,6 +72,8 @@ The framework separates three roles:
 
 The package does not run a separate national herd-dynamics model inside every ED. The controlled spatial livestock population is first established, then expressed in the GOBLIN cohort structure without changing that population.
 
+For cattle, the final genetic disaggregation is explicitly **ED-informed**. Dairy cows provide the default support for DxD and DxB cohorts, other/suckler cows provide the default support for BxB cohorts, and a sparse set of receiver/rearing EDs is admitted where the ED's own young-stock structure indicates bought-in cattle and where such support is needed for exact national GOBLIN closure. County controls determine cattle totals and age-sex composition; they do **not** make every ED eligible for every genetic cohort.
+
 ## Temporal interpretation
 
 The 2015-2025 panel is a **reconstructed ED panel**, not eleven independent ED censuses.
@@ -92,20 +94,18 @@ pip install -e .
 
 ## Data
 
-Compact, auditable controls are versioned directly in GitHub. The current development manifest keeps the two larger full-data inputs external and pins their exact SHA256 checksums:
+The complete Ireland 2015-2025 development input bundle is currently versioned directly in GitHub for simple and reproducible use. The manifest pins the two principal full-data CSVs by SHA256 checksum:
 
-- `CSO_ED_2020.csv`
-- `AQA06_Unpivoted_2013_2025.csv`
+- `data/raw/cattle/CSO_ED_2020.csv`
+- `data/raw/land/AQA06_Unpivoted_2013_2025.csv`
 
-The remaining cattle, sheep, GOBLIN cohort, SE and county-region controls are currently tracked in the repository. Before public release, the external full-data entries can point to a versioned Zenodo record or stable official source without changing the scientific module API.
+The cattle, sheep, GOBLIN cohort, SE and county-region controls are also tracked in the repository. Before a public v1.0 release, larger/raw source files can be moved to a versioned Zenodo record or stable official source without changing the scientific module API.
 
-To inspect the data contract:
+To verify the complete data contract:
 
 ```bash
-goblin-spatial fetch-data --verify-only --tracked-only
+goblin-spatial fetch-data --verify-only
 ```
-
-Once the external full-data inputs are available at the paths declared in `configs/ireland_2015_2025.yaml`, the complete build can be run directly.
 
 ## One-command build
 
@@ -150,7 +150,9 @@ Additional safeguards require:
 - no negative livestock or land values;
 - exact preservation of the eight 2020 land/SE anchor fields;
 - exact closure to the controlling livestock totals;
-- preservation of structural-zero support where required.
+- preservation of age-sex and ED genetic structural-zero support where required;
+- no DxD/DxB allocation to non-receiver zero-dairy EDs;
+- no BxB allocation to non-receiver zero-suckler EDs.
 
 The final validator also reports the difference between the preserved reported average holding size and the mechanically implied `AREA_FARMED / AGRICULTURAL_HOLDINGS` ratio as a diagnostic. It does not force the two measures to be identical.
 
@@ -206,13 +208,15 @@ GOBLIN-Spatial/
 
 ## Validation status
 
-The modular sheep composition/cohort stage reproduces the frozen validated sheep enrichment and all 10 GOBLIN sheep cohorts exactly. The modular land and SE stages reproduce the frozen Script 6 output to floating-point precision. The final validation/export layer reproduces the reference dimensions of the clean workbook: 31,427 all-year rows, 2,857 2020 rows, 35 CSO columns and 50 GOBLIN columns.
+The cattle module reproduces all official ED, county and national cattle controls exactly while enforcing the corrected sparse ED-informed DxD/DxB/BxB support. In the 2020 baseline, 1,142 of 1,463 zero-dairy EDs retain zero dairy-origin young stock, while 321 receiver/rearing EDs provide the movement-aware exception required for exact closure.
 
-A full-data regression test is included in `tests/test_full_regression.py`. It is designed to run once the two external full-data inputs are present and checks the complete 2015-2025 national cattle, sheep and holdings series together with final workbook dimensions.
+The modular sheep composition/cohort stage reproduces the validated sheep enrichment and all 10 GOBLIN sheep cohorts exactly. The modular land and SE stages reproduce the validated Script 6 accounting to floating-point precision. The final validation/export layer reproduces the clean-workbook dimensions: 31,427 all-year rows, 2,857 2020 rows, 35 CSO columns and 50 GOBLIN columns.
+
+The complete input bundle is now Git-tracked, and GitHub Actions automatically runs both compact tests and the full 2015-2025 regression on each relevant update.
 
 ## Status
 
-**Validated Irish 2015-2025 baseline complete. Modular Python package implemented. Full-data integration regression is ready to run when the two pinned external input files are present in the repository working tree or connected through the data manifest.**
+**Validated Irish 2015-2025 baseline complete. Modular Python package implemented. Complete input bundle Git-tracked and full-data CI regression active.**
 
 ## Author
 
