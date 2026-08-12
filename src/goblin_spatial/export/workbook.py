@@ -1,4 +1,4 @@
-"""Clean four-sheet Excel export for GOBLIN-Spatial."""
+"""Clean Excel export for GOBLIN-Spatial."""
 
 from __future__ import annotations
 
@@ -51,6 +51,20 @@ SE_LAND = [
     "OTHER_CROPS_HA",
 ]
 GOBLIN_31 = [*FINAL_21_COHORTS, *GOBLIN_SHEEP_10]
+STANDARD_OUTPUT = [
+    "FADN_REGION",
+    "FADN_REGION_LABEL",
+    "SO_DAIRY_COWS_2020_EUR",
+    "SO_SUCKLER_COWS_2020_EUR",
+    "SO_BULLS_2020_EUR",
+    "SO_FOLLOWERS_2020_EUR",
+    "SO_SHEEP_2020_EUR",
+    "SO_LIVESTOCK_2020_EUR",
+    "SO_CEREALS_2020_EUR",
+    "SO_COVERED_TOTAL_2020_EUR",
+    "SO_OTHER_CROPS_UNVALUED_HA",
+    "SO_COVERED_PER_HOLDING_2020_EUR",
+]
 BANNED_TOKENS = [
     "STATUS",
     "METHOD",
@@ -93,12 +107,16 @@ def _check_clean(frame: pd.DataFrame, name: str) -> None:
 def build_clean_sheets(
     master: pd.DataFrame, base_year: int = 2020
 ) -> dict[str, pd.DataFrame]:
-    """Return the exact four clean tables used by the validated workbook.
+    """Return the clean biological, structural and Standard Output tables.
 
     ``LSU`` is intentionally excluded from the current baseline export because
     the historical source field is a static 2020 context value, not an annual
-    reconstructed indicator. Scenario-consistent LSU belongs in a later
-    pressure/scenario module.
+    reconstructed indicator. Scenario-consistent LSU belongs in the pressure
+    layer.
+
+    Standard Output is kept on a separate sheet so adding valuation does not
+    alter the validated CSO/GOBLIN biological schemas. It uses one fixed 2020
+    coefficient basis across all years.
     """
 
     ids = _existing(master, IDENTIFIERS)
@@ -149,6 +167,16 @@ def build_clean_sheets(
         "CSO_2020": cso_2020,
         "GOBLIN_2020": goblin_2020,
     }
+
+    so_columns = list(dict.fromkeys(ids + _existing(master, STANDARD_OUTPUT)))
+    if any(column.startswith("SO_") for column in so_columns):
+        so_all = (
+            master[so_columns]
+            .sort_values(["YEAR", "CSOED"], kind="stable")
+            .reset_index(drop=True)
+        )
+        sheets["Standard_Output"] = so_all
+
     for name, frame in sheets.items():
         _check_clean(frame, name)
 
@@ -189,6 +217,7 @@ def _format_sheet(
     )
     integer = workbook.add_format({"num_format": "#,##0"})
     decimal = workbook.add_format({"num_format": "#,##0.00"})
+    currency = workbook.add_format({"num_format": "€#,##0.00"})
     age = workbook.add_format({"num_format": "0.00"})
 
     for col, value in enumerate(frame.columns):
@@ -202,11 +231,12 @@ def _format_sheet(
         "ALL_GRASSLAND",
         "TOTAL_CEREALS",
         "OTHER_CROPS_HA",
+        "SO_OTHER_CROPS_UNVALUED_HA",
     }
     age_names = {"AVERAGE_AGE_OF_HOLDER", "MEDIAN_AGE_OF_HOLDER"}
 
     for col_idx, column in enumerate(frame.columns):
-        width = max(12, min(27, len(str(column)) + 2))
+        width = max(12, min(30, len(str(column)) + 2))
         fmt = None
         if column in integer_names:
             fmt = integer
@@ -214,6 +244,8 @@ def _format_sheet(
             fmt = decimal
         elif column in age_names:
             fmt = age
+        elif column.startswith("SO_") and column.endswith("_EUR"):
+            fmt = currency
 
         if column in {"ELECTORAL_DIVISIONS", "EDNAME", "COUNTYNAME"}:
             width = 24
@@ -227,7 +259,7 @@ def export_clean_workbook(
     output_path: str | Path,
     base_year: int = 2020,
 ) -> dict[str, pd.DataFrame]:
-    """Write the final clean four-sheet workbook and return its tables."""
+    """Write the final clean workbook and return its tables."""
 
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
