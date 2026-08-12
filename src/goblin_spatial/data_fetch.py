@@ -129,19 +129,21 @@ def _safe_extract_zip(archive_path: Path, extract_dir: Path) -> None:
         archive.extractall(extract_dir)
 
 
-def _canonicalise_single_shapefile_bundle(
+def _canonicalise_shapefile_bundle(
     extract_dir: Path,
     primary: Path,
+    *,
+    expected_sha256: str | None = None,
 ) -> bool:
-    """Copy a uniquely identifiable shapefile bundle to the canonical stem.
+    """Copy the pinned extracted shapefile bundle to the canonical local stem.
 
-    Research archives often preserve browser-added suffixes such as ``(1)`` or
-    a nested source directory. The manifest, however, exposes one stable local
-    path to the scientific code. If the expected primary shapefile is absent
-    but the extracted archive contains exactly one shapefile, copy that bundle
-    to the manifest's canonical stem. The original extracted members are kept.
+    Research archives can preserve browser-added suffixes, nested directories,
+    or several shapefiles. The manifest therefore identifies the scientific
+    primary by its SHA256 whenever available. If the expected primary is absent,
+    candidates are selected by that pinned hash; only when no hash is supplied
+    is a unique `.shp` candidate accepted.
 
-    Returns ``True`` when canonicalisation was performed.
+    The original extracted members are retained alongside the canonical copy.
     """
 
     if primary.suffix.lower() != ".shp" or primary.exists():
@@ -152,14 +154,25 @@ def _canonicalise_single_shapefile_bundle(
         for path in extract_dir.rglob("*")
         if path.is_file() and path.suffix.lower() == ".shp"
     ]
-    if len(candidates) != 1:
+
+    selected: Path | None = None
+    if expected_sha256:
+        expected = str(expected_sha256).lower()
+        matches = [
+            path for path in candidates if sha256_file(path).lower() == expected
+        ]
+        if len(matches) == 1:
+            selected = matches[0]
+    elif len(candidates) == 1:
+        selected = candidates[0]
+
+    if selected is None:
         return False
 
-    source_shp = candidates[0]
     primary.parent.mkdir(parents=True, exist_ok=True)
     copied = False
     for suffix in (".shp", ".shx", ".dbf", ".prj", ".cpg"):
-        source = source_shp.with_suffix(suffix)
+        source = selected.with_suffix(suffix)
         target = primary.with_suffix(suffix)
         if source.exists() and source.resolve() != target.resolve():
             shutil.copy2(source, target)
@@ -202,7 +215,11 @@ def _postprocess_archive(
     canonicalised = False
     if extract and missing:
         _safe_extract_zip(archive_path, extract_dir)
-        canonicalised = _canonicalise_single_shapefile_bundle(extract_dir, primary)
+        canonicalised = _canonicalise_shapefile_bundle(
+            extract_dir,
+            primary,
+            expected_sha256=info.get("primary_sha256"),
+        )
         missing = [path for path in required if not path.exists()]
 
     if missing:
