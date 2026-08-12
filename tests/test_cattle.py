@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 
 from goblin_spatial.cattle import add_cattle_cohorts, build_cattle_panel
-from goblin_spatial.cattle.cohorts import FINAL_21_COHORTS
+from goblin_spatial.cattle.cohorts import CONTAINERS, FINAL_21_COHORTS
 from goblin_spatial.cattle.panel import AGE_SEX_COLS
 from goblin_spatial.config import load_config
 
@@ -97,9 +97,14 @@ def test_cattle_goblin_cohort_regression() -> None:
     assert (cattle["suckler_cows"] == cattle["OTHER_COW"]).all()
     assert (cattle["bulls"] == cattle["BULLS"]).all()
 
-    y2020 = cattle.loc[cattle["YEAR"] == 2020]
-    from goblin_spatial.cattle.cohorts import CONTAINERS
+    for container, mapping in CONTAINERS.items():
+        cohort_columns = [mapping[genetic] for genetic in ("DxD", "DxB", "BxB")]
+        assert (
+            cattle[cohort_columns].sum(axis=1).astype(int)
+            == cattle[container].astype(int)
+        ).all()
 
+    y2020 = cattle.loc[cattle["YEAR"] == 2020]
     for container, expected in EXPECTED_2020_GENETIC_MARGINS.items():
         mapping = CONTAINERS[container]
         observed = tuple(
@@ -107,3 +112,37 @@ def test_cattle_goblin_cohort_regression() -> None:
             for genetic in ("DxD", "DxB", "BxB")
         )
         assert observed == expected
+
+
+def test_cattle_ed_informed_genetic_support() -> None:
+    """The GOBLIN genetic split must remain sparse where adult origins are absent."""
+
+    config = load_config(CONFIG)
+    cattle = add_cattle_cohorts(build_cattle_panel(config), config)
+    y2020 = cattle.loc[cattle["YEAR"] == 2020].copy()
+
+    dairy_origin_columns = [
+        mapping[genetic]
+        for mapping in CONTAINERS.values()
+        for genetic in ("DxD", "DxB")
+    ]
+    bxb_columns = [mapping["BxB"] for mapping in CONTAINERS.values()]
+
+    zero_dairy = y2020["DAIRY_COW"].eq(0)
+    no_dairy_origin = y2020[dairy_origin_columns].sum(axis=1).eq(0)
+
+    assert int(zero_dairy.sum()) == 1_463
+    assert int((zero_dairy & no_dairy_origin).sum()) == 1_142
+
+    dairy_only = y2020["DAIRY_COW"].gt(0) & y2020["OTHER_COW"].eq(0)
+    assert int(dairy_only.sum()) == 11
+    assert y2020.loc[dairy_only, bxb_columns].sum(axis=1).eq(0).all()
+
+    no_adult_receiver = (
+        y2020["DAIRY_COW"].eq(0)
+        & y2020["OTHER_COW"].eq(0)
+        & y2020["OTHER_CATTLE"].gt(0)
+    )
+    assert int(no_adult_receiver.sum()) == 51
+    assert y2020.loc[no_adult_receiver, dairy_origin_columns].sum(axis=1).gt(0).all()
+    assert y2020.loc[no_adult_receiver, bxb_columns].sum(axis=1).gt(0).all()
