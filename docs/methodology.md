@@ -68,15 +68,36 @@ The same reconciliation machinery is intended to be shared across package module
 
 ### Cattle
 
-The annual cattle panel is constrained to official county totals and an ED age-sex structure. The fixed ED cattle population is then expressed in the 21 cattle cohorts used by GOBLIN.
+The annual cattle panel is constrained to official county totals and an ED age-sex structure. `OTHER_CATTLE` is first represented in the six CSO age-sex containers, with breeding bulls retained separately. The fixed ED cattle population is then expressed in the 21 cattle cohorts used by GOBLIN.
 
 For every ED-year:
 
 `sum(21 GOBLIN cattle cohorts) = TOTAL_CATTLE`
 
-The GOBLIN cohort relationships inform DxD, DxB and BxB biological composition but do not replace the CSO livestock population.
+and, for each CSO pre-adult age-sex container:
 
-Biological dependency should not be interpreted as geographical co-location. For example, cohort relationships may depend biologically on dairy or beef cows even where cattle move between holdings or areas. Spatial allocation is therefore controlled by the official ED population and the reconciliation framework, not by assuming that all biologically related cohorts must occupy the same ED.
+`DxD + DxB + BxB = fixed CSO ED age-sex total`
+
+The GOBLIN cohort relationships determine the national biological composition of the six pre-adult age-sex containers. They do not generate or replace the CSO ED cattle population.
+
+Genetic support is **ED-first**. The default biological support follows the adult-cow structure observed in the ED:
+
+- EDs with dairy cows support dairy-origin `DxD` and `DxB` cohorts;
+- EDs with other/suckler cows support `BxB` cohorts;
+- mixed EDs can support all three genetic groups;
+- breeding bulls remain a separate adult cohort and are never split into DxD, DxB or BxB.
+
+Biological dependency does not imply geographical co-location. Young cattle can move from breeding to rearing or finishing areas. For that reason, the framework admits a **sparse receiver/rearing exception** rather than imposing absolute genetic zeros on every ED without the corresponding adult-cow class. EDs with non-cow cattle but no adult cows are treated as receiver locations. Where additional dairy-origin support is required to reproduce the national GOBLIN margins, zero-dairy EDs are admitted in descending order of their own 2020 young-stock-to-adult-cow signal until exact closure becomes feasible across the complete 2015–2025 panel.
+
+This rule deliberately avoids the previous blanket county-context fallback. County statistics continue to control the official cattle totals and age-sex composition, but **county context does not make every ED genetically eligible**. The result preserves genuine rearing/finishing movement while retaining structural zeros in most EDs where the corresponding breeding origin is absent.
+
+The distinction is therefore:
+
+```text
+CSO ED cattle + county controls  -> how many cattle and what age/sex
+ED adult-cow / receiver support  -> where genetic cohorts are plausible
+GOBLIN cohort relationships      -> national DxD/DxB/BxB composition
+```
 
 ### Sheep
 
@@ -124,6 +145,8 @@ sum(21 GOBLIN cattle cohorts) = TOTAL_CATTLE
 sum(10 GOBLIN sheep cohorts) = TOTAL_SHEEP
 AREA_FARMED = ALL_GRASSLAND + TOTAL_CEREALS + OTHER_CROPS_HA
 ```
+
+The cattle module additionally validates that non-receiver zero-dairy EDs contain no DxD/DxB cattle and that non-receiver zero-suckler EDs contain no BxB cattle.
 
 A package build should fail rather than silently continue if a protected accounting constraint is violated.
 
