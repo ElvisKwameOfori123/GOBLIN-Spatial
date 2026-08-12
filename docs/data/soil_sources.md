@@ -18,13 +18,39 @@ validated ED livestock baseline
 No association is converted to a future land use or to GOBLIN soil Group
 1/2/3 at this stage.
 
+## Frozen reproducibility release
+
+The two large spatial inputs used by the first soil stage are preserved in the
+published Zenodo dataset:
+
+**GOBLIN-Spatial Frozen Spatial Input Bundle for Irish Electoral Division and
+Soil Analysis, Version 0.1.0**
+
+- version-specific DOI: `10.5281/zenodo.21906755`
+- all-versions/concept DOI: `10.5281/zenodo.21906754`
+- published: 2026-08-12
+- licence recorded on Zenodo: CC BY 4.0
+
+Model execution pins the **version-specific DOI/record** so a later Zenodo
+version cannot silently change the spatial inputs underlying an analysis. The
+concept DOI is retained for citation/discovery of the evolving dataset family.
+
+The record currently contains:
+
+- `Electoral_Divisions.zip`
+- `INSM250k_ING_1b.zip`
+
+The files are fetched on demand by `goblin-spatial fetch-data`, checksum
+verified, and unpacked under `data/external/spatial/`, which is excluded from
+ordinary Git history.
+
 ## Authoritative ED universe
 
-The CSO SAPS shapefile contains 3,409 ED geometries.  The current validated
-2020 GOBLIN-Spatial livestock baseline contains 2,857 production EDs.  The
-baseline is authoritative: the overlay must select exactly those 2,857
-geometries before intersecting soil.  A successful geometry source therefore
-has 100% key coverage of the baseline but may contain additional ED polygons.
+The CSO SAPS shapefile contains 3,409 ED geometries. The current validated 2020
+GOBLIN-Spatial livestock baseline contains 2,857 production EDs. The baseline
+is authoritative: the overlay must select exactly those 2,857 geometries before
+intersecting soil. A successful geometry source therefore has 100% key coverage
+of the baseline but may contain additional ED polygons.
 
 Compound codes are canonicalised member-by-member, e.g.
 `08045/08046 -> 8045/8046`, so leading zeros cannot break the join.
@@ -33,7 +59,11 @@ Compound codes are canonicalised member-by-member, e.g.
 
 ### CSO SAPS ED geography
 
-Expected principal file:
+Zenodo archive destination:
+
+`data/external/spatial/ed/Electoral_Divisions.zip`
+
+After verified extraction, the principal file is:
 
 `data/external/spatial/ed/Electoral_Divisions_generalised_SAPS_Shp_with_proper_names.shp`
 
@@ -41,31 +71,45 @@ The `.shx`, `.dbf` and `.prj` members are required beside it.
 
 ### Irish Soil Information System
 
-Expected bundle:
+Zenodo archive destination:
 
 `data/external/spatial/sis_soils/INSM250k_ING_1b.zip`
 
-The current bundle contains `INSM250k_ING.shp` and its sidecars plus source
-metadata.  The shapefile's raw `Associatio` field is retained as the initial
-soil identifier.  The neutral overlay does not infer component-series
-proportions from the association code.
+The bundle contains `INSM250k_ING.shp` and its sidecars plus source metadata.
+The shapefile's raw `Associatio` field is retained as the initial soil
+identifier. The neutral overlay does not infer component-series proportions
+from the association code.
 
 ### LPIS 2020 audit
 
-Expected workbook:
+Expected local workbook:
 
 `data/external/spatial/lpis/LPIS_2020_audit.xlsx`
 
-This is retained for the later agricultural-grassland mask / denominator
-validation stage.  It is not yet used to alter the first ED x SIS association
-overlay.
+LPIS is **not** part of Zenodo spatial release v0.1.0. It is retained for the
+later agricultural-grassland mask / denominator validation stage and is not yet
+used to alter the first ED x SIS association overlay.
 
 ## Why the raw files are external
 
 The SIS `.shp` inside the supplied archive is larger than GitHub's normal
-single-file limit.  Raw GIS binaries are therefore gitignored.  Exact principal
-inputs are pinned in `data_manifest.yaml` by SHA256 so local copies can be
-verified without committing the binaries.
+single-file workflow is intended to carry. Raw GIS binaries are therefore kept
+outside Git. The Zenodo release provides the frozen research copy; the manifest
+pins the archive checksums and principal extracted shapefiles so downloaded data
+can be verified before scientific use.
+
+This gives the project the following separation:
+
+```text
+GitHub repository
+    -> code, tests, controls, manifest
+
+Zenodo version 0.1.0
+    -> frozen ED + SIS raw spatial inputs
+
+local data/external/spatial/
+    -> verified cache/extraction used at runtime
+```
 
 ## First output schema
 
@@ -97,7 +141,7 @@ It does not yet answer:
 - whether released hectares should become forestry, rewetting, nature,
   cropland or AD grass.
 
-Those are later stages.  In particular:
+Those are later stages. In particular:
 
 ```text
 ED x SIS associations
