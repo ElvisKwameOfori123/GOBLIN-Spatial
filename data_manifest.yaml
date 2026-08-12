@@ -1,15 +1,24 @@
-manifest_version: "0.4.0"
+manifest_version: "0.5.0"
 release: "ireland-2015-2025-dev"
 status: "development"
 
-# Development rule:
-# - the complete Ireland 2015-2025 baseline input bundle is currently
-#   versioned directly in GitHub for simple, reproducible development;
-# - SHA256 checksums pin the principal full-data inputs;
-# - large/raw GIS sources are declared as external inputs and kept out of
-#   ordinary Git history; their exact local copies are pinned by SHA256;
-# - before a public v1.0 release, large/raw source files can be moved to
-#   Zenodo or official download endpoints without changing scientific logic.
+# Data architecture:
+# - compact validated controls remain versioned directly in Git;
+# - large/raw GIS inputs are stored externally and fetched on demand;
+# - the published GOBLIN-Spatial spatial bundle is pinned to an immutable,
+#   version-specific Zenodo record for exact reproducibility;
+# - the Zenodo concept DOI is also recorded for citation/discovery of future
+#   versions, but model execution uses the version-specific record below.
+
+external_releases:
+  goblin_spatial_spatial_inputs_v0_1_0:
+    repository: "Zenodo"
+    record_id: 21906755
+    version_doi: "10.5281/zenodo.21906755"
+    concept_doi: "10.5281/zenodo.21906754"
+    title: "GOBLIN-Spatial Frozen Spatial Input Bundle for Irish Electoral Division and Soil Analysis, Version 0.1.0"
+    publication_date: "2026-08-12"
+    license: "CC-BY-4.0"
 
 datasets:
   cso_ed_2020:
@@ -99,20 +108,53 @@ datasets:
   saps_ed_geography:
     module: [soil, spatial]
     description: "CSO SAPS Electoral Division geometry carrying the CSOED coding system used to spatially locate the authoritative GOBLIN-Spatial baseline."
-    source: "external"
-    destination: "data/external/spatial/ed/Electoral_Divisions_generalised_SAPS_Shp_with_proper_names.shp"
-    sha256: "0fefea2da017afb25dccafe3c51dbfb7ecdf2dff7ce7e00ae91ce5ee600102df"
+    source: "zenodo"
+    release: "goblin_spatial_spatial_inputs_v0_1_0"
+    destination: "data/external/spatial/ed/Electoral_Divisions.zip"
+    url: "https://zenodo.org/records/21906755/files/Electoral_Divisions.zip?download=1"
+    known_hash: "md5:bc4b752a1b518913e7ea18ed09ac3ae0"
+    archive: "zip"
+    extract_to: "data/external/spatial/ed"
+    primary_path: "data/external/spatial/ed/Electoral_Divisions_generalised_SAPS_Shp_with_proper_names.shp"
+    primary_sha256: "0fefea2da017afb25dccafe3c51dbfb7ecdf2dff7ce7e00ae91ce5ee600102df"
+    required_members:
+      - "data/external/spatial/ed/Electoral_Divisions_generalised_SAPS_Shp_with_proper_names.shp"
+      - "data/external/spatial/ed/Electoral_Divisions_generalised_SAPS_Shp_with_proper_names.shx"
+      - "data/external/spatial/ed/Electoral_Divisions_generalised_SAPS_Shp_with_proper_names.dbf"
+      - "data/external/spatial/ed/Electoral_Divisions_generalised_SAPS_Shp_with_proper_names.prj"
+    member_sha256:
+      shp: "0fefea2da017afb25dccafe3c51dbfb7ecdf2dff7ce7e00ae91ce5ee600102df"
+      shx: "b40af1176ea8cc602e30c908211cc93da5c26b3c39be3d1fc3a8dcd0aa2f0bea"
+      dbf: "679b675766419688141644dec2dafee8b3cb4b928f1258c7c0c32343675022dd"
+      prj: "4df6798dbe12d22a1edd15991de2cae2cb4a6a1d79bf2b18319c352736a2f25f"
     required: false
-    note: "The matching .shx, .dbf and .prj sidecars must sit beside the .shp. The full SAPS layer has 3,409 EDs; the livestock baseline remains authoritative and currently selects 2,857 production EDs."
+    note: "Zenodo version DOI 10.5281/zenodo.21906755. The full SAPS layer has 3,409 geometries; the authoritative livestock baseline selects the 2,857 EDs used by GOBLIN-Spatial."
 
   sis_national_soils_zip:
     module: [soil, spatial]
-    description: "Teagasc Irish Soil Information System national 1:250,000 soil-association map bundle."
-    source: "external"
+    description: "Teagasc/EPA Irish Soil Information System national 1:250,000 soil-association map bundle."
+    source: "zenodo"
+    release: "goblin_spatial_spatial_inputs_v0_1_0"
     destination: "data/external/spatial/sis_soils/INSM250k_ING_1b.zip"
-    sha256: "7c2eaa206335d6c34a02bfd008567375cd4b5128b83f88635c58a5be3cc6a35b"
+    url: "https://zenodo.org/records/21906755/files/INSM250k_ING_1b.zip?download=1"
+    known_hash: "sha256:7c2eaa206335d6c34a02bfd008567375cd4b5128b83f88635c58a5be3cc6a35b"
+    zenodo_md5: "04a56bcad4b6aa5a38275b5719371194"
+    archive: "zip"
+    extract_to: "data/external/spatial/sis_soils"
+    primary_path: "data/external/spatial/sis_soils/INSM250k_ING.shp"
+    primary_sha256: "e628c26cca1f4ae609b554085b28b83a84aa025ddb60f0dae85b1f4c1063ba99"
+    required_members:
+      - "data/external/spatial/sis_soils/INSM250k_ING.shp"
+      - "data/external/spatial/sis_soils/INSM250k_ING.shx"
+      - "data/external/spatial/sis_soils/INSM250k_ING.dbf"
+      - "data/external/spatial/sis_soils/INSM250k_ING.prj"
+    member_sha256:
+      shp: "e628c26cca1f4ae609b554085b28b83a84aa025ddb60f0dae85b1f4c1063ba99"
+      shx: "31c13fb670729e19d98dca4392c4150ee7b62da78f6418443947cc95189ec2aa"
+      dbf: "00a5b137bc8ed7653ab67fb63a7e94fb6343de204433a3ca70aeaa21737ceb0f"
+      prj: "4df6798dbe12d22a1edd15991de2cae2cb4a6a1d79bf2b18319c352736a2f25f"
     required: false
-    note: "Extract in place before overlay. The contained INSM250k_ING.shp is larger than GitHub's normal per-file limit, so the raw bundle is intentionally not committed."
+    note: "Zenodo version DOI 10.5281/zenodo.21906755. The contained INSM250k_ING.shp is larger than GitHub's normal per-file limit and is therefore fetched and unpacked outside Git history."
 
   lpis_2020_audit:
     module: [soil, land, spatial]
@@ -121,4 +163,4 @@ datasets:
     destination: "data/external/spatial/lpis/LPIS_2020_audit.xlsx"
     sha256: "a2bc952ddc922982cf0a23e4f91dacc54bbce44a1d6e0af84f675694287ab1a5"
     required: false
-    note: "This audit workbook is contextual input only until a validated parcel/grassland geometry workflow is defined."
+    note: "Not redistributed through the Zenodo v0.1.0 spatial bundle. Retained as contextual local input until redistribution rights and the parcel/grassland workflow are fully documented."
