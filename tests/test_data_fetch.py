@@ -51,7 +51,9 @@ def test_fetch_data_verifies_and_extracts_local_zip(tmp_path: Path) -> None:
     assert expected.read_bytes() == b"fixed spatial fixture"
 
 
-def test_fetch_data_canonicalises_single_shapefile_bundle(tmp_path: Path) -> None:
+def test_fetch_data_canonicalises_pinned_shapefile_among_multiple_candidates(
+    tmp_path: Path,
+) -> None:
     source_dir = tmp_path / "source"
     source_dir.mkdir()
     source_stem = source_dir / "Electoral_Divisions(1)"
@@ -64,11 +66,15 @@ def test_fetch_data_canonicalises_single_shapefile_bundle(tmp_path: Path) -> Non
     for suffix, payload in payloads.items():
         source_stem.with_suffix(suffix).write_bytes(payload)
 
+    decoy = source_dir / "Another_Layer.shp"
+    decoy.write_bytes(b"different-shapefile")
+
     archive = tmp_path / "bundle.zip"
     with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         for suffix in payloads:
             member = source_stem.with_suffix(suffix)
             zf.write(member, arcname=member.name)
+        zf.write(decoy, arcname=decoy.name)
 
     canonical_stem = Path("external/Electoral_Divisions")
     manifest = {
