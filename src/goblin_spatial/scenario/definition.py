@@ -35,9 +35,14 @@ class ScenarioDefinition:
     decides which existing ED animals comprise that reduction.
 
     Protection rules interpret a *higher* score as stronger protection (a
-    smaller proportional cut). ``protection_strength`` controls how strongly
-    the score changes the allocation. At the default 0.8, an ED at score 1 has
-    one-fifth of the raw cut weight of an otherwise identical ED at score 0.
+    smaller proportional cut). ``DAIRY_PROTECTION`` derives that score directly
+    from baseline dairy-cow numbers, so EDs with larger dairy herds receive a
+    smaller percentage cut than otherwise comparable EDs with fewer dairy cows.
+    The national GOBLIN reduction is unchanged.
+
+    ``protection_strength`` controls how strongly the score changes incidence.
+    At the default 0.8, an ED at score 1 has one-fifth of the raw cut weight of
+    an otherwise identical ED at score 0.
     """
 
     name: str
