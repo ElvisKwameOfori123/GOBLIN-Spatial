@@ -5,16 +5,20 @@ National biology and spatial incidence are deliberately separated:
 * GOBLIN/COHORTS supplies the national target for every biological cohort.
 * GOBLIN-Spatial starts from the selected ED cohort baseline and allocates only
   the implied reduction across EDs.
-* Dairy-origin cohorts (DxD and DxB) follow the geography of dairy-cow
-  reductions plus existing receiver/rearing locations.
-* BxB cohorts follow suckler-cow reductions plus existing receiver/rearing
-  locations.
-* Bulls follow total adult-cow reductions.
+* Breeding EDs respond first through their own adult-to-cohort relationship.
+* Receiver/rearing/finishing EDs with no corresponding adult cows inherit the
+  reduction signal from breeding activity within the same county.
+* National fallback is reserved for sparse orphan cases where a cohort exists
+  in a county with no corresponding adult breeding stock at all.
 
-No future cohort is constructed from an ED ratio. ED-specific baseline cohort
-composition is used to decide *where* a national biological reduction lands.
-This preserves local finishing/rearing differences without allowing them to
-change the national GOBLIN biological target.
+For an active breeding ED, the core signal is equivalent to the direct marginal
+relationship discussed in the model design::
+
+    cohort_base * (adult_reduction / adult_base)
+      = adult_reduction * (cohort_base / adult_base)
+
+Thus adult and follower changes are one linked herd adjustment, while the county
+layer preserves observed separation between breeding and finishing geography.
 """
 
 from __future__ import annotations
@@ -48,35 +52,77 @@ def _reduction_signal(
     base_adults: np.ndarray,
     adult_reductions: np.ndarray,
     cohort_base: np.ndarray,
-) -> np.ndarray:
-    """Return an ED adult-reduction signal with support for receiver EDs.
+    counties: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return ED-first, county-second adult reduction signals.
 
-    Breeding EDs use their own realised adult reduction rate. If a cohort is
-    present in an ED with no corresponding adult cows, that ED is an observed
-    receiver/rearing location; it receives the national adult-reduction rate as
-    its signal rather than being excluded.
+    Active breeding EDs use their own realised adult reduction rate. Cohort
+    locations with no corresponding adults are treated as receiver/rearing or
+    finishing EDs and inherit the reduction rate of the same county. Only if the
+    county itself has no corresponding adults does the function use the national
+    rate as an explicit orphan fallback.
+
+    Returns
+    -------
+    signal:
+        Reduction-rate signal in [0, 1].
+    source:
+        Diagnostic source label: ``LOCAL_ED``, ``COUNTY_RECEIVER``,
+        ``NATIONAL_ORPHAN`` or ``NONE``.
     """
 
     base_adults = np.asarray(base_adults, dtype=np.int64)
     adult_reductions = np.asarray(adult_reductions, dtype=np.int64)
     cohort_base = np.asarray(cohort_base, dtype=np.int64)
+    counties = np.asarray(counties, dtype=object)
 
-    if (base_adults < 0).any() or (adult_reductions < 0).any():
-        raise ValueError("adult counts and reductions must be non-negative")
+    n = len(base_adults)
+    if any(len(x) != n for x in (adult_reductions, cohort_base, counties)):
+        raise ValueError("adult, cohort and county arrays must have equal length")
+    if (base_adults < 0).any() or (adult_reductions < 0).any() or (cohort_base < 0).any():
+        raise ValueError("adult, reduction and cohort counts must be non-negative")
     if (adult_reductions > base_adults).any():
         raise AssertionError("adult reduction exceeds adult baseline")
+    if pd.isna(counties).any():
+        raise ValueError("county is required for receiver/rearing cohort propagation")
 
-    signal = np.zeros(len(base_adults), dtype=float)
+    signal = np.zeros(n, dtype=float)
+    source = np.full(n, "NONE", dtype=object)
+
     active = base_adults > 0
     signal[active] = adult_reductions[active] / base_adults[active]
+    source[active] = "LOCAL_ED"
+
+    network = pd.DataFrame(
+        {
+            "County": counties,
+            "BASE_ADULTS": base_adults,
+            "ADULT_REDUCTION": adult_reductions,
+        }
+    )
+    county_base = network.groupby("County", sort=False)["BASE_ADULTS"].transform("sum").to_numpy(dtype=float)
+    county_reduction = network.groupby("County", sort=False)["ADULT_REDUCTION"].transform("sum").to_numpy(dtype=float)
+    county_rate = np.divide(
+        county_reduction,
+        county_base,
+        out=np.zeros(n, dtype=float),
+        where=county_base > 0,
+    )
+
+    receivers = (~active) & (cohort_base > 0)
+    county_receivers = receivers & (county_base > 0)
+    signal[county_receivers] = county_rate[county_receivers]
+    source[county_receivers] = "COUNTY_RECEIVER"
 
     national_base = int(base_adults.sum())
     national_reduction = int(adult_reductions.sum())
     national_rate = national_reduction / national_base if national_base > 0 else 0.0
 
-    receivers = (~active) & (cohort_base > 0)
-    signal[receivers] = national_rate
-    return np.clip(signal, 0.0, 1.0)
+    orphan = receivers & (county_base <= 0)
+    signal[orphan] = national_rate
+    source[orphan] = "NATIONAL_ORPHAN"
+
+    return np.clip(signal, 0.0, 1.0), source
 
 
 def _cohort_origin(cohort: str) -> str:
@@ -95,21 +141,14 @@ def allocate_cattle_cohort_response(
 ) -> pd.DataFrame:
     """Subtract GOBLIN/COHORTS cohort reductions from the ED cohort baseline.
 
-    Parameters
-    ----------
-    adult_scenario:
-        Output from :func:`allocate_adult_livestock_scenario`. It must retain
-        the selected baseline's 21 GOBLIN cattle cohort columns.
-    national_cohort_targets:
-        Exact national endpoint for each of the 21 GOBLIN cattle cohorts. In a
-        future pathway run these values should come from GOBLIN/COHORTS, not
-        from ED ratios.
+    This function represents one milestone/endpoint. Adult reductions and
+    follower reductions belong to the same herd state. Breeding EDs are linked
+    directly through their own adult reduction rate and baseline cohort/adult
+    relationship. Receiver/rearing/finishing EDs are linked through the same
+    county before any national orphan fallback is allowed.
 
-    Notes
-    -----
-    This first implementation is reduction-only. A target above the selected
-    baseline cohort total is rejected rather than silently creating animals in
-    new EDs. Expansion can be added later as an explicit, separate process.
+    ``national_cohort_targets`` remains authoritative for national biology. ED
+    and county relationships determine spatial incidence only.
     """
 
     out = adult_scenario.copy()
@@ -118,6 +157,7 @@ def allocate_cattle_cohort_response(
 
     required = [
         "CSOED",
+        "County",
         "BASE_DAIRY_COW",
         "BASE_OTHER_COW",
         "BASE_ADULT_COWS",
@@ -148,7 +188,6 @@ def allocate_cattle_cohort_response(
             raise ValueError(f"negative national target for {cohort}")
         targets[cohort] = value
 
-    # National adult targets must agree with the already-allocated adult layer.
     adult_checks = {
         "dairy_cows": int(out["SCENARIO_DAIRY_COW"].sum()),
         "suckler_cows": int(out["SCENARIO_OTHER_COW"].sum()),
@@ -160,7 +199,6 @@ def allocate_cattle_cohort_response(
                 f"the adult scenario target ({expected:,})"
             )
 
-    # Adults inherit the spatial allocation already completed.
     adult_mapping = {
         "dairy_cows": ("BASE_DAIRY_COW", "REDUCTION_DAIRY_COW", "SCENARIO_DAIRY_COW"),
         "suckler_cows": ("BASE_OTHER_COW", "REDUCTION_OTHER_COW", "SCENARIO_OTHER_COW"),
@@ -176,6 +214,7 @@ def allocate_cattle_cohort_response(
     red_dairy = _integer_array(out, "REDUCTION_DAIRY_COW")
     red_suckler = _integer_array(out, "REDUCTION_OTHER_COW")
     red_adults = _integer_array(out, "REDUCTION_ADULT_COWS")
+    counties = out["County"].astype(str).to_numpy(dtype=object)
 
     for cohort in FOLLOWER_COHORTS:
         base = _integer_array(out, cohort)
@@ -190,18 +229,18 @@ def allocate_cattle_cohort_response(
 
         origin = _cohort_origin(cohort)
         if origin == "DAIRY":
-            signal = _reduction_signal(base_dairy, red_dairy, base)
+            signal, source = _reduction_signal(base_dairy, red_dairy, base, counties)
         elif origin == "SUCKLER":
-            signal = _reduction_signal(base_suckler, red_suckler, base)
+            signal, source = _reduction_signal(base_suckler, red_suckler, base, counties)
         else:
-            signal = _reduction_signal(base_adults, red_adults, base)
+            signal, source = _reduction_signal(base_adults, red_adults, base, counties)
 
-        # The existing cohort distribution captures ED-specific rearing and
-        # finishing propensity. Adult reduction rates tilt the cuts toward the
-        # places whose breeding base is actually contracting. A tiny positive
-        # floor keeps every existing cohort location available if exact national
-        # closure requires spill-over beyond strongly signalled EDs.
-        cut_weights = base.astype(float) * (signal + 1e-9)
+        # For a breeding ED this weight is algebraically the direct marginal
+        # adult-to-cohort response: adult_reduction * cohort_base/adult_base.
+        # Receiver EDs use the corresponding county reduction rate instead.
+        # The tiny floor is used only for exact finite-population closure after
+        # the ED/county signal has been applied; true orphan support is flagged.
+        cut_weights = base.astype(float) * (signal + 1e-12)
         reductions = _bounded_integer_allocate(cut_weights, base, reduction_total)
         scenario_values = base - reductions
 
@@ -214,6 +253,7 @@ def allocate_cattle_cohort_response(
 
         out[f"BASE_COHORT_{cohort}"] = base
         out[f"REDUCTION_SIGNAL_{cohort}"] = signal
+        out[f"REDUCTION_SIGNAL_SOURCE_{cohort}"] = source
         out[f"REDUCTION_COHORT_{cohort}"] = reductions
         out[f"SCENARIO_COHORT_{cohort}"] = scenario_values
         out[f"REDUCTION_PCT_COHORT_{cohort}"] = np.where(
