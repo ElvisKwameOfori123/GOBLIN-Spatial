@@ -1,14 +1,15 @@
-manifest_version: "0.3.2"
+manifest_version: "0.4.0"
 release: "ireland-2015-2025-dev"
 status: "development"
 
 # Development rule:
 # - the complete Ireland 2015-2025 baseline input bundle is currently
 #   versioned directly in GitHub for simple, reproducible development;
-# - SHA256 checksums pin the two principal full-data CSV inputs;
+# - SHA256 checksums pin the principal full-data inputs;
+# - large/raw GIS sources are declared as external inputs and kept out of
+#   ordinary Git history; their exact local copies are pinned by SHA256;
 # - before a public v1.0 release, large/raw source files can be moved to
-#   Zenodo or official download endpoints without changing the scientific
-#   cattle, sheep, land or SE module logic.
+#   Zenodo or official download endpoints without changing scientific logic.
 
 datasets:
   cso_ed_2020:
@@ -94,3 +95,30 @@ datasets:
     path: "data/controls/county_region_map.csv"
     git_tracked: true
     required: true
+
+  saps_ed_geography:
+    module: [soil, spatial]
+    description: "CSO SAPS Electoral Division geometry carrying the CSOED coding system used to spatially locate the authoritative GOBLIN-Spatial baseline."
+    source: "external"
+    destination: "data/external/spatial/ed/Electoral_Divisions_generalised_SAPS_Shp_with_proper_names.shp"
+    sha256: "0fefea2da017afb25dccafe3c51dbfb7ecdf2dff7ce7e00ae91ce5ee600102df"
+    required: false
+    note: "The matching .shx, .dbf and .prj sidecars must sit beside the .shp. The full SAPS layer has 3,409 EDs; the livestock baseline remains authoritative and currently selects 2,857 production EDs."
+
+  sis_national_soils_zip:
+    module: [soil, spatial]
+    description: "Teagasc Irish Soil Information System national 1:250,000 soil-association map bundle."
+    source: "external"
+    destination: "data/external/spatial/sis_soils/INSM250k_ING_1b.zip"
+    sha256: "7c2eaa206335d6c34a02bfd008567375cd4b5128b83f88635c58a5be3cc6a35b"
+    required: false
+    note: "Extract in place before overlay. The contained INSM250k_ING.shp is larger than GitHub's normal per-file limit, so the raw bundle is intentionally not committed."
+
+  lpis_2020_audit:
+    module: [soil, land, spatial]
+    description: "LPIS 2020 audit workbook retained for the later agricultural-grassland mask and denominator validation stage."
+    source: "external"
+    destination: "data/external/spatial/lpis/LPIS_2020_audit.xlsx"
+    sha256: "a2bc952ddc922982cf0a23e4f91dacc54bbce44a1d6e0af84f675694287ab1a5"
+    required: false
+    note: "This audit workbook is contextual input only until a validated parcel/grassland geometry workflow is defined."
