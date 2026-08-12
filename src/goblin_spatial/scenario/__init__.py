@@ -3,10 +3,20 @@
 from goblin_spatial.scenario.definition import AllocationRule, ScenarioDefinition
 from goblin_spatial.scenario.allocation import allocate_adult_livestock_scenario
 from goblin_spatial.scenario.cohort_response import allocate_cattle_cohort_response
+from goblin_spatial.scenario.pathway import (
+    NationalMilestone,
+    TransitionPathwayDefinition,
+    build_transition_pathway,
+    linear_milestones_from_endpoint,
+)
 
 __all__ = [
     "AllocationRule",
     "ScenarioDefinition",
     "allocate_adult_livestock_scenario",
     "allocate_cattle_cohort_response",
+    "NationalMilestone",
+    "TransitionPathwayDefinition",
+    "build_transition_pathway",
+    "linear_milestones_from_endpoint",
 ]
