@@ -16,7 +16,17 @@ from goblin_spatial.scenario.pathway import (
 )
 from goblin_spatial.scenario.cattle_pathway import build_cattle_cohort_pathway
 from goblin_spatial.scenario.sheep_pathway import build_sheep_cohort_pathway
-from goblin_spatial.scenario.livestock_pathway import build_full_livestock_pathway
+from goblin_spatial.scenario.livestock_pathway import (
+    build_adult_driven_livestock_pathway,
+    build_full_livestock_pathway,
+)
+from goblin_spatial.scenario.sequential import (
+    SequentialScenarioDefinition,
+    SequentialScenarioResult,
+    reduction_schedule,
+    run_sequential_scenario,
+    standard_reduction_suite,
+)
 
 __all__ = [
     "NetZeroScenarioDefinition",
@@ -32,5 +42,11 @@ __all__ = [
     "linear_milestones_from_endpoint",
     "build_cattle_cohort_pathway",
     "build_sheep_cohort_pathway",
+    "build_adult_driven_livestock_pathway",
     "build_full_livestock_pathway",
+    "SequentialScenarioDefinition",
+    "SequentialScenarioResult",
+    "reduction_schedule",
+    "run_sequential_scenario",
+    "standard_reduction_suite",
 ]
