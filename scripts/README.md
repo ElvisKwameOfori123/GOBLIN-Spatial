@@ -19,11 +19,11 @@ The package itself is now organised around four scientific modules: `cattle`, `s
 | `06` farm structure and holder age | `se` |
 | `07` clean workbook | export layer |
 
-The legacy scripts are not intended to become the public package API. They are retained as the regression reference until the modular implementation reproduces every validated control and output.
+The corrected Script 5C-equivalent implementation is now `src/goblin_spatial/cattle/cohorts.py`. It uses ED adult-cow structure plus a sparse ED receiver/rearing exception and no longer uses blanket county context to give every ED positive DxD/DxB/BxB support. The original standalone Script 5C should therefore be treated only as a historical regression reference, not as the current scientific implementation.
 
-Normal users should ultimately run:
+The legacy scripts are not intended to become the public package API. Normal users should run:
 
 ```bash
-goblin-spatial fetch-data
+goblin-spatial fetch-data --verify-only
 goblin-spatial build --config configs/ireland_2015_2025.yaml
 ```
