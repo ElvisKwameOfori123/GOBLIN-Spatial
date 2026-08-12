@@ -1,9 +1,19 @@
-"""Spatialise fixed national adult-livestock reductions across EDs.
+"""Spatialise fixed national livestock reductions across EDs.
 
-This is the first scenario layer. It does not yet rebuild young cattle cohorts.
-It answers one transparent question: given a selected 2020 or 2025 ED starting
-state and a national reduction, where does that adult-livestock reduction land
-under the chosen allocation rule?
+This is the first scenario layer. It does not construct a new ED population from
+scratch. It always starts from the selected 2020 or 2025 ED baseline, calculates
+the national number of animals to remove, allocates that reduction across the
+animals already present in EDs, and subtracts the allocated reduction from the
+baseline.
+
+In other words::
+
+    national reduction = baseline national total - scenario national target
+    scenario ED count = baseline ED count - ED allocated reduction
+
+Young cattle are not yet rebuilt here. A subsequent biological response step
+will translate adult changes into national GOBLIN/COHORTS follower targets and
+spatialise those cohort changes across breeding and receiver/rearing EDs.
 """
 
 from __future__ import annotations
@@ -12,7 +22,6 @@ import numpy as np
 import pandas as pd
 
 from goblin_spatial.dynamics.baseline import select_baseline_year
-from goblin_spatial.reconciliation import hamilton_allocate
 from goblin_spatial.scenario.definition import AllocationRule, ScenarioDefinition
 
 
@@ -37,8 +46,10 @@ def _normalise_score(series: pd.Series) -> np.ndarray:
     return np.clip(out, 0.0, 1.0)
 
 
-def _bounded_integer_allocate(weights: np.ndarray, capacities: np.ndarray, target: int) -> np.ndarray:
-    """Allocate an integer target without exceeding per-ED capacities."""
+def _bounded_integer_allocate(
+    weights: np.ndarray, capacities: np.ndarray, target: int
+) -> np.ndarray:
+    """Allocate an integer reduction without exceeding per-ED baseline counts."""
 
     weights = np.asarray(weights, dtype=float)
     capacities = np.asarray(capacities, dtype=np.int64)
@@ -98,6 +109,13 @@ def _allocate_reduction(
     rule: AllocationRule,
     score: np.ndarray | None,
 ) -> tuple[np.ndarray, int]:
+    """Subtract an allocated national reduction from an existing ED baseline.
+
+    The scenario endpoint is used only to determine the national reduction that
+    must be removed. The ED scenario population is never rebuilt independently
+    from the target total.
+    """
+
     base = np.asarray(base, dtype=np.int64)
     if (base < 0).any():
         raise ValueError("baseline livestock counts must be non-negative")
@@ -113,7 +131,12 @@ def _allocate_reduction(
         return np.zeros(len(base), dtype=np.int64), target_total
 
     if rule == AllocationRule.PRORATA:
-        scenario = hamilton_allocate(base.astype(float), target_total).astype(np.int64)
+        # Allocate the number to REMOVE, proportional to the animals already
+        # present in each ED, then subtract. This makes the baseline the
+        # explicit authority rather than reconstructing a target distribution.
+        cut_weights = base.astype(float)
+        reductions = _bounded_integer_allocate(cut_weights, base, reduction_total)
+        scenario = base - reductions
     elif rule == AllocationRule.SCORE_WEIGHTED:
         if score is None:
             raise ValueError("SCORE_WEIGHTED allocation requires an ED score")
@@ -128,8 +151,12 @@ def _allocate_reduction(
     else:
         raise ValueError(f"unsupported allocation rule: {rule}")
 
+    if int(reductions.sum()) != reduction_total:
+        raise AssertionError("national reduction failed exact closure")
     if int(scenario.sum()) != target_total:
         raise AssertionError("national scenario target failed exact closure")
+    if not np.array_equal(base - reductions, scenario):
+        raise AssertionError("scenario is not baseline minus allocated reduction")
     if (scenario < 0).any() or (scenario > base).any():
         raise AssertionError("ED scenario count is outside baseline reduction bounds")
     if ((base == 0) & (scenario > 0)).any():
@@ -143,17 +170,21 @@ def allocate_adult_livestock_scenario(
     *,
     expected_eds: int | None = None,
 ) -> pd.DataFrame:
-    """Allocate a national adult-cattle/sheep reduction to EDs exactly.
+    """Allocate national adult-cattle/sheep reductions from an ED baseline.
 
-    The returned table is the spatial incidence layer for future destocking
-    studies. It preserves the selected baseline, reports the reduction assigned
-    to every ED, and closes exactly to the national reduction implied by the
-    scenario definition.
+    The selected 2020 or 2025 ED state is the authority. For each livestock
+    category the function:
 
-    Young cattle are deliberately not changed here. A subsequent biological
-    response step will translate adult changes into national GOBLIN/COHORTS
-    follower targets and then spatialise those followers across breeding and
-    receiver/rearing EDs.
+    1. reads the baseline ED counts;
+    2. calculates the national number to remove;
+    3. allocates only that reduction across EDs under the selected rule; and
+    4. subtracts each ED reduction from its own baseline count.
+
+    The returned table therefore makes the geography of destocking directly
+    observable. Young cattle are deliberately not changed here. A subsequent
+    biological response step will translate adult changes into national
+    GOBLIN/COHORTS follower targets and then spatialise those cohort changes
+    across breeding and receiver/rearing EDs.
     """
 
     baseline = select_baseline_year(
@@ -201,6 +232,16 @@ def allocate_adult_livestock_scenario(
             100.0 * (rounded - scenario_values) / rounded,
             0.0,
         )
+
+        national_reduction = int(rounded.sum()) - target_total
+        if int(out[f"REDUCTION_{column}"].sum()) != national_reduction:
+            raise AssertionError(f"national reduction failed for {column}")
+        if not np.array_equal(
+            out[f"BASE_{column}"].to_numpy(dtype=np.int64)
+            - out[f"REDUCTION_{column}"].to_numpy(dtype=np.int64),
+            out[f"SCENARIO_{column}"].to_numpy(dtype=np.int64),
+        ):
+            raise AssertionError(f"baseline-minus-reduction identity failed for {column}")
 
     out["REDUCTION_ADULT_COWS"] = (
         out["REDUCTION_DAIRY_COW"] + out["REDUCTION_OTHER_COW"]
