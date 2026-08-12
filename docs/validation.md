@@ -6,7 +6,7 @@ The current validated baseline covers 2,857 Electoral Divisions for 2015–2025,
 
 The 21 GOBLIN cattle cohorts reproduce the fixed CSO ED cattle population exactly.
 
-Key checks from the validated run:
+Key accounting checks from the validated run:
 
 - maximum original CSO cattle-control change: `0`
 - maximum ED age-sex cohort difference: `0`
@@ -15,6 +15,19 @@ Key checks from the validated run:
 - negative genetic cells: `0`
 - age-sex structural-zero violations: `0`
 - young-only ED pre-adult closure difference: `0`
+
+The corrected cattle spatial support is also validated explicitly. In the 2020 baseline:
+
+- zero-dairy EDs: `1,463`
+- zero-dairy EDs retaining zero DxD/DxB cattle: `1,142`
+- zero-dairy EDs admitted as receiver/rearing exceptions: `321`
+- EDs with no adult cows but positive `OTHER_CATTLE`: `51`
+- dairy-only EDs: `11`
+- dairy-only EDs receiving BxB cattle: `0`
+
+The 321 zero-dairy receiver/rearing exceptions are not imposed as a fixed percentage. They arise from the ED support algorithm required to keep the complete 2015–2025 set of CSO age-sex rows and national GOBLIN genetic margins simultaneously feasible. Most zero-dairy EDs therefore retain a true dairy-origin structural zero, while a limited set of EDs with strong young-stock/receiver characteristics can carry bought-in DxD or DxB cattle.
+
+These support checks validate the internal biological-spatial logic of the disaggregation. They are not a claim that the precise genetic mix of every ED has been independently observed.
 
 ## Script 5D: final 31 cohorts
 
@@ -56,6 +69,10 @@ The final clean workbook validation passed with:
 - 50 columns in `GOBLIN_All_Years`
 - exact 2020 subset identity
 - no model-diagnostic, status, target/allocation or reconstruction-method fields in the clean presentation sheets
+
+## Automated regression
+
+The complete input bundle is now Git-tracked. GitHub Actions therefore runs both the compact tests and the full 2015–2025 regression automatically. The full regression checks national cattle and sheep totals, cohort closure, land/SE constraints and the final clean-workbook dimensions.
 
 ## Interpretation
 
