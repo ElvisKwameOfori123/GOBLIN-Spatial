@@ -2,63 +2,69 @@
 
 ## Role in GOBLIN-Spatial
 
-Standard Output (SO) is a **valuation and exposure layer**. It is not an income,
-profit or welfare measure and it does not determine livestock allocation,
-biological cohort closure, pasture dry-matter demand or spared grassland.
+Standard Output (SO) is a **valuation and exposure layer**. It is not income,
+profit or welfare and it does not determine livestock allocation, biological
+cohort closure, pasture dry-matter demand or spared grassland.
 
-The sequence is therefore:
+The build sequence is:
 
 ```text
-physical ED livestock/cohort state
-        -> fixed-2020 Standard Output valuation
-        -> production-value exposure diagnostics
+cattle + sheep + land + socioeconomic ED baseline
+        -> fixed-2020 Standard Output mapping
+        -> validation
+        -> processed baseline export
 ```
 
-For scenario analysis the physical pathway is solved first. The same 2020
-coefficient set is then applied to the baseline and scenario states. This keeps
-SO changes interpretable as structural/activity change rather than a mixture of
-physical change and changing prices.
+The top-level pipeline calls `add_baseline_standard_output()` only after the
+physical livestock, cohort and land modules are complete. The same fixed
+coefficient set is applied to every baseline year so changes reflect physical
+activity/structure rather than price drift.
 
 Recommended interpretation:
 
-> Standard Output is expressed using fixed 2020 regional coefficients to isolate
-> structural changes in livestock and land-use activity from changes in
-> valuation coefficients.
+> Fixed-IFS-2020 Standard-Output-weighted production-value exposure at ED level.
 
-## Numerical coefficient source
+This is not a reconstruction of official holding-level Total Standard Output,
+not farm income and not a farm welfare measure.
 
-The numerical source is `IFS_T_MAIN_SOC_2020.xlsx`, sheet `SOC2020`. The model
-uses the Irish rows (`COUNTRY = IE`, `YEAR = 2020`) and the original `SOC_EUR`
-field. The source workbook is not required at runtime: the exact subset used by
-the model is versioned as:
+## Runtime mapping control
+
+The model-readable crosswalk is versioned as:
+
+`data/controls/standard_output/GOBLIN_SO_mapping.csv`
+
+It contains one row for each of the 31 GOBLIN livestock cohorts plus land and
+control variables. Runtime valuation reads this file directly, so product-code
+crosswalks, regional coefficients, imputation flags and the other-crop
+sensitivity are auditable without editing Python.
+
+The original numerical SO source remains:
+
+`IFS_T_MAIN_SOC_2020.xlsx`, sheet `SOC2020`
+
+and the exact Irish source subset used for audit is versioned as:
 
 `data/controls/standard_output/IFS_SOC2020_IE_model_controls.csv`
 
-The source workbook SHA256 used to prepare the extract is:
+The source workbook SHA256 is:
 
 `f9341129f63eb19bf3e37f0c655d1e3399ad013d1fc81d88922fdd5d4963f561`
 
-The coefficient loader can also read the original workbook directly, allowing
-the compact control extract to be audited against the source.
+## Historic Irish SO regions
 
-## Irish FADN regions
+The Irish SOC2020 table uses two historic regional codes for coefficient
+lookup. These are deliberately kept separate from the current three-region NUTS
+II geography used in modern NFS reporting.
 
-The 2020 Irish SOC table contains two historic FADN regions:
+- `381`: Border, Midland and Western (IE01)
+  - Cavan, Donegal, Galway, Leitrim, Laois, Longford, Louth, Mayo,
+    Monaghan, Offaly, Roscommon, Sligo, Westmeath
+- `382`: Southern and Eastern (IE02)
+  - Carlow, Clare, Cork, Dublin, Kerry, Kilkenny, Kildare, Limerick,
+    Meath, Tipperary, Waterford, Wexford, Wicklow
 
-- `381`: Border, Midland and Western
-- `382`: Southern and Eastern
-
-The corresponding county mapping used here is:
-
-**381 (BMW):** Cavan, Donegal, Galway, Laois, Leitrim, Longford, Louth, Mayo,
-Monaghan, Offaly, Roscommon, Sligo and Westmeath.
-
-**382 (Southern & Eastern):** Carlow, Clare, Cork, Dublin, Kerry, Kildare,
-Kilkenny, Limerick, Meath, Tipperary, Waterford, Wexford and Wicklow.
-
-This mapping is tested explicitly because older development scripts contained
-comments that reversed the human-readable labels even where their numerical
-coefficient pairs remained correct.
+County is therefore mapped first to `381` or `382`, and the corresponding fixed
+SO coefficient is then applied.
 
 ## Livestock cohort crosswalk
 
@@ -75,55 +81,81 @@ The 31 GOBLIN livestock cohorts are valued through the IFS product classes:
 | all heifers >2 yr | `A2230` |
 | all steers >2 yr | `A2130` |
 | lowland ewes | `A4110K` |
-| upland ewes | `A4100` |
-| other lowland/upland sheep cohorts | `A4120` |
+| upland ewes | `A4110K` |
+| all other lowland/upland sheep cohorts | `A4120` |
 
-Genetic origin does not alter the SO coefficient where the IFS product class is
-defined by age/sex rather than breeding origin.
+`A4100` is the parent **all sheep** category and is never assigned to an
+individual GOBLIN sheep cohort. This prevents double counting and fixes the
+previous draft mapping of upland ewes.
+
+`TOTAL_CATTLE`, `OTHER_CATTLE` and `TOTAL_SHEEP` are control totals only and are
+not multiplied by an SO coefficient after the detailed cohorts are valued.
 
 ## Cereals
 
-The ED baseline contains `TOTAL_CEREALS` rather than individual cereal crops.
-A fixed regional composite €/ha coefficient is therefore calculated from the
-2020 regional crop mix and the SOC values for:
+The ED baseline contains `TOTAL_CEREALS`, not crop-specific cereal hectares.
+The runtime mapping therefore carries a fixed 2020 regional area-weighted
+composite derived from:
 
 - common wheat/spelt (`C1110T`)
 - barley (`C1300T`)
 - oats/spring cereal mixtures (`C1400T`)
 
-The resulting fixed coefficients are approximately:
+The fixed coefficients are:
 
-- FADN 381: EUR 1,582.1568/ha
-- FADN 382: EUR 1,786.1349/ha
+- region 381: EUR 1,582.156794611131/ha
+- region 382: EUR 1,786.1348808802604/ha
 
-The crop-area weights are fixed at the 2020 base so annual and scenario SO
-changes do not contain a changing valuation mix.
+The original source controls and frozen 2020 crop-area weights can reproduce
+these values independently.
 
 ## Other crops
 
-`OTHER_CROPS_HA` is a heterogeneous residual that can contain activities with
-very different SO coefficients. GOBLIN-Spatial does **not** assign it an
-invented cereal-equivalent coefficient. Until a documented crop crosswalk is
-available, the model reports:
+In the land module:
 
-- `SO_COVERED_TOTAL_2020_EUR` = livestock SO + cereal SO
-- `SO_OTHER_CROPS_UNVALUED_HA` = residual crop area not yet valued
+```text
+OTHER_CROPS_HA = AREA_FARMED - ALL_GRASSLAND - TOTAL_CEREALS
+```
 
-The word `COVERED` is deliberate: this is not claimed to be complete total farm
-SO where other crops are present.
+It is therefore a broad residual of non-grass, non-cereal agricultural land,
+not simply the single CSO row named `Other crops`.
 
-## Teagasc National Farm Survey 2020
+The main fixed 2020 regional composite is:
 
-The Teagasc National Farm Survey 2020 is used as methodological evidence and a
-validation benchmark, not as an ED-level input. NFS applies Standard Output to
-animal and crop activities for farm-system classification. Table 08A reports
-mean Total Standard Output for the represented commercial-farm population.
-Those benchmark values are stored in:
+- region 381: EUR 1,915.1395145631068/ha
+- region 382: EUR 3,160.0518068965516/ha
 
-`data/controls/standard_output/NFS_2020_TSO_benchmarks.csv`
+The composite is flagged `IMPUTED=YES`. It is built from the documented 2020
+residual crop/fruit/horticulture basket. Because the raw CSO `Other crops`
+component includes miscanthus, fallow land and wild-bird cover, the model also
+carries a conservative sensitivity:
 
-They are diagnostic benchmarks only; GOBLIN-Spatial is not calibrated to force
-ED values to reproduce the NFS farm-system means.
+- region 381: EUR 1,190.5161650485436/ha
+- region 382: EUR 2,902.2530344827587/ha
+
+The main baseline output reports both the main and conservative other-crop
+valuation so the imputation is transparent.
+
+## Grassland and area farmed
+
+`ALL_GRASSLAND` is retained in the physical feed/land account and is not added
+to the livestock production-value total. Directly adding a grassland SO value
+on top of animal SO would mix the feed base with livestock output.
+
+`AREA_FARMED` is a land-accounting total/denominator and receives no coefficient.
+
+## Baseline formulas
+
+For ED `e` in historic SO region `r`:
+
+```text
+SO_LIVESTOCK_e = sum_k(activity_e,k * SOC_k,r)
+SO_CEREALS_e = TOTAL_CEREALS_e * CEREAL_SOC_r
+SO_OTHER_CROPS_e = OTHER_CROPS_HA_e * OTHER_CROP_SOC_r
+SO_COVERED_TOTAL_e = SO_LIVESTOCK_e + SO_CEREALS_e + SO_OTHER_CROPS_e
+```
+
+The conservative total substitutes the conservative other-crop coefficient.
 
 ## Output contract
 
@@ -138,16 +170,19 @@ The baseline/panel valuation exposes at least:
 - `SO_SHEEP_2020_EUR`
 - `SO_LIVESTOCK_2020_EUR`
 - `SO_CEREALS_2020_EUR`
+- `SO_OTHER_CROPS_2020_EUR`
+- `SO_OTHER_CROPS_CONSERVATIVE_2020_EUR`
+- `SO_OTHER_CROPS_IMPUTED_HA`
 - `SO_COVERED_TOTAL_2020_EUR`
-- `SO_OTHER_CROPS_UNVALUED_HA`
-- `SO_COVERED_PER_HOLDING_2020_EUR`
+- `SO_COVERED_TOTAL_CONSERVATIVE_2020_EUR`
+- `SO_COVERED_PER_HOLDING_2020_EUR` when holdings are available
 
-Scenario valuation adds baseline and scenario livestock SO plus:
+Scenario valuation currently applies the same mapping to baseline and scenario
+livestock cohorts and reports:
 
 - `SO_LIVESTOCK_CHANGE_2020_EUR` = scenario - baseline
 - `SO_LIVESTOCK_EXPOSURE_2020_EUR` = baseline - scenario
 - `SO_LIVESTOCK_CHANGE_PCT`
 
-The existing clean biological CSO/GOBLIN workbook sheets remain unchanged; SO
-is exported separately so valuation cannot silently alter the validated
-livestock/land data contract.
+Land scenario valuation can be added when the pathway contains explicit
+scenario crop areas; the baseline integration does not assume those changes.
