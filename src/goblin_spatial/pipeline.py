@@ -143,9 +143,14 @@ def build(config: str | Path | SpatialConfig) -> pd.DataFrame:
     master = add_se(master, cfg)
 
     # SO is a downstream valuation/exposure layer. It never changes the physical
-    # livestock, land or cohort reconciliation. A fixed 2020 coefficient basis
-    # is used for every year so structural change is not mixed with price drift.
-    master = add_baseline_standard_output(master)
+    # livestock, land or cohort reconciliation. Runtime mapping is explicit in
+    # the YAML configuration, while the original IFS extract is loaded as an
+    # audit control. This keeps the baseline build reproducible and transparent.
+    master = add_baseline_standard_output(
+        master,
+        mapping_path=cfg.files.get("standard_output_mapping"),
+        coefficient_path=cfg.files.get("standard_output_coefficients"),
+    )
     master = _canonical_order(master)
 
     validation = validate_master(master, cfg)
