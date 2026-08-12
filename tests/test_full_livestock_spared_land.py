@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -182,4 +183,8 @@ def test_null_livestock_scenario_has_zero_spared_grassland():
     )
 
     assert land["POTENTIAL_SPARED_GRASSLAND_HA"].sum() == pytest.approx(0.0)
-    assert (land["SCENARIO_REQUIRED_GRASSLAND_HA"] == land["ALL_GRASSLAND"]).all()
+    assert np.allclose(
+        land["SCENARIO_REQUIRED_GRASSLAND_HA"].to_numpy(dtype=float),
+        land["ALL_GRASSLAND"].to_numpy(dtype=float),
+        atol=1e-9,
+    )
