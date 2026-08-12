@@ -1,8 +1,8 @@
 """Build the first neutral GOBLIN-Spatial ED x SIS soil profile.
 
-This runner intentionally performs no functional soil classification.  The
-baseline supplied by --baseline defines the ED universe; the SAPS shapefile is
-filtered to those CSOEDs before intersection with the raw SIS associations.
+The authoritative GOBLIN-Spatial baseline defines the ED universe; the SAPS
+geography is filtered to those CSOEDs before intersection with raw SIS soil
+associations. No functional soil or future-land-use classification is applied.
 """
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ from goblin_spatial.soil import overlay_soil_associations
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_BASELINE = PROJECT_ROOT / "data" / "raw" / "cattle" / "CSO_ED_2020.csv"
 DEFAULT_ED = (
     PROJECT_ROOT
     / "data"
@@ -42,8 +43,11 @@ def main() -> None:
     parser.add_argument(
         "--baseline",
         type=Path,
-        required=True,
-        help="Authoritative GOBLIN-Spatial baseline CSV containing CSOED.",
+        default=DEFAULT_BASELINE,
+        help=(
+            "Authoritative GOBLIN-Spatial baseline CSV containing CSOED. "
+            "Defaults to data/raw/cattle/CSO_ED_2020.csv."
+        ),
     )
     parser.add_argument("--ed-shp", type=Path, default=DEFAULT_ED)
     parser.add_argument("--soil-shp", type=Path, default=DEFAULT_SOIL)
@@ -54,7 +58,10 @@ def main() -> None:
 
     for path in (args.baseline, args.ed_shp, args.soil_shp):
         if not path.exists():
-            raise FileNotFoundError(path)
+            raise FileNotFoundError(
+                f"Missing required input: {path}. Run 'goblin-spatial fetch-data' "
+                "first for the external spatial inputs."
+            )
 
     baseline = pd.read_csv(args.baseline, dtype={"CSOED": str}, low_memory=False)
     if "CSOED" not in baseline.columns:
