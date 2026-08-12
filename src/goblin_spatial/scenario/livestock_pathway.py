@@ -8,13 +8,14 @@ import pandas as pd
 
 from goblin_spatial.scenario.cattle_pathway import build_cattle_cohort_pathway
 from goblin_spatial.scenario.sheep_pathway import build_sheep_cohort_pathway
+from goblin_spatial.standard_output import add_pathway_standard_output
 
 
 def build_full_livestock_pathway(
     adult_pathway: pd.DataFrame,
     cattle_targets_by_year: Mapping[int, Mapping[str, int]],
 ) -> pd.DataFrame:
-    """Return one cumulative 31-cohort ED pathway for cattle and sheep."""
+    """Return one cumulative 31-cohort ED pathway with fixed-2020 SO exposure."""
 
     cattle = build_cattle_cohort_pathway(adult_pathway, cattle_targets_by_year)
     sheep = build_sheep_cohort_pathway(adult_pathway)
@@ -56,4 +57,8 @@ def build_full_livestock_pathway(
         out["BASE_GOBLIN_31_LIVESTOCK_TOTAL"]
         - out["SCENARIO_GOBLIN_31_LIVESTOCK_TOTAL"]
     )
-    return out
+
+    # Standard Output is deliberately downstream of the physical herd pathway.
+    # The same Irish 2020 coefficients value baseline and scenario cohorts, so
+    # SO change measures structural production exposure rather than price drift.
+    return add_pathway_standard_output(out)
