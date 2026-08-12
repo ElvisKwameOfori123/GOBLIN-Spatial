@@ -21,6 +21,12 @@ outputs/
 data/raw/cattle/CSO_ED_2020.csv
 data/raw/land/AQA06_Unpivoted_2013_2025.csv
 
+# Raw holding-linked agricultural soil source. It is used only to generate
+# compact ED shares; holding identifiers must not be committed to the model.
+data/external/soil/*.csv
+data/external/soil/*.csv.xz
+data/external/soil/*.xlsx
+
 # Raw external GIS supplied locally. The project tracks manifests, checksums,
 # source notes and overlay code, not large shapefile binaries.
 data/external/spatial/ed/*.shp
