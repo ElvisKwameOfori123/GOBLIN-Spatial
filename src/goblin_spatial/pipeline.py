@@ -12,6 +12,7 @@ from goblin_spatial.export import export_clean_workbook
 from goblin_spatial.land import add_land
 from goblin_spatial.se import add_se
 from goblin_spatial.sheep import add_sheep_cohorts, build_sheep_panel
+from goblin_spatial.standard_output import add_baseline_standard_output
 from goblin_spatial.validation import validate_master
 
 
@@ -106,9 +107,10 @@ def _output_path(
 def build(config: str | Path | SpatialConfig) -> pd.DataFrame:
     """Run the complete GOBLIN-Spatial data-generation workflow.
 
-    One call executes cattle, sheep, livestock merge, land, SE, validation and
-    final export. The scientific modules remain callable independently for
-    development, while normal users need only ``goblin-spatial build``.
+    One call executes cattle, sheep, livestock merge, land, SE, fixed-2020
+    Standard Output valuation, validation and final export. The scientific
+    modules remain callable independently for development, while normal users
+    need only ``goblin-spatial build``.
 
     Row ordering is aligned deliberately with the frozen reference stages.
     This matters only for deterministic largest-remainder tie-breaking, but it
@@ -139,6 +141,11 @@ def build(config: str | Path | SpatialConfig) -> pd.DataFrame:
     master = merge_livestock(cattle, sheep)
     master = add_land(master, cfg)
     master = add_se(master, cfg)
+
+    # SO is a downstream valuation/exposure layer. It never changes the physical
+    # livestock, land or cohort reconciliation. A fixed 2020 coefficient basis
+    # is used for every year so structural change is not mixed with price drift.
+    master = add_baseline_standard_output(master)
     master = _canonical_order(master)
 
     validation = validate_master(master, cfg)
