@@ -95,7 +95,7 @@ def test_complete_build_regression() -> None:
         "SO_LIVESTOCK_2020_EUR",
         "SO_CEREALS_2020_EUR",
         "SO_COVERED_TOTAL_2020_EUR",
-        "SO_OTHER_CROPS_UNVALUED_HA",
+        "SO_OTHER_CROPS_IMPUTED_HA",
     }
     assert required_so.issubset(master.columns)
     assert set(master["FADN_REGION"].astype(str).unique()) == {"381", "382"}
@@ -109,3 +109,4 @@ def test_complete_build_regression() -> None:
     assert "Standard_Output" in sheets
     assert len(sheets["Standard_Output"]) == 31427
     assert "SO_COVERED_TOTAL_2020_EUR" in sheets["Standard_Output"].columns
+    assert "SO_OTHER_CROPS_IMPUTED_HA" in sheets["Standard_Output"].columns
