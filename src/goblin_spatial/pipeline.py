@@ -12,6 +12,7 @@ from goblin_spatial.export import export_clean_workbook
 from goblin_spatial.land import add_land
 from goblin_spatial.se import add_se
 from goblin_spatial.sheep import add_sheep_cohorts, build_sheep_panel
+from goblin_spatial.soil import add_ed_agricultural_soil
 from goblin_spatial.standard_output import add_baseline_standard_output
 from goblin_spatial.validation import validate_master
 
@@ -107,10 +108,10 @@ def _output_path(
 def build(config: str | Path | SpatialConfig) -> pd.DataFrame:
     """Run the complete GOBLIN-Spatial data-generation workflow.
 
-    One call executes cattle, sheep, livestock merge, land, SE, fixed-2020
-    Standard Output valuation, validation and final export. The scientific
-    modules remain callable independently for development, while normal users
-    need only ``goblin-spatial build``.
+    One call executes cattle, sheep, livestock merge, land, SE, ED agricultural
+    soil context, fixed-2020 Standard Output valuation, validation and final
+    export. The scientific modules remain callable independently for
+    development, while normal users need only ``goblin-spatial build``.
 
     Row ordering is aligned deliberately with the frozen reference stages.
     This matters only for deterministic largest-remainder tie-breaking, but it
@@ -142,10 +143,18 @@ def build(config: str | Path | SpatialConfig) -> pd.DataFrame:
     master = add_land(master, cfg)
     master = add_se(master, cfg)
 
+    # The agricultural-soil control is already collapsed to one profile per ED.
+    # It contributes GOBLIN G1/G2/G3 shares and forestry context only. Source
+    # UAA is a weighting diagnostic; validated ALL_GRASSLAND remains the hectare
+    # authority. Missing ED profiles use documented county/national fallbacks.
+    soil_profile = cfg.files.get("agricultural_soil_profile")
+    if soil_profile is not None:
+        master = add_ed_agricultural_soil(master, soil_profile)
+
     # SO is a downstream valuation/exposure layer. It never changes the physical
-    # livestock, land or cohort reconciliation. Runtime mapping is explicit in
-    # the YAML configuration, while the original IFS extract is loaded as an
-    # audit control. This keeps the baseline build reproducible and transparent.
+    # livestock, land, cohort reconciliation or soil allocation. Runtime mapping
+    # is explicit in YAML, while the original IFS extract remains an audit
+    # control. This keeps the baseline build reproducible and transparent.
     master = add_baseline_standard_output(
         master,
         mapping_path=cfg.files.get("standard_output_mapping"),
