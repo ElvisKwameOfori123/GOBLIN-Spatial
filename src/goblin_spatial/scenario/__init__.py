@@ -9,6 +9,9 @@ from goblin_spatial.scenario.pathway import (
     build_transition_pathway,
     linear_milestones_from_endpoint,
 )
+from goblin_spatial.scenario.cattle_pathway import build_cattle_cohort_pathway
+from goblin_spatial.scenario.sheep_pathway import build_sheep_cohort_pathway
+from goblin_spatial.scenario.livestock_pathway import build_full_livestock_pathway
 
 __all__ = [
     "AllocationRule",
@@ -19,4 +22,7 @@ __all__ = [
     "TransitionPathwayDefinition",
     "build_transition_pathway",
     "linear_milestones_from_endpoint",
+    "build_cattle_cohort_pathway",
+    "build_sheep_cohort_pathway",
+    "build_full_livestock_pathway",
 ]
