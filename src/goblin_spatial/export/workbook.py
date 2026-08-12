@@ -65,6 +65,33 @@ STANDARD_OUTPUT = [
     "SO_OTHER_CROPS_UNVALUED_HA",
     "SO_COVERED_PER_HOLDING_2020_EUR",
 ]
+SOIL_PROFILE = [
+    "ALL_GRASSLAND",
+    "SOIL_PROFILE_SOURCE",
+    "SOIL_SOURCE_HOLDINGS",
+    "SOIL_SOURCE_UAA_HA",
+    "SOIL_USE_CLASS_1_SHARE",
+    "SOIL_USE_CLASS_2_SHARE",
+    "SOIL_USE_CLASS_3_SHARE",
+    "SOIL_USE_CLASS_4_SHARE",
+    "SOIL_USE_CLASS_5_SHARE",
+    "SOIL_USE_CLASS_6_SHARE",
+    "GOBLIN_SOIL_G1_SHARE",
+    "GOBLIN_SOIL_G2_SHARE",
+    "GOBLIN_SOIL_G3_SHARE",
+    "GOBLIN_SOIL_G1_GRASSLAND_HA",
+    "GOBLIN_SOIL_G2_GRASSLAND_HA",
+    "GOBLIN_SOIL_G3_GRASSLAND_HA",
+    "FOREST_YC_14_SHARE",
+    "FOREST_YC_18_SHARE",
+    "FOREST_YC_20_SHARE",
+    "FOREST_YC_24_SHARE",
+    "FOREST_YC_SOURCE_UAA_HA",
+    "FOREST_YC_WEIGHTED_MEAN",
+    "IFS_SOIL_DOMINANT",
+    "IFS_SOIL_DOMINANT_SHARE",
+    "IFS_SOIL_N_CLASSES",
+]
 BANNED_TOKENS = [
     "STATUS",
     "METHOD",
@@ -107,16 +134,16 @@ def _check_clean(frame: pd.DataFrame, name: str) -> None:
 def build_clean_sheets(
     master: pd.DataFrame, base_year: int = 2020
 ) -> dict[str, pd.DataFrame]:
-    """Return the clean biological, structural and Standard Output tables.
+    """Return clean biological, structural, SO and optional soil tables.
 
     ``LSU`` is intentionally excluded from the current baseline export because
     the historical source field is a static 2020 context value, not an annual
     reconstructed indicator. Scenario-consistent LSU belongs in the pressure
     layer.
 
-    Standard Output is kept on a separate sheet so adding valuation does not
-    alter the validated CSO/GOBLIN biological schemas. It uses one fixed 2020
-    coefficient basis across all years.
+    Standard Output and agricultural soil context are kept on separate sheets
+    so those downstream/contextual additions do not alter the validated
+    CSO/GOBLIN biological schemas.
     """
 
     ids = _existing(master, IDENTIFIERS)
@@ -177,6 +204,22 @@ def build_clean_sheets(
         )
         sheets["Standard_Output"] = so_all
 
+    if "GOBLIN_SOIL_G1_SHARE" in master.columns:
+        soil_base = master.loc[master["YEAR"] == base_year].copy()
+        requested = list(dict.fromkeys(ids + SOIL_PROFILE))
+        soil_columns = [
+            column
+            for column in requested
+            if column in soil_base.columns
+            and not soil_base[column].isna().all()
+        ]
+        soil_frame = (
+            soil_base[soil_columns]
+            .sort_values(["CSOED"], kind="stable")
+            .reset_index(drop=True)
+        )
+        sheets["Soil_Profile"] = soil_frame
+
     for name, frame in sheets.items():
         _check_clean(frame, name)
 
@@ -218,6 +261,7 @@ def _format_sheet(
     integer = workbook.add_format({"num_format": "#,##0"})
     decimal = workbook.add_format({"num_format": "#,##0.00"})
     currency = workbook.add_format({"num_format": "€#,##0.00"})
+    percent = workbook.add_format({"num_format": "0.00%"})
     age = workbook.add_format({"num_format": "0.00"})
 
     for col, value in enumerate(frame.columns):
@@ -232,14 +276,25 @@ def _format_sheet(
         "TOTAL_CEREALS",
         "OTHER_CROPS_HA",
         "SO_OTHER_CROPS_UNVALUED_HA",
+        "SOIL_SOURCE_UAA_HA",
+        "GOBLIN_SOIL_G1_GRASSLAND_HA",
+        "GOBLIN_SOIL_G2_GRASSLAND_HA",
+        "GOBLIN_SOIL_G3_GRASSLAND_HA",
+        "FOREST_YC_SOURCE_UAA_HA",
+        "FOREST_YC_WEIGHTED_MEAN",
     }
     age_names = {"AVERAGE_AGE_OF_HOLDER", "MEDIAN_AGE_OF_HOLDER"}
 
     for col_idx, column in enumerate(frame.columns):
         width = max(12, min(30, len(str(column)) + 2))
         fmt = None
-        if column in integer_names:
+        if column in integer_names or column in {
+            "SOIL_SOURCE_HOLDINGS",
+            "IFS_SOIL_N_CLASSES",
+        }:
             fmt = integer
+        elif column.endswith("_SHARE"):
+            fmt = percent
         elif column in decimal_names:
             fmt = decimal
         elif column in age_names:
