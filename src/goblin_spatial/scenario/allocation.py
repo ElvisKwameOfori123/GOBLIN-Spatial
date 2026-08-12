@@ -14,6 +14,8 @@ national reduction itself and never seeds livestock into a new ED footprint.
 
 from __future__ import annotations
 
+import hashlib
+
 import numpy as np
 import pandas as pd
 
@@ -66,6 +68,25 @@ def _rank_score(series: pd.Series) -> np.ndarray:
             hi = float(ranks.max())
             score.loc[positive] = (ranks - lo) / (hi - lo)
     return score.to_numpy(dtype=float)
+
+
+def _fixed_random_score(baseline: pd.DataFrame, seed: int) -> np.ndarray:
+    """Return a row-order-independent reproducible pseudo-random ED score.
+
+    The score is derived from ``seed`` and ``CSOED`` rather than from NumPy's
+    process state. Re-running the same scenario therefore reproduces the same
+    spatial perturbation and keeps the ordering fixed across milestones.
+    """
+
+    if "CSOED" not in baseline.columns:
+        raise ValueError("RANDOMISED allocation requires CSOED")
+    values: list[float] = []
+    denominator = float(2**64 - 1)
+    for ed in baseline["CSOED"].astype(str):
+        digest = hashlib.sha256(f"{int(seed)}|{ed}".encode("utf-8")).digest()
+        integer = int.from_bytes(digest[:8], byteorder="big", signed=False)
+        values.append(integer / denominator)
+    return np.asarray(values, dtype=float)
 
 
 def _protection_multiplier(score: np.ndarray, strength: float) -> np.ndarray:
@@ -137,11 +158,11 @@ def _rule_cut_weights(
     base: np.ndarray,
     scenario: ScenarioDefinition,
 ) -> tuple[np.ndarray, np.ndarray | None]:
-    """Return ED cut weights and an optional protection-score diagnostic.
+    """Return ED cut weights and an optional rule-score diagnostic.
 
-    High protection score means a smaller proportional cut. DairyProtection is
-    defined from the selected baseline itself: EDs with larger dairy-cow herds
-    receive higher protection scores and therefore less reduction pressure.
+    High protection score means a smaller proportional cut for protection rules.
+    ``RANDOMISED`` instead returns a reproducible pseudo-random incidence score;
+    it changes geography only and never changes the national reduction total.
     """
 
     base = np.asarray(base, dtype=np.int64)
@@ -151,6 +172,13 @@ def _rule_cut_weights(
 
     if rule == AllocationRule.PRORATA:
         return raw, None
+
+    if rule == AllocationRule.RANDOMISED:
+        score = _fixed_random_score(baseline, scenario.random_seed)
+        # Keep animal availability in the weighting while perturbing the
+        # proportional incidence. The small floor prevents an ED with livestock
+        # from becoming mechanically impossible to cut.
+        return raw * (0.05 + score), score
 
     if rule == AllocationRule.DAIRY_PROTECTION:
         score = _rank_score(baseline["DAIRY_COW"])
@@ -255,16 +283,7 @@ def allocate_adult_livestock_scenario(
     *,
     expected_eds: int | None = None,
 ) -> pd.DataFrame:
-    """Allocate national adult-cattle/sheep reductions from an ED baseline.
-
-    The selected 2020 or 2025 ED state is the authority. For each livestock
-    category the function reads the baseline counts, calculates the national
-    number to remove, allocates only that reduction under the selected rule,
-    and subtracts the ED reduction from the ED baseline.
-
-    The returned table is therefore a spatial incidence table of destocking.
-    Young cattle are handled by the separate biological cohort-response layer.
-    """
+    """Allocate national adult-cattle/sheep reductions from an ED baseline."""
 
     baseline = select_baseline_year(
         panel, scenario.baseline_year, expected_eds=expected_eds
@@ -324,7 +343,6 @@ def allocate_adult_livestock_scenario(
         if int(out[f"SCENARIO_{column}"].sum()) != target_total:
             raise AssertionError(f"national target failed for {column}")
 
-    # Null-scenario guarantee: zero reductions reproduce the selected ED state.
     for column, reduction_attr in CATEGORY_COLUMNS.items():
         if float(getattr(scenario, reduction_attr)) == 0.0:
             if not np.array_equal(
