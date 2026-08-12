@@ -8,10 +8,12 @@ import pandas as pd
 from goblin_spatial.cattle.cohorts import FINAL_21_COHORTS
 from goblin_spatial.sheep.cohorts import GOBLIN_SHEEP_10
 from goblin_spatial.standard_output import (
+    COHORT_PRODUCT_CODE,
     add_baseline_standard_output,
     add_pathway_standard_output,
     cereal_composite_coefficients,
     fadn_region_for_county,
+    load_model_mapping,
     load_soc2020_controls,
 )
 
@@ -26,7 +28,9 @@ def _zero_31_row(county: str = "Mayo") -> dict[str, object]:
 def test_correct_irish_fadn_region_mapping() -> None:
     assert fadn_region_for_county("Mayo") == "381"
     assert fadn_region_for_county("Louth") == "381"
+    assert fadn_region_for_county("Laois") == "381"
     assert fadn_region_for_county("Cork") == "382"
+    assert fadn_region_for_county("Tipperary") == "382"
     assert fadn_region_for_county("Wexford") == "382"
 
 
@@ -41,8 +45,29 @@ def test_soc2020_controls_match_source_workbook_values() -> None:
     assert lookup[("A2300G", "382")] == 807.62
     assert lookup[("A2300F", "381")] == 2468.88
     assert lookup[("A2300F", "382")] == 2449.47
+    assert lookup[("A4110K", "381")] == 129.82
+    assert lookup[("A4110K", "382")] == 122.55
     assert lookup[("A4120", "381")] == 51.61
     assert lookup[("A4120", "382")] == 49.09
+
+
+def test_model_mapping_covers_all_31_cohorts_without_parent_sheep_code() -> None:
+    mapping = load_model_mapping()
+    livestock = mapping.loc[mapping["DOMAIN"].isin(["CATTLE", "SHEEP"])]
+
+    assert len(COHORT_PRODUCT_CODE) == 31
+    assert set(livestock["MODEL_VARIABLE"]) == set(COHORT_PRODUCT_CODE)
+    assert set(livestock["IFS_PRODUCT_CODE"]) <= {
+        "A2010", "A2120", "A2130", "A2220", "A2230",
+        "A2300F", "A2300G", "A4110K", "A4120",
+    }
+    assert "A4100" not in set(livestock["IFS_PRODUCT_CODE"])
+
+    by_variable = livestock.set_index("MODEL_VARIABLE")
+    assert by_variable.loc["Lowland ewes", "IFS_PRODUCT_CODE"] == "A4110K"
+    assert by_variable.loc["Upland ewes", "IFS_PRODUCT_CODE"] == "A4110K"
+    other_sheep = set(GOBLIN_SHEEP_10) - {"Lowland ewes", "Upland ewes"}
+    assert set(by_variable.loc[sorted(other_sheep), "IFS_PRODUCT_CODE"]) == {"A4120"}
 
 
 def test_cereal_composite_coefficients_are_reproducible() -> None:
@@ -50,14 +75,29 @@ def test_cereal_composite_coefficients_are_reproducible() -> None:
     assert np.isclose(composite["381"], 1582.156794611131)
     assert np.isclose(composite["382"], 1786.1348808802604)
 
+    mapping = load_model_mapping().set_index("MODEL_VARIABLE")
+    assert np.isclose(mapping.loc["TOTAL_CEREALS", "SOC_EUR_381"], composite["381"])
+    assert np.isclose(mapping.loc["TOTAL_CEREALS", "SOC_EUR_382"], composite["382"])
 
-def test_baseline_standard_output_uses_fixed_regional_coefficients() -> None:
+
+def test_other_crop_composite_and_conservative_values_are_frozen() -> None:
+    mapping = load_model_mapping().set_index("MODEL_VARIABLE")
+    row = mapping.loc["OTHER_CROPS_HA"]
+    assert row["IMPUTED"] == "YES"
+    assert np.isclose(row["SOC_EUR_381"], 1915.1395145631068)
+    assert np.isclose(row["SOC_EUR_382"], 3160.0518068965516)
+    assert np.isclose(row["SENSITIVITY_SOC_EUR_381"], 1190.5161650485436)
+    assert np.isclose(row["SENSITIVITY_SOC_EUR_382"], 2902.2530344827587)
+
+
+def test_baseline_standard_output_uses_mapping_csv_and_values_other_crops() -> None:
     row = _zero_31_row("Mayo")
     row.update(
         {
             "dairy_cows": 2,
             "suckler_cows": 3,
             "Lowland ewes": 4,
+            "Upland ewes": 5,
             "TOTAL_CEREALS": 5.0,
             "OTHER_CROPS_HA": 7.0,
             "AGRICULTURAL_HOLDINGS": 2,
@@ -65,24 +105,40 @@ def test_baseline_standard_output_uses_fixed_regional_coefficients() -> None:
     )
     out = add_baseline_standard_output(pd.DataFrame([row])).iloc[0]
 
-    expected_livestock = 2 * 2468.88 + 3 * 876.03 + 4 * 129.82
+    expected_livestock = (
+        2 * 2468.88
+        + 3 * 876.03
+        + 4 * 129.82
+        + 5 * 129.82
+    )
     expected_cereals = 5 * 1582.156794611131
+    expected_other = 7 * 1915.1395145631068
+    expected_other_conservative = 7 * 1190.5161650485436
+    expected_total = expected_livestock + expected_cereals + expected_other
+    expected_total_conservative = (
+        expected_livestock + expected_cereals + expected_other_conservative
+    )
 
     assert out["FADN_REGION"] == "381"
     assert np.isclose(out["SO_LIVESTOCK_2020_EUR"], expected_livestock)
     assert np.isclose(out["SO_CEREALS_2020_EUR"], expected_cereals)
+    assert np.isclose(out["SO_OTHER_CROPS_2020_EUR"], expected_other)
     assert np.isclose(
-        out["SO_COVERED_TOTAL_2020_EUR"], expected_livestock + expected_cereals
+        out["SO_OTHER_CROPS_CONSERVATIVE_2020_EUR"],
+        expected_other_conservative,
     )
-    assert out["SO_OTHER_CROPS_UNVALUED_HA"] == 7.0
+    assert out["SO_OTHER_CROPS_IMPUTED_HA"] == 7.0
+    assert np.isclose(out["SO_COVERED_TOTAL_2020_EUR"], expected_total)
     assert np.isclose(
-        out["SO_COVERED_PER_HOLDING_2020_EUR"],
-        (expected_livestock + expected_cereals) / 2,
+        out["SO_COVERED_TOTAL_CONSERVATIVE_2020_EUR"],
+        expected_total_conservative,
+    )
+    assert np.isclose(
+        out["SO_COVERED_PER_HOLDING_2020_EUR"], expected_total / 2
     )
 
 
 def test_pathway_standard_output_reports_exposure_and_null_identity() -> None:
-    base = _zero_31_row("Cork")
     pathway: dict[str, object] = {"County": "Cork"}
 
     for cohort in FINAL_21_COHORTS:
