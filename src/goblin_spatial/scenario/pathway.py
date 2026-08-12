@@ -10,9 +10,9 @@ For livestock category k and milestone t::
     incremental national reduction = national state[t-1] - GOBLIN target[t]
     ED state[t] = ED state[t-1] - incremental ED reduction[t]
 
-The selected 2020 or 2025 ED baseline remains immutable. Protection scores are
-also evaluated from that selected baseline, so the pathway does not become
-circular as ED livestock populations change through time.
+The selected 2020 or 2025 ED baseline remains immutable. Protection/randomised
+scores are evaluated from that selected baseline, so a trajectory uses one
+consistent spatial rule rather than redrawing the country at every milestone.
 """
 
 from __future__ import annotations
@@ -77,6 +77,7 @@ class TransitionPathwayDefinition:
     baseline_year: int
     milestones: tuple[NationalMilestone, ...]
     allocation_rule: AllocationRule = AllocationRule.PRORATA
+    random_seed: int = 42
     score_column: str | None = None
     productivity_score_column: str | None = None
     vulnerability_score_column: str | None = None
@@ -99,12 +100,12 @@ class TransitionPathwayDefinition:
         if years[0] <= self.baseline_year:
             raise ValueError("first milestone must follow the baseline year")
 
-        # Reuse the single-scenario validator for the allocation-rule settings.
         ScenarioDefinition(
             name=f"{self.name}__allocation_template",
             baseline_year=self.baseline_year,
             target_year=years[-1],
             allocation_rule=self.allocation_rule,
+            random_seed=self.random_seed,
             score_column=self.score_column,
             productivity_score_column=self.productivity_score_column,
             vulnerability_score_column=self.vulnerability_score_column,
@@ -113,12 +114,15 @@ class TransitionPathwayDefinition:
         )
 
 
-def _rule_template(pathway: TransitionPathwayDefinition, target_year: int) -> ScenarioDefinition:
+def _rule_template(
+    pathway: TransitionPathwayDefinition, target_year: int
+) -> ScenarioDefinition:
     return ScenarioDefinition(
         name=f"{pathway.name}__{target_year}",
         baseline_year=pathway.baseline_year,
         target_year=target_year,
         allocation_rule=pathway.allocation_rule,
+        random_seed=pathway.random_seed,
         score_column=pathway.score_column,
         productivity_score_column=pathway.productivity_score_column,
         vulnerability_score_column=pathway.vulnerability_score_column,
@@ -141,17 +145,7 @@ def build_transition_pathway(
     *,
     expected_eds: int | None = None,
 ) -> pd.DataFrame:
-    """Spatialise a cumulative contraction pathway across EDs.
-
-    Returns one row per ED and milestone. ``BASE_*`` columns always refer to the
-    selected 2020/2025 starting state. ``PREVIOUS_*`` is the immediately prior
-    pathway state, ``INCREMENTAL_REDUCTION_*`` is the new reduction allocated at
-    the current milestone, and ``CUMULATIVE_REDUCTION_*`` is total reduction
-    relative to the selected baseline.
-
-    This function currently represents contraction pathways only. A milestone
-    target cannot exceed the previous national state for any category.
-    """
+    """Spatialise a cumulative contraction pathway across EDs."""
 
     baseline = select_baseline_year(
         panel, pathway.baseline_year, expected_eds=expected_eds
@@ -160,11 +154,16 @@ def build_transition_pathway(
     if missing:
         raise ValueError(f"transition pathway missing required columns: {missing}")
 
-    base_arrays = {column: _integer_column(baseline, column) for column in CATEGORY_COLUMNS}
-    current_arrays = {column: values.copy() for column, values in base_arrays.items()}
-    base_totals = {column: int(values.sum()) for column, values in base_arrays.items()}
+    base_arrays = {
+        column: _integer_column(baseline, column) for column in CATEGORY_COLUMNS
+    }
+    current_arrays = {
+        column: values.copy() for column, values in base_arrays.items()
+    }
+    base_totals = {
+        column: int(values.sum()) for column, values in base_arrays.items()
+    }
 
-    # Validate the full national path before allocating anything.
     previous_totals = base_totals.copy()
     for milestone in pathway.milestones:
         for column, target_key in TARGET_KEYS.items():
@@ -184,6 +183,7 @@ def build_transition_pathway(
         out.insert(1, "PATHWAY_BASELINE_YEAR", pathway.baseline_year)
         out.insert(2, "MILESTONE_YEAR", int(milestone.year))
         out.insert(3, "PATHWAY_ALLOCATION_RULE", pathway.allocation_rule.value)
+        out.insert(4, "PATHWAY_RANDOM_SEED", int(pathway.random_seed))
 
         rule_template = _rule_template(pathway, int(milestone.year))
 
@@ -195,7 +195,9 @@ def build_transition_pathway(
             incremental_total = previous_total - target_total
 
             if incremental_total < 0:
-                raise AssertionError("validated contraction pathway became expansive")
+                raise AssertionError(
+                    "validated contraction pathway became expansive"
+                )
 
             cut_weights, protection_score = _rule_cut_weights(
                 baseline, previous, rule_template
@@ -207,17 +209,29 @@ def build_transition_pathway(
             cumulative = base - scenario_values
 
             if int(incremental.sum()) != incremental_total:
-                raise AssertionError(f"incremental reduction failed for {column}")
+                raise AssertionError(
+                    f"incremental reduction failed for {column}"
+                )
             if int(scenario_values.sum()) != target_total:
-                raise AssertionError(f"national milestone target failed for {column}")
+                raise AssertionError(
+                    f"national milestone target failed for {column}"
+                )
             if not np.array_equal(previous - incremental, scenario_values):
-                raise AssertionError(f"previous-minus-increment identity failed for {column}")
+                raise AssertionError(
+                    f"previous-minus-increment identity failed for {column}"
+                )
             if not np.array_equal(base - scenario_values, cumulative):
-                raise AssertionError(f"cumulative reduction identity failed for {column}")
+                raise AssertionError(
+                    f"cumulative reduction identity failed for {column}"
+                )
             if (scenario_values < 0).any() or (scenario_values > previous).any():
-                raise AssertionError(f"non-monotonic ED pathway for {column}")
+                raise AssertionError(
+                    f"non-monotonic ED pathway for {column}"
+                )
             if ((base == 0) & (scenario_values > 0)).any():
-                raise AssertionError(f"pathway seeded {column} into a zero-baseline ED")
+                raise AssertionError(
+                    f"pathway seeded {column} into a zero-baseline ED"
+                )
 
             out[f"BASE_{column}"] = base
             out[f"PREVIOUS_{column}"] = previous
@@ -236,7 +250,9 @@ def build_transition_pathway(
 
             current_arrays[column] = scenario_values.astype(np.int64)
 
-        out["BASE_ADULT_COWS"] = out["BASE_DAIRY_COW"] + out["BASE_OTHER_COW"]
+        out["BASE_ADULT_COWS"] = (
+            out["BASE_DAIRY_COW"] + out["BASE_OTHER_COW"]
+        )
         out["PREVIOUS_ADULT_COWS"] = (
             out["PREVIOUS_DAIRY_COW"] + out["PREVIOUS_OTHER_COW"]
         )
@@ -254,13 +270,17 @@ def build_transition_pathway(
         rows.append(out)
 
     result = pd.concat(rows, ignore_index=True)
-
-    # Cross-milestone monotonicity check by ED.
-    ordered = result.sort_values(["CSOED", "MILESTONE_YEAR"], kind="stable")
+    ordered = result.sort_values(
+        ["CSOED", "MILESTONE_YEAR"], kind="stable"
+    )
     for column in CATEGORY_COLUMNS:
-        diffs = ordered.groupby("CSOED", sort=False)[f"SCENARIO_{column}"].diff()
+        diffs = ordered.groupby("CSOED", sort=False)[
+            f"SCENARIO_{column}"
+        ].diff()
         if (diffs.dropna() > 0).any():
-            raise AssertionError(f"ED pathway increases {column} between milestones")
+            raise AssertionError(
+                f"ED pathway increases {column} between milestones"
+            )
 
     return result
 
@@ -272,12 +292,7 @@ def linear_milestones_from_endpoint(
     endpoint: NationalMilestone,
     milestone_years: Sequence[int] = (2030, 2040, 2050),
 ) -> tuple[NationalMilestone, ...]:
-    """Create explicitly linear national milestones from one endpoint.
-
-    This is a transparent fallback for studies where GOBLIN supplies only the
-    final endpoint. Direct GOBLIN milestone values should be preferred whenever
-    they exist.
-    """
+    """Create explicitly linear national milestones from one endpoint."""
 
     required = {"dairy_cows", "suckler_cows", "sheep"}
     missing = required - set(baseline_totals)
@@ -290,7 +305,9 @@ def linear_milestones_from_endpoint(
     if not years or years != tuple(sorted(set(years))):
         raise ValueError("milestone_years must be unique and ascending")
     if years[0] <= baseline_year or years[-1] != int(endpoint.year):
-        raise ValueError("milestone years must follow baseline and end at endpoint year")
+        raise ValueError(
+            "milestone years must follow baseline and end at endpoint year"
+        )
 
     endpoint_values = {
         "dairy_cows": int(endpoint.dairy_cows),
@@ -299,14 +316,25 @@ def linear_milestones_from_endpoint(
     }
     for key in required:
         if endpoint_values[key] > int(baseline_totals[key]):
-            raise ValueError("linear contraction endpoint cannot exceed baseline total")
+            raise ValueError(
+                "linear contraction endpoint cannot exceed baseline total"
+            )
 
     output: list[NationalMilestone] = []
     span = int(endpoint.year) - int(baseline_year)
     for year in years:
         share = (year - int(baseline_year)) / span
         values = {
-            key: int(round(int(baseline_totals[key]) + share * (endpoint_values[key] - int(baseline_totals[key]))))
+            key: int(
+                round(
+                    int(baseline_totals[key])
+                    + share
+                    * (
+                        endpoint_values[key]
+                        - int(baseline_totals[key])
+                    )
+                )
+            )
             for key in required
         }
         output.append(
@@ -318,6 +346,5 @@ def linear_milestones_from_endpoint(
             )
         )
 
-    # Force exact supplied endpoint after any rounding at intermediate years.
     output[-1] = endpoint
     return tuple(output)
