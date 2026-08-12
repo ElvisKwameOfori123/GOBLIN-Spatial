@@ -33,7 +33,12 @@ files:
   county_region_map: data/controls/county_region_map.csv
 
   # ED AGRICULTURAL SOIL PROFILE
+  # A compact prebuilt profile is preferred when present. During development,
+  # the same profile can be regenerated directly from the external Cathal/NFS
+  # holding-linked source without carrying individual holding identifiers into
+  # the master dataset.
   agricultural_soil_profile: data/controls/soil/ED_GOBLIN_soil_profile.csv.xz
+  agricultural_soil_source: data/external/soil/cathal.csv
 
   # STANDARD OUTPUT
   standard_output_mapping: data/controls/standard_output/GOBLIN_SO_mapping.csv
