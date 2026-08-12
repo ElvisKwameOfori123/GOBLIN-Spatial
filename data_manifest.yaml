@@ -118,10 +118,10 @@ datasets:
   ed_agricultural_soil_profile:
     module: [soil, land]
     description: "Compact ED-level GOBLIN production-soil and forestry-context profile generated from the Cathal/NFS source."
-    source: "generated"
-    path: "data/controls/soil/ED_GOBLIN_soil_profile.csv.xz"
+    source: "external"
+    destination: "data/controls/soil/ED_GOBLIN_soil_profile.csv.xz"
     required: false
-    note: "Agricultural use-range classes 1-2 map to GOBLIN soil Group 1, classes 3-4 to Group 2, and classes 5-6 to Group 3. Source UAA weights shares; validated ALL_GRASSLAND remains the authoritative ED hectare total. Forest Yield Class and Irish Forest Soil fields are retained only as downstream opportunity context."
+    note: "Generated locally by scripts/build_ed_agricultural_soil_profile.py rather than downloaded. Agricultural use-range classes 1-2 map to GOBLIN soil Group 1, classes 3-4 to Group 2, and classes 5-6 to Group 3. Source UAA weights shares; validated ALL_GRASSLAND remains the authoritative ED hectare total. Forest Yield Class and Irish Forest Soil fields are retained only as downstream opportunity context."
 
   saps_ed_geography:
     module: [soil, spatial]
