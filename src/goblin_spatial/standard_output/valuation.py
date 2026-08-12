@@ -8,11 +8,10 @@ import pandas as pd
 from goblin_spatial.cattle.cohorts import FINAL_21_COHORTS
 from goblin_spatial.sheep.cohorts import GOBLIN_SHEEP_10
 from goblin_spatial.standard_output.coefficients import (
-    COHORT_PRODUCT_CODE,
     add_fadn_region,
-    cereal_composite_coefficients,
-    coefficient_lookup,
+    load_model_mapping,
     load_soc2020_controls,
+    model_coefficient_lookup,
 )
 
 
@@ -32,6 +31,13 @@ def _numeric(frame: pd.DataFrame, column: str) -> np.ndarray:
     return np.maximum(values, 0.0)
 
 
+def _optional_numeric(frame: pd.DataFrame, *columns: str) -> np.ndarray:
+    for column in columns:
+        if column in frame.columns:
+            return _numeric(frame, column)
+    return np.zeros(len(frame), dtype=float)
+
+
 def _pathway_column(state: str, cohort: str) -> str:
     state = state.upper()
     if cohort in SHEEP:
@@ -39,13 +45,24 @@ def _pathway_column(state: str, cohort: str) -> str:
     return f"{state}_COHORT_{cohort}"
 
 
+def _coefficient_array(
+    regions: np.ndarray,
+    lookup: dict[tuple[str, str], float],
+    model_variable: str,
+) -> np.ndarray:
+    return np.array(
+        [lookup[(model_variable, str(region))] for region in regions],
+        dtype=float,
+    )
+
+
 def _value_state(
     frame: pd.DataFrame,
     *,
     state: str | None,
-    controls: pd.DataFrame,
+    mapping: pd.DataFrame,
 ) -> dict[str, np.ndarray]:
-    lookup = coefficient_lookup(controls)
+    lookup = model_coefficient_lookup(mapping)
     regions = frame["FADN_REGION"].astype(str).to_numpy()
     n = len(frame)
 
@@ -60,10 +77,7 @@ def _value_state(
     for cohort in [*FINAL_21_COHORTS, *GOBLIN_SHEEP_10]:
         column = cohort if state is None else _pathway_column(state, cohort)
         activity = _numeric(frame, column)
-        product = COHORT_PRODUCT_CODE[cohort]
-        coeff = np.array(
-            [lookup[(product, region)] for region in regions], dtype=float
-        )
+        coeff = _coefficient_array(regions, lookup, cohort)
         value = activity * coeff
 
         if cohort in DAIRY:
@@ -93,54 +107,63 @@ def _value_state(
 def add_baseline_standard_output(
     frame: pd.DataFrame,
     *,
+    mapping_path: str | None = None,
     coefficient_path: str | None = None,
 ) -> pd.DataFrame:
-    """Add fixed-2020 SO exposure to a direct 31-cohort ED baseline/panel.
+    """Add fixed-2020 SO-weighted production-value exposure to the ED baseline.
 
-    The same 2020 coefficients are applied to every year. Temporal differences
-    therefore measure structural/activity change rather than a mixture of herd
-    change and changing valuation coefficients.
+    Runtime valuation is driven by ``GOBLIN_SO_mapping.csv``. The same fixed
+    coefficients are applied to every baseline year so temporal changes reflect
+    activity/structure rather than price drift. ``coefficient_path`` is retained
+    as an optional audit hook: when supplied, the original IFS control source is
+    loaded and validated but the direct model mapping remains the runtime input.
 
-    ``OTHER_CROPS_HA`` is deliberately not assigned an invented composite SO
-    coefficient. Its area is carried as an explicit unvalued field until a
-    documented mixed-crop crosswalk is added. ``SO_COVERED_TOTAL_2020_EUR`` is
-    therefore livestock plus cereals, not a claim of complete farm SO.
+    ``OTHER_CROPS_HA`` is valued using the documented 2020 regional residual-
+    crop composite in the mapping CSV. A conservative alternative is also
+    reported because the raw CSO ``Other crops`` component includes fallow and
+    wild-bird cover as well as productive crops.
     """
 
-    controls = load_soc2020_controls(coefficient_path)
+    if coefficient_path is not None:
+        load_soc2020_controls(coefficient_path)
+
+    mapping = load_model_mapping(mapping_path)
     out = add_fadn_region(frame)
-    values = _value_state(out, state=None, controls=controls)
+    values = _value_state(out, state=None, mapping=mapping)
     for component, array in values.items():
         out[f"SO_{component}_2020_EUR"] = array
 
-    if "TOTAL_CEREALS" in out.columns:
-        cereal_area = pd.to_numeric(
-            out["TOTAL_CEREALS"], errors="raise"
-        ).to_numpy(dtype=float)
-    elif "CEREALS_HA" in out.columns:
-        cereal_area = pd.to_numeric(
-            out["CEREALS_HA"], errors="raise"
-        ).to_numpy(dtype=float)
-    else:
-        cereal_area = np.zeros(len(out), dtype=float)
+    regions = out["FADN_REGION"].astype(str).to_numpy()
+    main_lookup = model_coefficient_lookup(mapping)
+    sensitivity_lookup = model_coefficient_lookup(mapping, sensitivity=True)
 
-    if np.any(cereal_area < -1e-12):
-        raise ValueError("negative cereal area cannot be valued")
-    cereal_area = np.maximum(cereal_area, 0.0)
-    cereal_coeff = cereal_composite_coefficients(controls)
-    out["SO_CEREALS_2020_EUR"] = (
-        cereal_area * out["FADN_REGION"].map(cereal_coeff).astype(float)
+    cereal_area = _optional_numeric(out, "TOTAL_CEREALS", "CEREALS_HA")
+    cereal_coeff = _coefficient_array(regions, main_lookup, "TOTAL_CEREALS")
+    out["SO_CEREALS_2020_EUR"] = cereal_area * cereal_coeff
+
+    other_crop_area = _optional_numeric(out, "OTHER_CROPS_HA")
+    other_crop_coeff = _coefficient_array(
+        regions, main_lookup, "OTHER_CROPS_HA"
     )
+    other_crop_conservative_coeff = _coefficient_array(
+        regions, sensitivity_lookup, "OTHER_CROPS_HA"
+    )
+    out["SO_OTHER_CROPS_2020_EUR"] = other_crop_area * other_crop_coeff
+    out["SO_OTHER_CROPS_CONSERVATIVE_2020_EUR"] = (
+        other_crop_area * other_crop_conservative_coeff
+    )
+    out["SO_OTHER_CROPS_IMPUTED_HA"] = other_crop_area
+
     out["SO_COVERED_TOTAL_2020_EUR"] = (
-        out["SO_LIVESTOCK_2020_EUR"] + out["SO_CEREALS_2020_EUR"]
+        out["SO_LIVESTOCK_2020_EUR"]
+        + out["SO_CEREALS_2020_EUR"]
+        + out["SO_OTHER_CROPS_2020_EUR"]
     )
-
-    if "OTHER_CROPS_HA" in out.columns:
-        out["SO_OTHER_CROPS_UNVALUED_HA"] = pd.to_numeric(
-            out["OTHER_CROPS_HA"], errors="raise"
-        ).clip(lower=0.0)
-    else:
-        out["SO_OTHER_CROPS_UNVALUED_HA"] = 0.0
+    out["SO_COVERED_TOTAL_CONSERVATIVE_2020_EUR"] = (
+        out["SO_LIVESTOCK_2020_EUR"]
+        + out["SO_CEREALS_2020_EUR"]
+        + out["SO_OTHER_CROPS_CONSERVATIVE_2020_EUR"]
+    )
 
     if "AGRICULTURAL_HOLDINGS" in out.columns:
         holdings = pd.to_numeric(
@@ -151,21 +174,30 @@ def add_baseline_standard_output(
             out["SO_COVERED_TOTAL_2020_EUR"] / holdings,
             np.nan,
         )
+        out["SO_COVERED_PER_HOLDING_CONSERVATIVE_2020_EUR"] = np.where(
+            holdings > 0,
+            out["SO_COVERED_TOTAL_CONSERVATIVE_2020_EUR"] / holdings,
+            np.nan,
+        )
     return out
 
 
 def add_pathway_standard_output(
     pathway: pd.DataFrame,
     *,
+    mapping_path: str | None = None,
     coefficient_path: str | None = None,
 ) -> pd.DataFrame:
     """Add baseline/scenario fixed-2020 livestock SO to a 31-cohort pathway."""
 
-    controls = load_soc2020_controls(coefficient_path)
+    if coefficient_path is not None:
+        load_soc2020_controls(coefficient_path)
+
+    mapping = load_model_mapping(mapping_path)
     out = add_fadn_region(pathway)
 
     for state in ("BASE", "SCENARIO"):
-        values = _value_state(out, state=state, controls=controls)
+        values = _value_state(out, state=state, mapping=mapping)
         for component, array in values.items():
             out[f"{state}_SO_{component}_2020_EUR"] = array
 
