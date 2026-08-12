@@ -12,7 +12,10 @@ from goblin_spatial.export import export_clean_workbook
 from goblin_spatial.land import add_land
 from goblin_spatial.se import add_se
 from goblin_spatial.sheep import add_sheep_cohorts, build_sheep_panel
-from goblin_spatial.soil import add_ed_agricultural_soil
+from goblin_spatial.soil import (
+    add_ed_agricultural_soil,
+    build_ed_agricultural_soil_profile,
+)
 from goblin_spatial.standard_output import add_baseline_standard_output
 from goblin_spatial.validation import validate_master
 
@@ -105,12 +108,39 @@ def _output_path(
     return path if path.is_absolute() else config.project_root / path
 
 
+def _add_agricultural_soil_if_available(
+    master: pd.DataFrame, cfg: SpatialConfig
+) -> pd.DataFrame:
+    """Attach the ED production-soil profile when a configured source exists.
+
+    A versioned compact ED profile is preferred. During development it can be
+    rebuilt from the external Cathal/NFS holding-linked source. Holding rows are
+    collapsed immediately to ED area-weighted shares and are never merged into
+    the livestock master. If neither input is present, the validated baseline
+    build remains available without soil enrichment.
+    """
+
+    profile_path = cfg.files.get("agricultural_soil_profile")
+    source_path = cfg.files.get("agricultural_soil_source")
+
+    if profile_path is not None and profile_path.exists():
+        return add_ed_agricultural_soil(master, profile_path)
+
+    if source_path is not None and source_path.exists():
+        profile = build_ed_agricultural_soil_profile(source_path)
+        generated = cfg.interim_dir / "ed_agricultural_soil_profile.csv"
+        profile.to_csv(generated, index=False, float_format="%.10f")
+        return add_ed_agricultural_soil(master, profile)
+
+    return master
+
+
 def build(config: str | Path | SpatialConfig) -> pd.DataFrame:
     """Run the complete GOBLIN-Spatial data-generation workflow.
 
-    One call executes cattle, sheep, livestock merge, land, SE, ED agricultural
-    soil context, fixed-2020 Standard Output valuation, validation and final
-    export. The scientific modules remain callable independently for
+    One call executes cattle, sheep, livestock merge, land, SE, optional ED
+    agricultural-soil context, fixed-2020 Standard Output valuation, validation
+    and final export. The scientific modules remain callable independently for
     development, while normal users need only ``goblin-spatial build``.
 
     Row ordering is aligned deliberately with the frozen reference stages.
@@ -143,13 +173,9 @@ def build(config: str | Path | SpatialConfig) -> pd.DataFrame:
     master = add_land(master, cfg)
     master = add_se(master, cfg)
 
-    # The agricultural-soil control is already collapsed to one profile per ED.
-    # It contributes GOBLIN G1/G2/G3 shares and forestry context only. Source
-    # UAA is a weighting diagnostic; validated ALL_GRASSLAND remains the hectare
-    # authority. Missing ED profiles use documented county/national fallbacks.
-    soil_profile = cfg.files.get("agricultural_soil_profile")
-    if soil_profile is not None:
-        master = add_ed_agricultural_soil(master, soil_profile)
+    # Production soil is a static ED context. Source UAA only estimates soil
+    # shares; validated ALL_GRASSLAND remains the hectare authority.
+    master = _add_agricultural_soil_if_available(master, cfg)
 
     # SO is a downstream valuation/exposure layer. It never changes the physical
     # livestock, land, cohort reconciliation or soil allocation. Runtime mapping
