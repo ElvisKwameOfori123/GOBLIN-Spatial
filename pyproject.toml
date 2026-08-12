@@ -21,6 +21,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# GIS dependencies are optional because the reconstructed ED baseline can be
+# used without raw polygon data.  Install this extra for ED/SIS overlays.
+geo = [
+  "geopandas>=0.14",
+  "shapely>=2.0",
+  "pyogrio>=0.7"
+]
+
 # Public upstream packages coordinated by GOBLIN Lite.  They are optional so
 # the validated ED reconstruction remains independently installable, while the
 # scenario layer can consume authoritative GOBLIN animal/feed controls when
