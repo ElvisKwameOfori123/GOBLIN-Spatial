@@ -32,6 +32,10 @@ files:
   se_controls: data/controls/06_SE_Data_Controls.csv
   county_region_map: data/controls/county_region_map.csv
 
+  # STANDARD OUTPUT
+  standard_output_mapping: data/controls/standard_output/GOBLIN_SO_mapping.csv
+  standard_output_coefficients: data/controls/standard_output/IFS_SOC2020_IE_model_controls.csv
+
 outputs:
   cattle_panel: data/interim/cattle_ed_2015_2025.csv
   sheep_panel: data/interim/sheep_ed_2015_2025.csv
