@@ -10,6 +10,7 @@ where the files were hosted.
 from __future__ import annotations
 
 import hashlib
+import shutil
 import zipfile
 from pathlib import Path
 from typing import Any
@@ -128,6 +129,44 @@ def _safe_extract_zip(archive_path: Path, extract_dir: Path) -> None:
         archive.extractall(extract_dir)
 
 
+def _canonicalise_single_shapefile_bundle(
+    extract_dir: Path,
+    primary: Path,
+) -> bool:
+    """Copy a uniquely identifiable shapefile bundle to the canonical stem.
+
+    Research archives often preserve browser-added suffixes such as ``(1)`` or
+    a nested source directory. The manifest, however, exposes one stable local
+    path to the scientific code. If the expected primary shapefile is absent
+    but the extracted archive contains exactly one shapefile, copy that bundle
+    to the manifest's canonical stem. The original extracted members are kept.
+
+    Returns ``True`` when canonicalisation was performed.
+    """
+
+    if primary.suffix.lower() != ".shp" or primary.exists():
+        return False
+
+    candidates = [
+        path
+        for path in extract_dir.rglob("*")
+        if path.is_file() and path.suffix.lower() == ".shp"
+    ]
+    if len(candidates) != 1:
+        return False
+
+    source_shp = candidates[0]
+    primary.parent.mkdir(parents=True, exist_ok=True)
+    copied = False
+    for suffix in (".shp", ".shx", ".dbf", ".prj", ".cpg"):
+        source = source_shp.with_suffix(suffix)
+        target = primary.with_suffix(suffix)
+        if source.exists() and source.resolve() != target.resolve():
+            shutil.copy2(source, target)
+            copied = True
+    return copied
+
+
 def _postprocess_archive(
     name: str,
     info: dict[str, Any],
@@ -160,8 +199,10 @@ def _postprocess_archive(
     required = [_project_path(project_root, value) for value in required_values]
     missing = [path for path in required if not path.exists()]
 
+    canonicalised = False
     if extract and missing:
         _safe_extract_zip(archive_path, extract_dir)
+        canonicalised = _canonicalise_single_shapefile_bundle(extract_dir, primary)
         missing = [path for path in required if not path.exists()]
 
     if missing:
@@ -182,7 +223,8 @@ def _postprocess_archive(
                 primary,
             )
 
-    return True, f"UNPACKED {name}: {extract_dir}", primary
+    action = "UNPACKED/CANONICALISED" if canonicalised else "UNPACKED"
+    return True, f"{action} {name}: {extract_dir}", primary
 
 
 def fetch_data(
