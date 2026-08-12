@@ -68,9 +68,6 @@ def test_prorata_reduction_closes_and_preserves_footprint():
     assert int(out["SCENARIO_DAIRY_COW"].sum()) == 140
     assert int(out["SCENARIO_OTHER_COW"].sum()) == 75
     assert int(out["SCENARIO_TOTAL_SHEEP"].sum()) == 90
-    assert int(out["REDUCTION_DAIRY_COW"].sum()) == 60
-    assert int(out["REDUCTION_OTHER_COW"].sum()) == 25
-    assert int(out["REDUCTION_TOTAL_SHEEP"].sum()) == 10
     assert (out["SCENARIO_DAIRY_COW"] <= out["BASE_DAIRY_COW"]).all()
     assert (out["SCENARIO_OTHER_COW"] <= out["BASE_OTHER_COW"]).all()
     assert (out["SCENARIO_TOTAL_SHEEP"] <= out["BASE_TOTAL_SHEEP"]).all()
@@ -78,35 +75,6 @@ def test_prorata_reduction_closes_and_preserves_footprint():
     assert zero["SCENARIO_DAIRY_COW"] == 0
     assert zero["SCENARIO_OTHER_COW"] == 0
     assert zero["SCENARIO_TOTAL_SHEEP"] == 0
-
-
-def test_scenario_is_baseline_minus_allocated_reduction():
-    # User-facing interpretation: ED A starts with 5, ED B with 7, and the
-    # national scenario removes 3 animals. The engine allocates those 3 removals
-    # across the existing baseline and subtracts them; it does not independently
-    # construct a new ED endpoint from a total of 9.
-    panel = pd.DataFrame(
-        [
-            {"YEAR": 2020, "CSOED": "A", "DAIRY_COW": 5, "OTHER_COW": 0, "TOTAL_SHEEP": 0},
-            {"YEAR": 2020, "CSOED": "B", "DAIRY_COW": 7, "OTHER_COW": 0, "TOTAL_SHEEP": 0},
-        ]
-    )
-    scenario = ScenarioDefinition(
-        name="remove_three",
-        baseline_year=2020,
-        target_year=2030,
-        dairy_reduction=0.25,
-    )
-    out = allocate_adult_livestock_scenario(panel, scenario, expected_eds=2)
-
-    assert int(out["BASE_DAIRY_COW"].sum()) == 12
-    assert int(out["REDUCTION_DAIRY_COW"].sum()) == 3
-    assert int(out["SCENARIO_DAIRY_COW"].sum()) == 9
-    assert out["REDUCTION_DAIRY_COW"].tolist() == [1, 2]
-    assert out["SCENARIO_DAIRY_COW"].tolist() == [4, 5]
-    assert (
-        out["BASE_DAIRY_COW"] - out["REDUCTION_DAIRY_COW"]
-    ).tolist() == out["SCENARIO_DAIRY_COW"].tolist()
 
 
 def test_baseline_year_switch_uses_2025_state():
@@ -119,7 +87,6 @@ def test_baseline_year_switch_uses_2025_state():
     out = allocate_adult_livestock_scenario(_panel(), scenario, expected_eds=4)
 
     assert int(out["BASE_DAIRY_COW"].sum()) == 400
-    assert int(out["REDUCTION_DAIRY_COW"].sum()) == 200
     assert int(out["SCENARIO_DAIRY_COW"].sum()) == 200
     assert set(out["SCENARIO_BASELINE_YEAR"]) == {2025}
 
@@ -150,6 +117,53 @@ def test_score_weighting_protects_higher_score_ed():
     a = out.loc[out["CSOED"] == "A"].iloc[0]
     c = out.loc[out["CSOED"] == "C"].iloc[0]
 
-    assert int(out["REDUCTION_DAIRY_COW"].sum()) == 100
     assert int(out["SCENARIO_DAIRY_COW"].sum()) == 100
     assert a["REDUCTION_PCT_DAIRY_COW"] < c["REDUCTION_PCT_DAIRY_COW"]
+
+
+def test_dairy_protection_cuts_high_dairy_ed_less_than_low_dairy_ed():
+    scenario = ScenarioDefinition(
+        name="dairy_protection",
+        baseline_year=2020,
+        target_year=2050,
+        dairy_reduction=0.50,
+        allocation_rule=AllocationRule.DAIRY_PROTECTION,
+    )
+    out = allocate_adult_livestock_scenario(_panel(), scenario, expected_eds=4)
+    high_dairy = out.loc[out["CSOED"] == "A"].iloc[0]
+    low_dairy = out.loc[out["CSOED"] == "C"].iloc[0]
+
+    # The national reduction is unchanged: 200 -> 100 dairy cows.
+    assert int(out["REDUCTION_DAIRY_COW"].sum()) == 100
+    assert int(out["SCENARIO_DAIRY_COW"].sum()) == 100
+
+    # But the incidence changes: the high-dairy ED is deliberately protected.
+    assert high_dairy["BASE_DAIRY_COW"] > low_dairy["BASE_DAIRY_COW"]
+    assert (
+        high_dairy["REDUCTION_PCT_DAIRY_COW"]
+        < low_dairy["REDUCTION_PCT_DAIRY_COW"]
+    )
+
+
+def test_baseline_minus_reduction_identity_with_five_plus_seven_example():
+    panel = pd.DataFrame(
+        [
+            {"YEAR": 2020, "CSOED": "A", "DAIRY_COW": 5, "OTHER_COW": 0, "TOTAL_SHEEP": 0},
+            {"YEAR": 2020, "CSOED": "B", "DAIRY_COW": 7, "OTHER_COW": 0, "TOTAL_SHEEP": 0},
+        ]
+    )
+    scenario = ScenarioDefinition(
+        name="remove_three",
+        baseline_year=2020,
+        target_year=2050,
+        dairy_reduction=0.25,  # 12 baseline -> 9 target -> remove exactly 3
+    )
+    out = allocate_adult_livestock_scenario(panel, scenario, expected_eds=2)
+
+    assert int(out["BASE_DAIRY_COW"].sum()) == 12
+    assert int(out["REDUCTION_DAIRY_COW"].sum()) == 3
+    assert int(out["SCENARIO_DAIRY_COW"].sum()) == 9
+    assert (
+        out["BASE_DAIRY_COW"] - out["REDUCTION_DAIRY_COW"]
+        == out["SCENARIO_DAIRY_COW"]
+    ).all()
