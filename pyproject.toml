@@ -20,6 +20,19 @@ dependencies = [
   "pooch>=1.8"
 ]
 
+[project.optional-dependencies]
+# Public upstream packages coordinated by GOBLIN Lite.  They are optional so
+# the validated ED reconstruction remains independently installable, while the
+# scenario layer can consume authoritative GOBLIN animal/feed controls when
+# required.
+goblin = [
+  "cattle_lca>=0.3.1",
+  "sheep_lca>=0.3.1",
+  "livestock_generation>=0.2.1",
+  "grassland_production>=0.3.6",
+  "landcover_assignment>=0.4.0"
+]
+
 [project.scripts]
 goblin-spatial = "goblin_spatial.cli:main"
 
