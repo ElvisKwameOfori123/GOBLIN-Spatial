@@ -84,8 +84,28 @@ def test_complete_build_regression() -> None:
     assert float(land_diff.abs().max()) < 1e-6
     assert np.isclose(master.loc[master["YEAR"] == 2020, "AREA_FARMED"].sum(), 4504866.7)
 
+    # SO is downstream valuation: it must exist, remain non-negative and leave
+    # the already-validated biological/land schemas unchanged.
+    required_so = {
+        "FADN_REGION",
+        "SO_DAIRY_COWS_2020_EUR",
+        "SO_SUCKLER_COWS_2020_EUR",
+        "SO_FOLLOWERS_2020_EUR",
+        "SO_SHEEP_2020_EUR",
+        "SO_LIVESTOCK_2020_EUR",
+        "SO_CEREALS_2020_EUR",
+        "SO_COVERED_TOTAL_2020_EUR",
+        "SO_OTHER_CROPS_UNVALUED_HA",
+    }
+    assert required_so.issubset(master.columns)
+    assert set(master["FADN_REGION"].astype(str).unique()) == {"381", "382"}
+    assert (master[list(required_so - {"FADN_REGION"})] >= 0).all().all()
+
     sheets = build_clean_sheets(master)
     assert sheets["CSO_All_Years"].shape == (31427, 35)
     assert sheets["GOBLIN_All_Years"].shape == (31427, 50)
     assert sheets["CSO_2020"].shape == (2857, 35)
     assert sheets["GOBLIN_2020"].shape == (2857, 50)
+    assert "Standard_Output" in sheets
+    assert len(sheets["Standard_Output"]) == 31427
+    assert "SO_COVERED_TOTAL_2020_EUR" in sheets["Standard_Output"].columns
