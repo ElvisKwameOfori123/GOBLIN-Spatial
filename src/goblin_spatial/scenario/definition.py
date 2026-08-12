@@ -18,6 +18,7 @@ class AllocationRule(str, Enum):
     """Alternative rules for deciding where a fixed national reduction lands."""
 
     PRORATA = "PRORATA"
+    RANDOMISED = "RANDOMISED"
     DAIRY_PROTECTION = "DAIRY_PROTECTION"
     PRODUCTIVITY_PROTECTION = "PRODUCTIVITY_PROTECTION"
     VULNERABILITY_PROTECTION = "VULNERABILITY_PROTECTION"
@@ -34,15 +35,16 @@ class ScenarioDefinition:
     fall by 30% relative to the chosen baseline year. The allocation rule then
     decides which existing ED animals comprise that reduction.
 
+    ``RANDOMISED`` keeps the national endpoint unchanged but perturbs where the
+    reduction falls using a deterministic ED-specific pseudo-random weight. The
+    same ``random_seed`` reproduces the same spatial ordering and therefore can
+    be carried consistently through 2030, 2040 and 2050.
+
     Protection rules interpret a *higher* score as stronger protection (a
     smaller proportional cut). ``DAIRY_PROTECTION`` derives that score directly
     from baseline dairy-cow numbers, so EDs with larger dairy herds receive a
     smaller percentage cut than otherwise comparable EDs with fewer dairy cows.
     The national GOBLIN reduction is unchanged.
-
-    ``protection_strength`` controls how strongly the score changes incidence.
-    At the default 0.8, an ED at score 1 has one-fifth of the raw cut weight of
-    an otherwise identical ED at score 0.
     """
 
     name: str
@@ -52,6 +54,7 @@ class ScenarioDefinition:
     suckler_reduction: float = 0.0
     sheep_reduction: float = 0.0
     allocation_rule: AllocationRule = AllocationRule.PRORATA
+    random_seed: int = 42
 
     # Generic protection score used by SCORE_WEIGHTED.
     score_column: str | None = None
@@ -84,6 +87,9 @@ class ScenarioDefinition:
         ):
             if float(value) < 0.0 or float(value) > 1.0:
                 raise ValueError(f"{label} must lie between 0 and 1")
+
+        if not isinstance(self.random_seed, int):
+            raise ValueError("random_seed must be an integer")
 
         if not 0.0 <= float(self.protection_strength) < 1.0:
             raise ValueError("protection_strength must lie in [0, 1)")
