@@ -1,5 +1,5 @@
 standard_output_basis: "fixed-2020"
-interpretation: "production-value exposure; not income, profit, welfare, allocation or land-release driver"
+interpretation: "SOC-weighted ED production-value exposure; not income, profit, welfare, allocation or land-release driver"
 
 coefficient_source:
   title: "IFS_T_MAIN_SOC_2020.xlsx"
@@ -9,9 +9,15 @@ coefficient_source:
   value_field: "SOC_EUR"
   source_sha256: "f9341129f63eb19bf3e37f0c655d1e3399ad013d1fc81d88922fdd5d4963f561"
   runtime_extract: "IFS_SOC2020_IE_model_controls.csv"
-  fadn_regions:
-    "381": "Border, Midland and Western"
-    "382": "Southern and Eastern"
+  runtime_mapping: "GOBLIN_SO_mapping.csv"
+  historic_so_regions:
+    "381":
+      label: "Border, Midland and Western (IE01)"
+      counties: ["Cavan", "Donegal", "Galway", "Leitrim", "Laois", "Longford", "Louth", "Mayo", "Monaghan", "Offaly", "Roscommon", "Sligo", "Westmeath"]
+    "382":
+      label: "Southern and Eastern (IE02)"
+      counties: ["Carlow", "Clare", "Cork", "Dublin", "Kerry", "Kilkenny", "Kildare", "Limerick", "Meath", "Tipperary", "Waterford", "Wexford", "Wicklow"]
+  geography_note: "These historic 381/382 SO regions are retained for coefficient lookup and must not be replaced by the current three-region NUTS II reporting geography."
 
 validation_source:
   title: "Teagasc National Farm Survey 2020 Results"
@@ -23,5 +29,13 @@ validation_source:
   runtime_benchmarks: "NFS_2020_TSO_benchmarks.csv"
 
 other_crops:
-  status: "not valued in v0.1"
-  reason: "OTHER_CROPS_HA is a heterogeneous residual without a documented single product-code crosswalk"
+  status: "valued with documented fixed-2020 regional composite"
+  model_variable: "OTHER_CROPS_HA"
+  main_soc_eur_per_ha:
+    "381": 1915.1395145631068
+    "382": 3160.0518068965516
+  conservative_soc_eur_per_ha:
+    "381": 1190.5161650485436
+    "382": 2902.2530344827587
+  method: "2020 area-weighted residual crop/fruit/horticulture basket"
+  caveat: "The raw CSO Other crops component is heterogeneous and includes miscanthus, fallow land and wild-bird cover; therefore the composite is flagged as imputed and a conservative sensitivity is retained."
