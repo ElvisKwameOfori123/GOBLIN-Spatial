@@ -1,9 +1,10 @@
-manifest_version: "0.5.0"
+manifest_version: "0.6.0"
 release: "ireland-2015-2025-dev"
 status: "development"
 
 # Data architecture:
 # - compact validated controls remain versioned directly in Git;
+# - holding-linked source microdata are external and are collapsed to ED controls;
 # - large/raw GIS inputs are stored externally and fetched on demand;
 # - the published GOBLIN-Spatial spatial bundle is pinned to an immutable,
 #   version-specific Zenodo record for exact reproducibility;
@@ -105,6 +106,23 @@ datasets:
     git_tracked: true
     required: true
 
+  cathal_agricultural_soils:
+    module: [soil, land]
+    description: "Cathal/NFS holding-linked agricultural soil and forestry-context source used only to derive ED-level shares."
+    source: "external"
+    destination: "data/external/soil/cathal.csv"
+    sha256: "4af6018a8860380aa0f45ba6acc47e9d894e27ec93975ea29eb2dfb4dc21c1dc"
+    required: false
+    note: "Raw holding rows and herd identifiers are never merged into GOBLIN-Spatial outputs. cso_ed locates the source record, fsizuaa supplies the area weight, and soil_code_nfs supplies agricultural use-range class."
+
+  ed_agricultural_soil_profile:
+    module: [soil, land]
+    description: "Compact ED-level GOBLIN production-soil and forestry-context profile generated from the Cathal/NFS source."
+    source: "generated"
+    path: "data/controls/soil/ED_GOBLIN_soil_profile.csv.xz"
+    required: false
+    note: "Agricultural use-range classes 1-2 map to GOBLIN soil Group 1, classes 3-4 to Group 2, and classes 5-6 to Group 3. Source UAA weights shares; validated ALL_GRASSLAND remains the authoritative ED hectare total. Forest Yield Class and Irish Forest Soil fields are retained only as downstream opportunity context."
+
   saps_ed_geography:
     module: [soil, spatial]
     description: "CSO SAPS Electoral Division geometry carrying the CSOED coding system used to spatially locate the authoritative GOBLIN-Spatial baseline."
@@ -132,7 +150,7 @@ datasets:
 
   sis_national_soils_zip:
     module: [soil, spatial]
-    description: "Teagasc/EPA Irish Soil Information System national 1:250,000 soil-association map bundle."
+    description: "Teagasc/EPA Irish Soil Information System national 1:250,000 soil-association map bundle retained for optional spatial validation and later opportunity refinement."
     source: "zenodo"
     release: "goblin_spatial_spatial_inputs_v0_1_0"
     destination: "data/external/spatial/sis_soils/INSM250k_ING_1b.zip"
@@ -154,13 +172,13 @@ datasets:
       dbf: "00a5b137bc8ed7653ab67fb63a7e94fb6343de204433a3ca70aeaa21737ceb0f"
       prj: "4df6798dbe12d22a1edd15991de2cae2cb4a6a1d79bf2b18319c352736a2f25f"
     required: false
-    note: "Zenodo version DOI 10.5281/zenodo.21906755. The contained INSM250k_ING.shp is larger than GitHub's normal per-file limit and is therefore fetched and unpacked outside Git history."
+    note: "Zenodo version DOI 10.5281/zenodo.21906755. SIS is not required for the principal GOBLIN production-soil calculation; it remains available for validation and later spatial land-opportunity analysis."
 
   lpis_2020_audit:
     module: [soil, land, spatial]
-    description: "LPIS 2020 audit workbook retained for the later agricultural-grassland mask and denominator validation stage."
+    description: "LPIS 2020 audit workbook retained for later parcel/grassland validation and high-resolution opportunity work."
     source: "external"
     destination: "data/external/spatial/lpis/LPIS_2020_audit.xlsx"
     sha256: "a2bc952ddc922982cf0a23e4f91dacc54bbce44a1d6e0af84f675694287ab1a5"
     required: false
-    note: "Not redistributed through the Zenodo v0.1.0 spatial bundle. Retained as contextual local input until redistribution rights and the parcel/grassland workflow are fully documented."
+    note: "Not redistributed through the Zenodo v0.1.0 spatial bundle. It is not required for the principal ED production-soil profile."
