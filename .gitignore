@@ -21,6 +21,22 @@ outputs/
 data/raw/cattle/CSO_ED_2020.csv
 data/raw/land/AQA06_Unpivoted_2013_2025.csv
 
+# Raw external GIS supplied locally. The project tracks manifests, checksums,
+# source notes and overlay code, not large shapefile binaries.
+data/external/spatial/ed/*.shp
+data/external/spatial/ed/*.shx
+data/external/spatial/ed/*.dbf
+data/external/spatial/ed/*.prj
+data/external/spatial/sis_soils/*.shp
+data/external/spatial/sis_soils/*.shx
+data/external/spatial/sis_soils/*.dbf
+data/external/spatial/sis_soils/*.prj
+data/external/spatial/sis_soils/*.sbn
+data/external/spatial/sis_soils/*.sbx
+data/external/spatial/sis_soils/*.lyr
+data/external/spatial/sis_soils/*.zip
+data/external/spatial/lpis/*.xlsx
+
 # Temporary/archive formats not used as tracked source inputs
 *.parquet
 *.tmp
