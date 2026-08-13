@@ -4,7 +4,7 @@ The source table keeps published pathway labels (SI, BE) separate from the
 internal scenario identifiers (SI_SG, BE_SG). Adult livestock endpoints come
 from Styles Table 2. The 2050 land areas and Available residual come from Table
 S3. Gross livestock-land release is the exact difference from the 2020 Table S3
-livestock land baseline.
+livestock land baseline, with dairy/beef/sheep components retained separately.
 """
 
 from __future__ import annotations
@@ -87,18 +87,31 @@ def load_styles_split_gas_pathway_controls(
     dairy = _integer(row, "DAIRY_COWS")
     suckler = _integer(row, "SUCKLER_COWS")
 
-    base_livestock_land = sum(
-        _integer(row, field)
-        for field in ("BASE_DAIRY_LAND_HA", "BASE_BEEF_LAND_HA", "BASE_SHEEP_LAND_HA")
-    )
-    target_livestock_land = sum(
-        _integer(row, field)
-        for field in ("TARGET_DAIRY_LAND_HA", "TARGET_BEEF_LAND_HA", "TARGET_SHEEP_LAND_HA")
-    )
+    base_dairy_land = _integer(row, "BASE_DAIRY_LAND_HA")
+    base_beef_land = _integer(row, "BASE_BEEF_LAND_HA")
+    base_sheep_land = _integer(row, "BASE_SHEEP_LAND_HA")
+    target_dairy_land = _integer(row, "TARGET_DAIRY_LAND_HA")
+    target_beef_land = _integer(row, "TARGET_BEEF_LAND_HA")
+    target_sheep_land = _integer(row, "TARGET_SHEEP_LAND_HA")
+
+    base_livestock_land = base_dairy_land + base_beef_land + base_sheep_land
+    target_livestock_land = target_dairy_land + target_beef_land + target_sheep_land
     release = _integer(row, "LIVESTOCK_LAND_RELEASE_HA")
     if base_livestock_land - target_livestock_land != release:
         raise ValueError(
             "Styles livestock-land release does not close to the Table S3 land balance"
+        )
+
+    release_by_system = {
+        "DAIRY": float(base_dairy_land - target_dairy_land),
+        "BEEF": float(base_beef_land - target_beef_land),
+        "SHEEP": float(base_sheep_land - target_sheep_land),
+    }
+    if any(value < 0 for value in release_by_system.values()):
+        raise ValueError("Styles category-resolved livestock land release cannot be negative")
+    if abs(sum(release_by_system.values()) - release) > 1e-6:
+        raise ValueError(
+            "Styles dairy/beef/sheep land-release components do not close to gross release"
         )
 
     targets = {
@@ -123,6 +136,9 @@ def load_styles_split_gas_pathway_controls(
                 dairy_cows=dairy,
                 suckler_cows=suckler,
                 livestock_land_release_ha=(float(release) if use_2020_land_controls else None),
+                livestock_land_release_by_system_ha=(
+                    release_by_system if use_2020_land_controls else {}
+                ),
                 land_use_targets_ha=(targets if use_2020_land_controls else {}),
                 available_land_residual_ha=(float(residual) if use_2020_land_controls else None),
             ),
