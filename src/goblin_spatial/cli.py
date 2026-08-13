@@ -9,7 +9,11 @@ import pandas as pd
 
 from goblin_spatial.config import load_config
 from goblin_spatial.data_fetch import fetch_data
-from goblin_spatial.land import LandUseAllocationDefinition
+from goblin_spatial.land import (
+    LandUseAllocationDefinition,
+    add_spared_land_opportunity_envelope,
+    summarise_spared_land_opportunity_envelope,
+)
 from goblin_spatial.pipeline import build
 from goblin_spatial.pressure import load_pasture_dm_control
 from goblin_spatial.scenario import (
@@ -18,6 +22,7 @@ from goblin_spatial.scenario import (
     reduction_schedule,
     run_cattle_study,
 )
+from goblin_spatial.soil import add_ed_agricultural_soil
 
 
 def _add_cattle_scenario_arguments(parser: argparse.ArgumentParser) -> None:
@@ -143,6 +148,37 @@ def _parser() -> argparse.ArgumentParser:
     )
     _add_cattle_scenario_arguments(run_all_parser)
 
+    opportunity_parser = sub.add_parser(
+        "opportunity",
+        help=(
+            "Screen potentially spared grassland against the ED soil/opportunity "
+            "profile without allocating land-use shares."
+        ),
+    )
+    opportunity_parser.add_argument(
+        "--config",
+        default="configs/ireland_2015_2025.yaml",
+        help="Path to the YAML build configuration.",
+    )
+    opportunity_parser.add_argument(
+        "--scenario-ed-results",
+        required=True,
+        help="Path to scenario_ed_results.csv from a completed cattle scenario.",
+    )
+    opportunity_parser.add_argument(
+        "--soil-profile",
+        default=None,
+        help=(
+            "Optional compact ED soil profile. Defaults to agricultural_soil_profile "
+            "in the configuration."
+        ),
+    )
+    opportunity_parser.add_argument(
+        "--output-dir",
+        default=None,
+        help="Output directory. Defaults to the scenario-results directory.",
+    )
+
     return parser
 
 
@@ -219,6 +255,61 @@ def _configured_baseline_path(cfg) -> Path:
     return path if path.is_absolute() else cfg.project_root / path
 
 
+def _run_opportunity_screen(args: argparse.Namespace) -> None:
+    cfg = load_config(Path(args.config))
+    scenario_path = Path(args.scenario_ed_results)
+    if not scenario_path.exists():
+        raise FileNotFoundError(f"scenario ED results not found: {scenario_path}")
+
+    soil_path = (
+        Path(args.soil_profile)
+        if args.soil_profile is not None
+        else cfg.files.get("agricultural_soil_profile")
+    )
+    if soil_path is None or not Path(soil_path).exists():
+        raise FileNotFoundError(
+            "policy-neutral opportunity screening requires the compact ED agricultural-"
+            "soil profile. Generate it with scripts/build_ed_agricultural_soil_profile.py "
+            "or pass --soil-profile explicitly."
+        )
+
+    scenario = pd.read_csv(scenario_path, low_memory=False)
+    required = {
+        "CSOED",
+        "County",
+        "MILESTONE_YEAR",
+        "ALL_GRASSLAND",
+        "POTENTIAL_SPARED_GRASSLAND_HA",
+    }
+    missing = sorted(required - set(scenario.columns))
+    if missing:
+        raise ValueError(f"scenario results missing columns: {missing}")
+    if scenario[["CSOED", "MILESTONE_YEAR"]].duplicated().any():
+        raise ValueError("scenario results must contain one row per ED and milestone")
+
+    enriched = add_ed_agricultural_soil(scenario, Path(soil_path))
+    screened = add_spared_land_opportunity_envelope(enriched)
+    national = summarise_spared_land_opportunity_envelope(screened)
+
+    output_dir = (
+        Path(args.output_dir)
+        if args.output_dir is not None
+        else scenario_path.parent
+    )
+    output_dir.mkdir(parents=True, exist_ok=True)
+    ed_output = output_dir / "scenario_ed_opportunity_envelope.csv"
+    national_output = output_dir / "scenario_national_opportunity_envelope.csv"
+    screened.to_csv(ed_output, index=False)
+    national.to_csv(national_output, index=False)
+
+    print(f"ED opportunity envelope: {ed_output}")
+    print(f"National opportunity envelope: {national_output}")
+    print(
+        "Opportunity envelopes overlap and are screening diagnostics only; no "
+        "alternative-land hectares have been allocated."
+    )
+
+
 def main() -> None:
     args = _parser().parse_args()
 
@@ -234,6 +325,10 @@ def main() -> None:
     if args.command == "build":
         result = build(Path(args.config))
         print(f"GOBLIN-Spatial historical baseline complete: {len(result):,} rows")
+        return
+
+    if args.command == "opportunity":
+        _run_opportunity_screen(args)
         return
 
     if args.command in {"scenario", "run-all"}:
