@@ -22,16 +22,14 @@ dependencies = [
 
 [project.optional-dependencies]
 # GIS dependencies are optional because the reconstructed ED baseline can be
-# used without raw polygon data. Install this extra for ED/SIS overlays.
+# used without raw polygon data. Install this extra for ED/SIS/LPIS overlays.
 geo = [
   "geopandas>=0.14",
   "shapely>=2.0",
-  "pyogrio>=0.7"
+  "pyogrio>=0.7",
+  "pyarrow>=14"
 ]
 
-# Exact public upstream versions exercised by the clean GitHub Actions
-# integration test. Pinning them prevents the frozen pasture-DM control from
-# silently drifting when upstream animal/feed implementations change.
 goblin = [
   "cattle_lca==0.3.1",
   "sheep_lca==0.3.1",
@@ -42,6 +40,7 @@ goblin = [
 
 [project.scripts]
 goblin-spatial = "goblin_spatial.cli:main"
+goblin-spatial-opportunity = "goblin_spatial.opportunity_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

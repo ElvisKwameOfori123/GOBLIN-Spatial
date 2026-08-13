@@ -33,19 +33,20 @@ files:
   county_region_map: data/controls/county_region_map.csv
 
   # FROZEN GOBLIN PASTURE FEED CONTROL
-  # Derived with the pinned public GOBLIN animal/feed packages and retained as
-  # a fixed-2020 management/feed parameterisation for cattle-population-only
-  # scenarios. The same per-head coefficients are reused at future milestones
-  # unless a study explicitly supplies year/scenario-specific GOBLIN controls.
   pasture_dm_controls: data/controls/pasture/GOBLIN_pasture_dm_2020_fixed.csv
 
   # ED AGRICULTURAL SOIL PROFILE
-  # A compact prebuilt profile is preferred when present. During development,
-  # the same profile can be regenerated directly from the external Cathal/NFS
-  # holding-linked source without carrying individual holding identifiers into
-  # the master dataset.
+  # Source UAA weights the soil shares; ALL_GRASSLAND remains authoritative.
   agricultural_soil_profile: data/controls/soil/ED_GOBLIN_soil_profile.csv.xz
   agricultural_soil_source: data/external/soil/cathal.csv
+
+  # LPIS / SPATIAL OPPORTUNITY CONTEXT
+  # Large parcel GeoParquets remain external. The one-off overlay produces the
+  # compact two-snapshot ED control used by normal opportunity runs.
+  saps_ed_geography: data/external/spatial/ed/Electoral_Divisions_generalised_SAPS_Shp_with_proper_names.shp
+  lpis_2020_parcels: data/external/spatial/lpis/LPIS_2020_GOBLIN_reduced.parquet
+  lpis_2025_parcels: data/external/spatial/lpis/LPIS_2025_GOBLIN_reduced.parquet
+  lpis_ed_profile: data/controls/lpis/ED_LPIS_opportunity_2020_2025.csv.xz
 
   # STANDARD OUTPUT
   standard_output_mapping: data/controls/standard_output/GOBLIN_SO_mapping.csv
