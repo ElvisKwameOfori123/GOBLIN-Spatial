@@ -8,12 +8,17 @@ Two pathway contracts are retained:
 
 ``build_adult_driven_livestock_pathway``
     Principal GOBLIN-Spatial route. Dairy cows, suckler cows and total sheep are
-    the only externally controlled livestock populations. Young/follower cattle
+    the externally controlled livestock populations. Young/follower cattle
     respond endogenously to the realised incremental adult reductions, while
     sheep reductions are distributed through the ten existing sheep cohorts.
 
 Both routes are cumulative: milestone t starts from the solved ED state at
 milestone t-1. Animals are never rebuilt from scratch at each milestone.
+
+The solved 21-cohort state is also exposed explicitly as ``TOTAL_CATTLE``
+accounting. If an external national GOBLIN total-cattle target is supplied, the
+model validates exact national closure rather than silently changing that
+control or inventing a reconciliation rule.
 """
 
 from __future__ import annotations
@@ -40,6 +45,122 @@ ADULT_COHORT_MAP = {
     "dairy_cows": "DAIRY_COW",
     "suckler_cows": "OTHER_COW",
 }
+
+
+def _add_total_cattle_accounting(frame: pd.DataFrame) -> pd.DataFrame:
+    """Expose and validate total cattle from the solved 21-cohort state.
+
+    The historical ``TOTAL_CATTLE`` column, when present, is an authoritative
+    baseline accounting control. Scenario total cattle is always the sum of the
+    21 solved cattle cohorts. No separate animal pool is created.
+    """
+
+    out = frame.copy()
+    required = {
+        "BASE_GOBLIN_21_CATTLE_TOTAL",
+        "SCENARIO_GOBLIN_21_CATTLE_TOTAL",
+    }
+    missing = sorted(required - set(out.columns))
+    if missing:
+        raise ValueError(f"total-cattle accounting missing columns: {missing}")
+
+    base = pd.to_numeric(
+        out["BASE_GOBLIN_21_CATTLE_TOTAL"], errors="raise"
+    ).astype(np.int64)
+    scenario = pd.to_numeric(
+        out["SCENARIO_GOBLIN_21_CATTLE_TOTAL"], errors="raise"
+    ).astype(np.int64)
+
+    if (scenario < 0).any() or (scenario > base).any():
+        raise AssertionError(
+            "scenario total cattle must remain within the baseline cattle capacity"
+        )
+
+    if "TOTAL_CATTLE" in out.columns:
+        historical = pd.to_numeric(out["TOTAL_CATTLE"], errors="raise").to_numpy(
+            dtype=float
+        )
+        rounded = np.rint(historical).astype(np.int64)
+        if np.max(np.abs(historical - rounded)) > 1e-8:
+            raise AssertionError("historical TOTAL_CATTLE must contain integer counts")
+        if not np.array_equal(rounded, base.to_numpy(dtype=np.int64)):
+            raise AssertionError(
+                "baseline 21 cattle cohorts do not close to historical TOTAL_CATTLE"
+            )
+
+    out["BASE_TOTAL_CATTLE"] = base
+    out["SCENARIO_TOTAL_CATTLE"] = scenario
+    out["CUMULATIVE_REDUCTION_TOTAL_CATTLE"] = base - scenario
+
+    if "PREVIOUS_GOBLIN_21_CATTLE_TOTAL" in out.columns:
+        out["PREVIOUS_TOTAL_CATTLE"] = pd.to_numeric(
+            out["PREVIOUS_GOBLIN_21_CATTLE_TOTAL"], errors="raise"
+        ).astype(np.int64)
+    if "INCREMENTAL_REDUCTION_GOBLIN_21_CATTLE_TOTAL" in out.columns:
+        out["INCREMENTAL_REDUCTION_TOTAL_CATTLE"] = pd.to_numeric(
+            out["INCREMENTAL_REDUCTION_GOBLIN_21_CATTLE_TOTAL"], errors="raise"
+        ).astype(np.int64)
+
+    return out
+
+
+def _validate_national_total_cattle_targets(
+    frame: pd.DataFrame,
+    targets_by_year: Mapping[int, int] | None,
+) -> pd.DataFrame:
+    """Validate exact national total-cattle closure where GOBLIN supplies it.
+
+    This function deliberately validates but does not rebalance the herd. If an
+    adult-driven cohort response does not reproduce an externally supplied
+    national total-cattle target, the caller receives an explicit failure so a
+    scientifically justified reconciliation method can be chosen rather than
+    hidden inside the model.
+    """
+
+    out = frame.copy()
+    if not targets_by_year:
+        return out
+    if "MILESTONE_YEAR" not in out.columns:
+        raise ValueError("national total-cattle validation requires MILESTONE_YEAR")
+
+    years_in_frame = set(
+        pd.to_numeric(out["MILESTONE_YEAR"], errors="raise").astype(int).unique()
+    )
+    target_years = {int(year) for year in targets_by_year}
+    unknown = sorted(target_years - years_in_frame)
+    if unknown:
+        raise ValueError(
+            f"total-cattle targets supplied for absent milestones: {unknown}"
+        )
+
+    out["NATIONAL_TARGET_TOTAL_CATTLE"] = np.nan
+    out["NATIONAL_ACTUAL_TOTAL_CATTLE"] = np.nan
+    out["NATIONAL_TOTAL_CATTLE_DIFFERENCE"] = np.nan
+
+    for raw_year, raw_target in targets_by_year.items():
+        year = int(raw_year)
+        if isinstance(raw_target, bool) or int(raw_target) != raw_target or int(raw_target) < 0:
+            raise ValueError(
+                f"national total-cattle target for {year} must be a non-negative integer"
+            )
+        target = int(raw_target)
+        mask = pd.to_numeric(out["MILESTONE_YEAR"], errors="raise").astype(int) == year
+        actual = int(
+            pd.to_numeric(
+                out.loc[mask, "SCENARIO_TOTAL_CATTLE"], errors="raise"
+            ).sum()
+        )
+        difference = actual - target
+        out.loc[mask, "NATIONAL_TARGET_TOTAL_CATTLE"] = target
+        out.loc[mask, "NATIONAL_ACTUAL_TOTAL_CATTLE"] = actual
+        out.loc[mask, "NATIONAL_TOTAL_CATTLE_DIFFERENCE"] = difference
+        if difference != 0:
+            raise AssertionError(
+                f"national total-cattle target failed for {year}: "
+                f"target={target}, actual={actual}, difference={difference}"
+            )
+
+    return out
 
 
 def _adult_driven_cattle_pathway(adult_pathway: pd.DataFrame) -> pd.DataFrame:
@@ -100,7 +221,6 @@ def _adult_driven_cattle_pathway(adult_pathway: pd.DataFrame) -> pd.DataFrame:
         if out["CSOED"].astype(str).tolist() != ed_order:
             raise AssertionError("ED membership/order changed between milestones")
 
-        # Adult cohorts are already solved by the sequential adult pathway.
         for cohort, adult_column in ADULT_COHORT_MAP.items():
             base = base_cohorts[cohort]
             previous = _integer_array(out, f"PREVIOUS_{adult_column}")
@@ -213,7 +333,7 @@ def _adult_driven_cattle_pathway(adult_pathway: pd.DataFrame) -> pd.DataFrame:
             raise AssertionError(
                 f"ED cattle cohort increases between milestones: {cohort}"
             )
-    return result
+    return _add_total_cattle_accounting(result)
 
 
 def build_adult_driven_livestock_pathway(
@@ -222,6 +342,7 @@ def build_adult_driven_livestock_pathway(
     include_standard_output: bool = False,
     mapping_path: str | None = None,
     coefficient_path: str | None = None,
+    total_cattle_targets_by_year: Mapping[int, int] | None = None,
 ) -> pd.DataFrame:
     """Return the principal cumulative 31-cohort ED livestock pathway.
 
@@ -229,9 +350,16 @@ def build_adult_driven_livestock_pathway(
     populations. Young cattle and the ten sheep cohorts are derived
     sequentially from the previous solved ED state. Standard Output, when
     requested, is appended only after the physical livestock state is complete.
+
+    ``total_cattle_targets_by_year`` may carry authoritative national GOBLIN
+    total-cattle controls. They are checked only after all 21 cattle cohorts have
+    been solved. A mismatch is explicit and is not silently rebalanced.
     """
 
     cattle = _adult_driven_cattle_pathway(adult_pathway)
+    cattle = _validate_national_total_cattle_targets(
+        cattle, total_cattle_targets_by_year
+    )
     sheep = build_sheep_cohort_pathway(adult_pathway)
 
     keys = ["CSOED", "MILESTONE_YEAR"]
@@ -316,6 +444,7 @@ def build_full_livestock_pathway(
     cattle = build_cattle_cohort_pathway(
         adult_pathway, cattle_targets_by_year
     )
+    cattle = _add_total_cattle_accounting(cattle)
     sheep = build_sheep_cohort_pathway(adult_pathway)
 
     keys = ["CSOED", "MILESTONE_YEAR"]
