@@ -90,9 +90,6 @@ def _system_dm(
         profile=profile,
     )
 
-    # Breeding bulls serve the adult cattle system as a whole.  Allocate their
-    # pasture demand between dairy and beef according to each ED's adult-cow mix
-    # so bull feed is not double counted and remains spatially local.
     bull = _cohort_dm(
         frame,
         state=state,
@@ -136,13 +133,7 @@ def _joint_capacity_allocate(
     weights: np.ndarray,
     targets: np.ndarray,
 ) -> np.ndarray:
-    """Meet category column totals while respecting a shared ED capacity.
-
-    The iterative proportional allocator treats all three systems simultaneously,
-    avoiding an arbitrary dairy-first, beef-first or sheep-first priority.  Each
-    category retains its own non-negative spatial weights.  Structural zeros in
-    the weights remain zero throughout.
-    """
+    """Meet category column totals while respecting a shared ED capacity."""
 
     capacity = np.maximum(np.asarray(capacity, dtype=float), 0.0)
     weights = np.maximum(np.asarray(weights, dtype=float), 0.0)
@@ -220,12 +211,7 @@ def allocate_category_resolved_goblin_land_release(
     *,
     grassland_column: str = "ALL_GRASSLAND",
 ) -> pd.DataFrame:
-    """Spatialise dairy/beef/sheep GOBLIN land-release controls exactly.
-
-    This function currently represents one endpoint year, matching the principal
-    Styles SI_SG / BE_SG route.  The national category controls must sum to the
-    authoritative gross livestock-land release supplied by the pathway.
-    """
+    """Spatialise dairy/beef/sheep GOBLIN land-release controls exactly."""
 
     out = livestock_endpoint.copy().sort_values("CSOED", kind="stable").reset_index(drop=True)
     required = {
@@ -253,14 +239,8 @@ def allocate_category_resolved_goblin_land_release(
 
     targets = _validated_targets(national_release_ha_by_system)
     weights = {
-        # A baseline-footprint allocation is intentional here.  It represents a
-        # spatialised national land-efficiency shift and remains valid when dairy
-        # head numbers increase, as in SI_SG.
         "DAIRY": np.maximum(base_dm["DAIRY"], 0.0),
-        # Beef land release is tied to the realised fall in suckler/BxB pressure.
         "BEEF": np.maximum(base_dm["BEEF"] - scenario_dm["BEEF"], 0.0),
-        # Sheep heads are fixed in the principal experiment, while Table S3 still
-        # releases a small sheep-land area.  Use the baseline sheep footprint.
         "SHEEP": np.maximum(base_dm["SHEEP"], 0.0),
     }
     if float(weights["BEEF"].sum()) <= 1e-12 and targets["BEEF"] > 0:
