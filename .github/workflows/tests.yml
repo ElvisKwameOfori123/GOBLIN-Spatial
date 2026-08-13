@@ -53,3 +53,41 @@ jobs:
       - name: Run full 2015-2025 regression
         if: steps.full_data.outputs.available == 'true'
         run: pytest -q -s -m full_data
+
+      - name: Clone-style CLI acceptance for 2020 and 2025
+        if: steps.full_data.outputs.available == 'true'
+        run: |
+          rm -rf data/processed/ci_scenario_2020 data/processed/ci_scenario_2025
+          goblin-spatial run-all \
+            --baseline-year 2020 \
+            --target-year 2050 \
+            --dairy-reduction 0.30 \
+            --suckler-reduction 0.30 \
+            --output-dir data/processed/ci_scenario_2020
+          goblin-spatial scenario \
+            --baseline-year 2025 \
+            --target-year 2050 \
+            --dairy-reduction 0.30 \
+            --suckler-reduction 0.30 \
+            --output-dir data/processed/ci_scenario_2025
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd
+
+          expected = {
+              "scenario_schedule.csv",
+              "scenario_national_summary.csv",
+              "scenario_ed_results.csv",
+              "baseline_ed_18_cohort_relationships.csv",
+              "scenario_ed_18_cohort_audit.csv",
+          }
+          for year in (2020, 2025):
+              folder = Path(f"data/processed/ci_scenario_{year}")
+              missing = sorted(name for name in expected if not (folder / name).exists())
+              assert not missing, (year, missing)
+              national = pd.read_csv(folder / "scenario_national_summary.csv").set_index("MILESTONE_YEAR")
+              assert 2050 in national.index
+              spared = float(national.loc[2050, "POTENTIAL_SPARED_GRASSLAND_HA"])
+              assert spared > 0
+              print(f"CLI_BOTH_30_FROM_{year}_2050_POTENTIAL_SPARED_GRASSLAND_HA={spared:.6f}")
+          PY
