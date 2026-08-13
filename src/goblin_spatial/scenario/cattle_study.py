@@ -1,9 +1,8 @@
 """Study-facing cattle-only scenario helpers.
 
-The general sequential engine can represent dairy, suckler and sheep changes,
-but the principal GOBLIN-Spatial study is cattle focused.  These helpers expose
-only dairy- and suckler-cow reductions and hard-code sheep reduction to zero.
-Sheep remain in the baseline herd and in grassland demand as unchanged context.
+The principal GOBLIN-Spatial study changes dairy and/or suckler cows only. Sheep
+remain fixed at the selected 2020 or 2025 baseline and continue to contribute to
+grassland demand as unchanged context.
 """
 
 from __future__ import annotations
@@ -26,13 +25,7 @@ def make_cattle_scenario(
     milestone_years: Sequence[int] | None = None,
     milestone_reductions: Mapping[int, Mapping[str, float]] | None = None,
 ) -> SequentialScenarioDefinition:
-    """Return a sequential scenario with sheep fixed at its selected baseline.
-
-    Direct milestone reductions, when supplied, use the study-facing keys
-    ``dairy_reduction`` and ``suckler_reduction`` only.  The helper inserts a
-    zero sheep reduction at every milestone before delegating to the general
-    engine.
-    """
+    """Return a sequential cattle scenario with sheep fixed at baseline."""
 
     expanded = None
     if milestone_reductions is not None:
@@ -76,9 +69,9 @@ def cattle_reduction_suite(
 ) -> dict[str, SequentialScenarioDefinition]:
     """Return the principal cattle experiments for the current study.
 
-    The suite contains baseline, dairy-only, suckler-only, both-cow types and a
-    reproducible randomised spatial-incidence sensitivity for the same combined
-    national cattle endpoint.  Sheep are unchanged in every case.
+    The suite contains baseline, dairy-only, suckler-only, combined dairy +
+    suckler, and a reproducible randomised spatial-incidence sensitivity for the
+    same combined national endpoint. Sheep are unchanged in every case.
     """
 
     r = float(reduction)
