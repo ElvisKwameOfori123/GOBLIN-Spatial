@@ -12,8 +12,7 @@ import geopandas as gpd
 import pandas as pd
 
 from goblin_spatial.config import load_config
-from goblin_spatial.land.lpis import build_ed_lpis_profile
-from goblin_spatial.soil.overlay import select_baseline_ed_geometries
+from goblin_spatial.land import build_ed_lpis_profile
 
 
 def main() -> None:
@@ -38,8 +37,6 @@ def main() -> None:
     if not ed_path.exists():
         raise FileNotFoundError(ed_path)
     ed = gpd.read_file(ed_path)
-    _, ed_model = select_baseline_ed_geometries(baseline, ed)
-    ed_model = ed_model.reset_index(drop=True)
 
     years = (2020, 2025) if args.year == "both" else (int(args.year),)
     outputs = []
@@ -52,7 +49,7 @@ def main() -> None:
         lpis = gpd.read_parquet(path)
         profile = build_ed_lpis_profile(
             lpis,
-            ed_model,
+            ed,
             baseline,
             year=year,
             chunk_size=args.chunk_size,
