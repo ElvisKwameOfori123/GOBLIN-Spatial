@@ -21,6 +21,16 @@ The 2020 and 2025 analyses therefore use the same pathway destination but can ha
 
 If an endpoint exceeds the selected baseline for an adult category, the principal reduction-only study fails rather than expanding or seeding that category.
 
+## Principal endpoint route
+
+`run_principal_goblin_endpoint()` is the study-facing route for the currently sourced Styles controls. It treats 2050 as the only livestock milestone because the source-controlled file currently contains a 2050 adult endpoint only.
+
+It therefore does **not** manufacture 2030 or 2040 livestock reductions by linear interpolation. The older generic sequential machinery remains useful for sensitivity analysis and for future pathway work, but it should become part of the principal SI_SG/BE_SG analysis only when matching intermediate national milestones are explicitly sourced or an interpolation assumption is deliberately declared.
+
+The principal route is:
+
+`selected baseline -> baseline minus 2050 endpoint -> ED reduction allocation -> 21-cattle-cohort response -> total cattle`
+
 ## Universal ED participation
 
 For every non-null adult reduction, every ED with a positive baseline stock of that category participates in the reduction.
