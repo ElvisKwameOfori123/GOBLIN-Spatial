@@ -97,6 +97,7 @@ jobs:
                   assert "COMMONAGE_FRACTION" in names or {"COM_NUM", "COM_DEN"}.issubset(names), names
                   assert "SHARE_DIGITISED_HA" in names, names
                   assert "SHARE_ELIGIBLE_HA" in names, names
+                  assert "LAND_USE_GROUP" in names, names
           PY
 
       - name: Rebuild 2020 and 2025 ED LPIS control
@@ -152,6 +153,34 @@ jobs:
           commonage = pd.to_numeric(frame["LPIS_COMMONAGE_GRASS_HA"], errors="raise").to_numpy(float)
           assert (commonage <= claimed + 1e-8).all()
 
+          # The grassland subtype columns are a mutually exclusive accounting
+          # partition. This catches semantic alias errors that can pass row-count
+          # and commonage checks while double-counting a published subtype.
+          grass_subtypes = [
+              "LPIS_PERMANENT_PASTURE_HA",
+              "LPIS_LOW_INPUT_GRASS_HA",
+              "LPIS_TEMPORARY_GRASS_HA",
+              "LPIS_HAY_MEADOW_HA",
+              "LPIS_PEAT_GRASS_HA",
+              "LPIS_RIPARIAN_GRASS_HA",
+              "LPIS_OTHER_GRASS_HA",
+          ]
+          subtype_sum = frame[grass_subtypes].apply(pd.to_numeric, errors="raise").sum(axis=1)
+          partition_error = (subtype_sum - pd.to_numeric(frame["LPIS_CLAIMED_GRASS_HA"], errors="raise")).abs()
+          assert float(partition_error.max()) <= 1e-6, float(partition_error.max())
+
+          totals = {
+              year: {
+                  column: float(pd.to_numeric(frame.loc[frame["LPIS_YEAR"].eq(year), column], errors="raise").sum())
+                  for column in [*grass_subtypes, "LPIS_FORESTRY_EXISTING_HA", "LPIS_FORESTRY_ELIGIBLE_SOURCE_HA"]
+              }
+              for year in (2020, 2025)
+          }
+          assert 3_500_000 < totals[2020]["LPIS_PERMANENT_PASTURE_HA"] < 3_800_000, totals[2020]
+          assert totals[2020]["LPIS_LOW_INPUT_GRASS_HA"] > 200_000, totals[2020]
+          assert totals[2020]["LPIS_FORESTRY_EXISTING_HA"] > 0, totals[2020]
+          assert totals[2025]["LPIS_FORESTRY_ELIGIBLE_SOURCE_HA"] > 0, totals[2025]
+
           summary = {
               "rows": int(len(frame)),
               "eds_per_snapshot": counts,
@@ -173,6 +202,8 @@ jobs:
                   str(year): float(frame.loc[frame["LPIS_YEAR"].eq(year), "LPIS_ELIGIBLE_GRASS_HA"].sum())
                   for year in (2020, 2025)
               },
+              "grass_subtype_totals_ha": {str(year): totals[year] for year in (2020, 2025)},
+              "grass_subtype_partition_max_abs_error_ha": float(partition_error.max()),
           }
           Path("data/controls/lpis/LPIS_ED_validation_summary.json").write_text(
               json.dumps(summary, indent=2), encoding="utf-8"
