@@ -34,6 +34,16 @@ from goblin_spatial.scenario.cattle_study import (
     make_cattle_scenario,
     cattle_reduction_suite,
 )
+from goblin_spatial.scenario.study_workflow import (
+    PRE_ADULT_CATTLE_COHORTS,
+    CattleStudyRun,
+    build_18_cohort_dependency_audit,
+    build_scenario_cohort_audit,
+    load_pasture_dm_profiles,
+    write_cattle_study_outputs,
+    run_cattle_study,
+    build_and_run_cattle_study,
+)
 
 __all__ = [
     "NetZeroScenarioDefinition",
@@ -59,4 +69,12 @@ __all__ = [
     "standard_reduction_suite",
     "make_cattle_scenario",
     "cattle_reduction_suite",
+    "PRE_ADULT_CATTLE_COHORTS",
+    "CattleStudyRun",
+    "build_18_cohort_dependency_audit",
+    "build_scenario_cohort_audit",
+    "load_pasture_dm_profiles",
+    "write_cattle_study_outputs",
+    "run_cattle_study",
+    "build_and_run_cattle_study",
 ]
