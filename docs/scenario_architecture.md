@@ -12,7 +12,7 @@ Sheep remain unchanged context in the principal study.
 
 The study workflow is:
 
-`validated ED baseline -> select 2020/2025 -> dairy/suckler reduction -> 2030/2040/2050 cattle cohorts -> Standard Output exposure -> grassland release -> ED soil opportunity -> alternative land allocation`
+`validated ED baseline -> select 2020/2025 -> dairy/suckler reduction -> 2030/2040/2050 cattle cohorts -> Standard Output exposure -> grassland release -> ED soil opportunity -> optional alternative land allocation`
 
 Dairy and suckler reductions are independently editable. If milestone reductions are not supplied, the engine interpolates from zero at the selected baseline year to the requested endpoint. Direct milestone reductions can be supplied instead.
 
@@ -132,23 +132,67 @@ The same engine works from a 2020 or 2025 starting state and for any endpoint re
 
 Standard Output is calculated only after the physical cattle state has been solved. It reports fixed-2020 production-value exposure and never drives animal allocation. The historical baseline produced by `goblin-spatial build` therefore does not require Standard Output fields.
 
-## Grassland release requires authoritative GOBLIN feed controls
+## Grassland release uses the pinned GOBLIN feed control
 
-The solved cattle pathway, with unchanged sheep context, can be passed to GOBLIN pasture/feed accounting:
+The solved cattle pathway, with unchanged sheep context, is passed to GOBLIN pasture/feed accounting:
 
 `scenario livestock -> pasture dry-matter demand -> required grassland -> potential spared grassland`
 
 The validated ED `ALL_GRASSLAND` remains the controlling land total. Potential spared grassland and any additional grassland requirement are reported separately.
 
-The study workflow deliberately refuses to invent pasture-DM coefficients. A grassland-release run must receive a complete year x 31-cohort pasture-DM control table derived from upstream GOBLIN animal/feed definitions. Without that table the scenario still runs through livestock, the 18-cohort audit and Standard Output, but it stops before claiming spared hectares.
+The repository carries a frozen 2020 per-head pasture-DM profile derived from and parity-tested against the pinned public GOBLIN animal/feed packages. For the principal cattle-population-only experiment, that fixed-2020 feed/management parameterisation is reused at future milestones. It is an explicit model assumption, not a claim about observed future feeding. A study that changes feed, productivity or grazing management should supply year/scenario-specific GOBLIN controls instead.
 
-## Alternative land opportunity
+## Policy-neutral alternative-land opportunity envelope
 
 Potential release is not automatic land-use conversion:
 
 `PotentialRelease != Opportunity != RealisedConversion`
 
-ED soil and forest context are attached only if the user requests an alternative-land allocation after potential release has been calculated. Land-use shares are explicit user/policy assumptions and default to zero.
+The first downstream land step is therefore a **policy-neutral opportunity envelope**, not an allocation. The ED agricultural-soil profile supplies transparent screening evidence for:
+
+- forestry
+- rewetting
+- AD grass
+- willow
+- energy grass
+- nature/restoration
+
+For each land use the screen reports two diagnostics:
+
+`ELIGIBLE_<USE>_SPARED_GRASSLAND_HA`
+
+This is potentially spared grassland located in EDs with positive evidence for that use under the current broad screen.
+
+`SCORE_WEIGHTED_<USE>_OPPORTUNITY_HA`
+
+This is potentially spared grassland multiplied by the 0-1 opportunity score. It is an index-weighted screening diagnostic, not physical converted area.
+
+These envelopes **overlap**. A hectare may be relevant to more than one future use, so land-use opportunity envelopes must never be summed across uses. They are intended to show the opportunity set before a policy pathway is imposed.
+
+The current screen uses the GOBLIN G1/G2/G3 production-soil ordering for biomass/grass opportunity, forest Yield Class as forestry-production context, and conservative dominant Irish Forest Soil peat/cutover evidence for rewetting. These are ED-level screens, not parcel-level suitability models.
+
+After a scenario has produced `POTENTIAL_SPARED_GRASSLAND_HA`, the policy-neutral screen can be run with:
+
+```bash
+python scripts/screen_spared_land_opportunity.py \
+  data/processed/scenarios/D30_S30_FROM_2020/scenario_ed_results.csv \
+  data/controls/soil/ED_GOBLIN_soil_profile.csv.xz
+```
+
+It writes:
+
+- `scenario_ed_opportunity_envelope.csv`
+- `scenario_national_opportunity_envelope.csv`
+
+No forest, rewetting, AD-grass, willow, energy-grass or nature hectares are assigned by this screen.
+
+## Realised alternative-land allocation remains explicit
+
+If a study later supplies land-use shares, the sequential allocation engine can distribute newly spared hectares across eligible EDs. Those shares are explicit user/policy assumptions and default to zero. Previously allocated land remains allocated at later milestones, and any unmet target is reported rather than forced.
+
+This preserves the accounting boundary:
+
+`potential spared grassland -> overlapping opportunity envelope -> explicit scenario allocation -> realised conversion assumption`
 
 ## Reproducible command-line workflow
 
@@ -186,4 +230,4 @@ A scenario writes:
 - `baseline_ed_18_cohort_relationships.csv`
 - `scenario_ed_18_cohort_audit.csv`
 
-If no authoritative pasture-DM control table is supplied, no spared-grassland result is produced. This is a deliberate scientific guardrail rather than a missing default.
+The policy-neutral opportunity screen is deliberately separate from the physical cattle/grassland result so no alternative-land pathway is invented silently.
