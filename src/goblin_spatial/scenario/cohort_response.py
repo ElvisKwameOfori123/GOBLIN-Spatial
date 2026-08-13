@@ -1,26 +1,34 @@
-"""Propagate adult destocking into the 21 GOBLIN cattle cohorts spatially.
+"""Propagate adult-cow reductions into the 21 GOBLIN cattle cohorts spatially.
 
-National biology and spatial incidence are deliberately separated:
+The rule is deliberately simple and auditable.
 
-* GOBLIN/COHORTS supplies the adult-to-pre-adult biological relationship.
-* GOBLIN-Spatial starts from the selected ED cohort baseline and allocates only
-  the implied reduction across EDs.
-* Breeding EDs respond through their own adult-to-cohort relationship.
-* EDs carrying more young stock than their local adult base can biologically
-  support are treated as mixed breeding/receiver locations for that cohort.
-* Pure receiver/rearing/finishing EDs inherit the reduction signal from breeding
-  activity within the same county.
-* National fallback is reserved for sparse orphan cases where a cohort exists
-  in a county with no corresponding adult breeding stock at all.
+For every follower cohort, the selected 2020 or 2025 ED baseline records the
+relationship between the relevant adult cows and the cohort already present in
+that ED.  If the ED has the relevant adult cows, its follower cohort responds to
+that ED's realised adult-cow reduction rate.  Algebraically::
 
-The spatial dependency split is derived from the same type of herd coefficient
-used by Henn et al. (2023): pre-adult cohort numbers relative to the relevant
-adult cow population.  For each cohort k, the selected baseline implies a
-national coefficient beta_k = cohort_k / origin_adults.  In each ED, up to
-beta_k * local_origin_adults is treated as locally supported.  Any observed
-cohort stock above that amount is treated as receiver/rearing dependence.  This
-is a transparent spatial proxy for cattle movement, not a claim that individual
-animals have been traced between EDs.
+    cohort_reduction_e = adult_reduction_e * (cohort_e / adult_e)
+                       = cohort_e * adult_reduction_rate_e
+
+This preserves each ED's observed adult-to-cohort relationship during a
+reduction scenario.
+
+Some EDs contain young stock but no corresponding adult cows.  These are
+receiver/orphan EDs for that cohort.  Their young stock is assumed to depend on
+breeding activity elsewhere in the same county, so their reduction follows the
+same-county adult reduction rate::
+
+    orphan_reduction_e = county_adult_reduction
+                         * (orphan_cohort_e / county_adults)
+                       = orphan_cohort_e * county_adult_reduction_rate
+
+Only if a cohort exists in a county with no corresponding adult cows at all is a
+national fallback used.  No mixed-ED decomposition and no arbitrary 30%, 50% or
+other spillover factor is imposed.
+
+GOBLIN/COHORTS remains authoritative for the national biological target of each
+cohort.  The ED and county relationships determine only where that required
+cohort reduction falls.
 """
 
 from __future__ import annotations
@@ -50,22 +58,28 @@ def _integer_array(frame: pd.DataFrame, column: str) -> np.ndarray:
     return rounded
 
 
-def _dependency_components(
+def _cohort_origin(cohort: str) -> str:
+    if cohort in DXD_COHORTS or cohort in DXB_COHORTS:
+        return "DAIRY"
+    if cohort in BXB_COHORTS:
+        return "SUCKLER"
+    if cohort == "bulls":
+        return "ADULT_COWS"
+    raise ValueError(f"cannot identify adult origin for cohort {cohort}")
+
+
+def _relationship_components(
     base_adults: np.ndarray,
     cohort_base: np.ndarray,
     counties: np.ndarray,
-) -> dict[str, np.ndarray | float]:
-    """Decompose one cohort into local-support and receiver-dependent shares.
+) -> dict[str, np.ndarray]:
+    """Describe the simple ED relationship used by the scenario ripple.
 
-    The national cohort/adult coefficient is used only as a biological reference
-    for the selected baseline.  It does not change the observed ED cohort count.
-    An ED can therefore be:
-
-    * ``LOCAL_ED``: all observed cohort stock is supportable by its local adults;
-    * ``MIXED_ED_COUNTY``: some stock is local and some is receiver/rearing stock;
-    * ``COUNTY_RECEIVER``: cohort stock exists with no corresponding local adults;
-    * ``NATIONAL_ORPHAN``: receiver stock exists in a county with no origin adults;
-    * ``NONE``: the ED contains none of the cohort.
+    ``LOCAL_ED`` means the ED contains both the relevant parent adults and the
+    follower cohort. ``COUNTY_RECEIVER`` means the cohort exists but the ED has
+    no corresponding adults, so the cohort is linked to the county adult pool.
+    ``NATIONAL_ORPHAN`` is reserved for the rare case where the county itself has
+    no corresponding adults. ``NONE`` means the cohort is absent in the ED.
     """
 
     base_adults = np.asarray(base_adults, dtype=np.int64)
@@ -77,31 +91,7 @@ def _dependency_components(
     if (base_adults < 0).any() or (cohort_base < 0).any():
         raise ValueError("adult and cohort counts must be non-negative")
     if pd.isna(counties).any():
-        raise ValueError("county is required for cohort dependency decomposition")
-
-    national_adults = int(base_adults.sum())
-    national_cohort = int(cohort_base.sum())
-    coefficient = (
-        float(national_cohort) / float(national_adults)
-        if national_adults > 0
-        else 0.0
-    )
-
-    local_capacity = coefficient * base_adults.astype(float)
-    local_supported = np.minimum(cohort_base.astype(float), local_capacity)
-    receiver_dependent = np.maximum(0.0, cohort_base.astype(float) - local_supported)
-    local_share = np.divide(
-        local_supported,
-        cohort_base,
-        out=np.zeros(n, dtype=float),
-        where=cohort_base > 0,
-    )
-    receiver_share = np.divide(
-        receiver_dependent,
-        cohort_base,
-        out=np.zeros(n, dtype=float),
-        where=cohort_base > 0,
-    )
+        raise ValueError("county is required for cohort relationship accounting")
 
     network = pd.DataFrame(
         {
@@ -121,26 +111,40 @@ def _dependency_components(
         .to_numpy(dtype=float)
     )
 
+    ed_ratio = np.divide(
+        cohort_base.astype(float),
+        base_adults.astype(float),
+        out=np.zeros(n, dtype=float),
+        where=base_adults > 0,
+    )
+    orphan_ratio_to_county_adults = np.divide(
+        cohort_base.astype(float),
+        county_adults,
+        out=np.zeros(n, dtype=float),
+        where=(base_adults == 0) & (cohort_base > 0) & (county_adults > 0),
+    )
+    orphan_share_of_county_cohort = np.divide(
+        cohort_base.astype(float),
+        county_cohort,
+        out=np.zeros(n, dtype=float),
+        where=(base_adults == 0) & (cohort_base > 0) & (county_cohort > 0),
+    )
+
     source = np.full(n, "NONE", dtype=object)
     has_cohort = cohort_base > 0
-    active = base_adults > 0
-    local_only = has_cohort & active & (receiver_share <= 1e-12)
-    mixed = has_cohort & active & (receiver_share > 1e-12)
-    receiver = has_cohort & (~active) & (county_adults > 0)
-    orphan = has_cohort & (~active) & (county_adults <= 0)
-    source[local_only] = "LOCAL_ED"
-    source[mixed] = "MIXED_ED_COUNTY"
+    local = has_cohort & (base_adults > 0)
+    receiver = has_cohort & (base_adults == 0) & (county_adults > 0)
+    national_orphan = has_cohort & (base_adults == 0) & (county_adults <= 0)
+    source[local] = "LOCAL_ED"
     source[receiver] = "COUNTY_RECEIVER"
-    source[orphan] = "NATIONAL_ORPHAN"
+    source[national_orphan] = "NATIONAL_ORPHAN"
 
     return {
-        "coefficient": coefficient,
-        "local_supported": local_supported,
-        "receiver_dependent": receiver_dependent,
-        "local_share": np.clip(local_share, 0.0, 1.0),
-        "receiver_share": np.clip(receiver_share, 0.0, 1.0),
+        "ed_ratio": ed_ratio,
         "county_adults": county_adults,
         "county_cohort": county_cohort,
+        "orphan_ratio_to_county_adults": orphan_ratio_to_county_adults,
+        "orphan_share_of_county_cohort": orphan_share_of_county_cohort,
         "source": source,
     }
 
@@ -151,16 +155,12 @@ def _reduction_signal(
     cohort_base: np.ndarray,
     counties: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Return an ED-local / county-receiver blended reduction signal.
+    """Return the local-parent or county-parent cohort reduction rate.
 
-    A pure breeding ED uses its own realised adult reduction rate. A pure
-    receiver/rearing/finishing ED uses the reduction rate of origin adults in
-    its county. A mixed ED blends the two rates according to the baseline share
-    of that cohort that can be supported by local adults versus the share that
-    is inferred to depend on cattle coming from elsewhere in the county.
-
-    No fixed 30%, 50% or other spillover factor is imposed. The dependency share
-    is inferred from the selected baseline cohort/adult relationship itself.
+    An ED with parent adults uses its own realised adult reduction rate.  An ED
+    with the cohort but no parent adults uses the realised reduction rate of the
+    relevant adults in its county.  A national rate is used only when the county
+    has none of the relevant parent adults.
     """
 
     base_adults = np.asarray(base_adults, dtype=np.int64)
@@ -176,11 +176,9 @@ def _reduction_signal(
     if (adult_reductions > base_adults).any():
         raise AssertionError("adult reduction exceeds adult baseline")
     if pd.isna(counties).any():
-        raise ValueError("county is required for receiver/rearing cohort propagation")
+        raise ValueError("county is required for receiver/orphan cohort propagation")
 
-    parts = _dependency_components(base_adults, cohort_base, counties)
-    local_share = np.asarray(parts["local_share"], dtype=float)
-    receiver_share = np.asarray(parts["receiver_share"], dtype=float)
+    parts = _relationship_components(base_adults, cohort_base, counties)
     county_base = np.asarray(parts["county_adults"], dtype=float)
     source = np.asarray(parts["source"], dtype=object)
 
@@ -212,30 +210,26 @@ def _reduction_signal(
     national_base = int(base_adults.sum())
     national_reduction = int(adult_reductions.sum())
     national_rate = national_reduction / national_base if national_base > 0 else 0.0
-    receiver_rate = np.where(county_base > 0, county_rate, national_rate)
 
-    signal = local_share * local_rate + receiver_share * receiver_rate
-    signal = np.where(cohort_base > 0, signal, 0.0)
+    signal = np.zeros(n, dtype=float)
+    local = source == "LOCAL_ED"
+    receiver = source == "COUNTY_RECEIVER"
+    orphan = source == "NATIONAL_ORPHAN"
+    signal[local] = local_rate[local]
+    signal[receiver] = county_rate[receiver]
+    signal[orphan] = national_rate
     return np.clip(signal, 0.0, 1.0), source
 
 
-def _cohort_origin(cohort: str) -> str:
-    if cohort in DXD_COHORTS or cohort in DXB_COHORTS:
-        return "DAIRY"
-    if cohort in BXB_COHORTS:
-        return "SUCKLER"
-    if cohort == "bulls":
-        return "ADULT_COWS"
-    raise ValueError(f"cannot identify adult origin for cohort {cohort}")
-
-
 def build_ed_cohort_dependency_profile(baseline: pd.DataFrame) -> pd.DataFrame:
-    """Return a publication/audit table of ED adult-to-cohort dependence.
+    """Record each ED's adult-to-cohort relationship before scenarios.
 
-    The output is long-form: one row per ED and follower cohort. It is designed
-    to make the spatial herd structure visible before any scenario is applied.
-    ``COUNTY_DEPENDENCY_SHARE`` is an inferred dependence proxy, not observed
-    animal movement data.
+    The output is long-form, one row per ED and follower cohort.  For a normal
+    breeding ED, ``ED_COHORT_PER_ADULT_RATIO`` is the observed baseline cohort
+    divided by the relevant parent adults in that ED.  For an orphan/receiver ED
+    with no parent adults, ``ORPHAN_COHORT_PER_COUNTY_ADULT_RATIO`` records its
+    cohort relative to the relevant adult pool elsewhere in the county.  These
+    are accounting relationships, not observed animal movement records.
     """
 
     required = {"CSOED", "County", "DAIRY_COW", "OTHER_COW", *FINAL_21_COHORTS}
@@ -268,7 +262,7 @@ def build_ed_cohort_dependency_profile(baseline: pd.DataFrame) -> pd.DataFrame:
         else:
             origin_adults = adults
 
-        parts = _dependency_components(origin_adults, cohort_base, counties)
+        parts = _relationship_components(origin_adults, cohort_base, counties)
         block = pd.DataFrame(
             {
                 "CSOED": frame["CSOED"].astype(str),
@@ -277,21 +271,15 @@ def build_ed_cohort_dependency_profile(baseline: pd.DataFrame) -> pd.DataFrame:
                 "ADULT_ORIGIN": origin,
                 "BASE_ORIGIN_ADULTS": origin_adults,
                 "BASE_COHORT_HEAD": cohort_base,
-                "COHORT_PER_ADULT_COEFFICIENT": float(parts["coefficient"]),
-                "LOCALLY_SUPPORTED_HEAD_EQUIV": np.asarray(
-                    parts["local_supported"], dtype=float
-                ),
-                "COUNTY_DEPENDENT_HEAD_EQUIV": np.asarray(
-                    parts["receiver_dependent"], dtype=float
-                ),
-                "LOCAL_SUPPORT_SHARE": np.asarray(parts["local_share"], dtype=float),
-                "COUNTY_DEPENDENCY_SHARE": np.asarray(
-                    parts["receiver_share"], dtype=float
-                ),
-                "COUNTY_ORIGIN_ADULT_TOTAL": np.asarray(
-                    parts["county_adults"], dtype=float
-                ),
+                "ED_COHORT_PER_ADULT_RATIO": np.asarray(parts["ed_ratio"], dtype=float),
+                "COUNTY_ORIGIN_ADULT_TOTAL": np.asarray(parts["county_adults"], dtype=float),
                 "COUNTY_COHORT_TOTAL": np.asarray(parts["county_cohort"], dtype=float),
+                "ORPHAN_COHORT_PER_COUNTY_ADULT_RATIO": np.asarray(
+                    parts["orphan_ratio_to_county_adults"], dtype=float
+                ),
+                "ORPHAN_SHARE_OF_COUNTY_COHORT": np.asarray(
+                    parts["orphan_share_of_county_cohort"], dtype=float
+                ),
                 "COHORT_SPATIAL_ROLE": np.asarray(parts["source"], dtype=object),
             }
         )
@@ -306,16 +294,12 @@ def allocate_cattle_cohort_response(
     adult_scenario: pd.DataFrame,
     national_cohort_targets: Mapping[str, int],
 ) -> pd.DataFrame:
-    """Subtract GOBLIN/COHORTS cohort reductions from the ED cohort baseline.
+    """Subtract the required national cohort reduction across existing ED stock.
 
-    This function represents one milestone/endpoint. Adult reductions and
-    follower reductions belong to the same herd state. Breeding EDs are linked
-    directly through their own adult reduction rate. Mixed and receiver/rearing
-    EDs also inherit the relevant same-county breeding signal before any national
-    orphan fallback is allowed.
-
-    ``national_cohort_targets`` remains authoritative for national biology. ED
-    and county relationships determine spatial incidence only.
+    GOBLIN/COHORTS supplies the national target for each of the 21 cattle
+    cohorts.  GOBLIN-Spatial allocates the implied reduction using the simple
+    ripple rule: local parent reduction first, same-county parent reduction for
+    receiver/orphan EDs, national fallback only for true county orphans.
     """
 
     out = adult_scenario.copy()
@@ -402,6 +386,8 @@ def allocate_cattle_cohort_response(
         else:
             signal, source = _reduction_signal(base_adults, red_adults, base, counties)
 
+        # base * signal is exactly the simple adult-to-cohort ripple before the
+        # integer closure needed to hit the authoritative national cohort target.
         cut_weights = base.astype(float) * (signal + 1e-12)
         reductions = _bounded_integer_allocate(cut_weights, base, reduction_total)
         scenario_values = base - reductions
