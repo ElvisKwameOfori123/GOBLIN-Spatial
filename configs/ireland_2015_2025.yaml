@@ -43,8 +43,15 @@ files:
   # LPIS / SPATIAL OPPORTUNITY CONTEXT
   # Large parcel GeoParquets remain external. The one-off overlay produces the
   # compact two-snapshot ED control used by normal opportunity runs.
+  # IMPORTANT VERSION PIN (2026-08-13):
+  #   2020 = corrected Zenodo v2 record 21922002
+  #          LPIS_2020_GOBLIN_reduced_v2.parquet
+  #   2025 = unchanged validated Zenodo v1 record 21918924
+  #          LPIS_2025_GOBLIN_reduced.parquet
+  # Zenodo v2 currently contains the corrected 2020 derivative/support files
+  # but not the unchanged 2025 parquet, so this split-version pin is deliberate.
   saps_ed_geography: data/external/spatial/ed/Electoral_Divisions_generalised_SAPS_Shp_with_proper_names.shp
-  lpis_2020_parcels: data/external/spatial/lpis/LPIS_2020_GOBLIN_reduced.parquet
+  lpis_2020_parcels: data/external/spatial/lpis/LPIS_2020_GOBLIN_reduced_v2.parquet
   lpis_2025_parcels: data/external/spatial/lpis/LPIS_2025_GOBLIN_reduced.parquet
   lpis_ed_profile: data/controls/lpis/ED_LPIS_opportunity_2020_2025.csv.xz
 
