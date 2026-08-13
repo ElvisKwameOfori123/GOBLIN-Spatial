@@ -1,10 +1,20 @@
-"""Memory-bounded GeoParquet reader for the LPIS-to-ED bridge."""
+"""Memory-bounded GeoParquet reader for the LPIS-to-ED bridge.
+
+The published Zenodo-v1 2020 reduced file predates the final commonage-share
+fields. Claimed area is still the valid primary agricultural accounting value.
+When a 2020 commonage row has no recoverable ownership fraction, this reader
+keeps the claimed/commonage information but suppresses share-adjusted eligible,
+digitised and reference diagnostics for that row rather than inventing a share.
+The resulting snapshot is explicitly flagged as incomplete for adjusted-area
+QA. The validated 2025 snapshot remains strict.
+"""
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
 import geopandas as gpd
+import numpy as np
 import pandas as pd
 import pyarrow.parquet as pq
 import shapely
@@ -36,6 +46,110 @@ def _batch_to_gdf(batch, geometry_column: str, crs: str) -> gpd.GeoDataFrame:
     return gpd.GeoDataFrame(frame, geometry=geometry, crs=crs)
 
 
+def _first_column(frame: pd.DataFrame, aliases: tuple[str, ...]) -> str | None:
+    lookup = {str(column).lower(): column for column in frame.columns}
+    for alias in aliases:
+        found = lookup.get(alias.lower())
+        if found is not None:
+            return found
+    return None
+
+
+def _bool_values(values: pd.Series) -> pd.Series:
+    if pd.api.types.is_bool_dtype(values):
+        return values.fillna(False).astype(bool)
+    if pd.api.types.is_numeric_dtype(values):
+        return pd.to_numeric(values, errors="coerce").fillna(0).ne(0)
+    text = values.astype("string").str.strip().str.upper()
+    return text.isin({"Y", "YES", "TRUE", "T", "1"}).fillna(False)
+
+
+def _prepare_legacy_commonage(
+    frame: gpd.GeoDataFrame,
+    *,
+    year: int,
+) -> tuple[gpd.GeoDataFrame, int]:
+    """Recover commonage fractions where possible and flag 2020-v1 gaps."""
+
+    out = frame.copy()
+    common_col = _first_column(out, ("IS_COMMONAGE", "COM_IND", "commonage_ind"))
+    fraction_col = _first_column(
+        out, ("COMMONAGE_FRACTION", "COMMONAGE_SHARE", "COM_SHARE")
+    )
+    numerator_col = _first_column(
+        out,
+        (
+            "COMMONAGE_NUMERATOR",
+            "COMMONAGE_NUM",
+            "COM_NUMERATOR",
+            "COM_NUM",
+            "commonage_num",
+        ),
+    )
+    denominator_col = _first_column(
+        out,
+        (
+            "COMMONAGE_DENOMINATOR",
+            "COMMONAGE_DEN",
+            "COM_DENOMINATOR",
+            "COM_DEN",
+            "commonage_den",
+        ),
+    )
+
+    if common_col is not None:
+        commonage = _bool_values(out[common_col])
+    elif numerator_col is not None and denominator_col is not None:
+        numerator = pd.to_numeric(out[numerator_col], errors="coerce")
+        denominator = pd.to_numeric(out[denominator_col], errors="coerce")
+        commonage = numerator.notna() & denominator.gt(0)
+    else:
+        commonage = pd.Series(False, index=out.index, dtype=bool)
+
+    if fraction_col is not None:
+        fraction = pd.to_numeric(out[fraction_col], errors="coerce").astype(float)
+    else:
+        fraction = pd.Series(np.nan, index=out.index, dtype=float)
+
+    if numerator_col is not None and denominator_col is not None:
+        numerator = pd.to_numeric(out[numerator_col], errors="coerce").astype(float)
+        denominator = pd.to_numeric(out[denominator_col], errors="coerce").astype(float)
+        derive = commonage & fraction.isna() & denominator.gt(0)
+        fraction.loc[derive] = numerator.loc[derive] / denominator.loc[derive]
+
+    unknown = commonage & (
+        fraction.isna()
+        | ~np.isfinite(fraction)
+        | fraction.le(0.0)
+        | fraction.gt(1.0 + 1e-12)
+    )
+    missing = int(unknown.sum())
+
+    if missing == 0:
+        if fraction_col is None and commonage.any():
+            out["COMMONAGE_FRACTION"] = fraction
+        return out, 0
+
+    if int(year) != 2020:
+        # Never relax the validated 2025 commonage contract.
+        return out, missing
+
+    # Technical sentinel only: adjusted-area diagnostics for these rows are set
+    # to zero/unavailable below, so 1.0 is never interpreted as ownership.
+    fraction.loc[unknown] = 1.0
+    out["COMMONAGE_FRACTION"] = fraction
+
+    for column in ("SHARE_DIGITISED_HA", "SHARE_ELIGIBLE_HA"):
+        if column not in out.columns:
+            out[column] = np.nan
+        out.loc[unknown, column] = 0.0
+    if "SHARE_REFERENCE_HA" not in out.columns:
+        out["SHARE_REFERENCE_HA"] = np.nan
+    out.loc[unknown, "SHARE_REFERENCE_HA"] = np.nan
+
+    return out, missing
+
+
 def build_ed_lpis_profile_from_parquet(
     path: str | Path,
     ed_gdf: gpd.GeoDataFrame,
@@ -56,6 +170,7 @@ def build_ed_lpis_profile_from_parquet(
     geometry_column = _geometry_column(parquet)
     partials: list[pd.DataFrame] = []
     rows_seen = 0
+    missing_commonage_total = 0
     numeric_columns = [
         *LPIS_PROFILE_AREA_COLUMNS,
         "LPIS_INTERSECTION_GEOMETRY_HA",
@@ -63,9 +178,19 @@ def build_ed_lpis_profile_from_parquet(
         "LPIS_GRASS_SOURCE_RECORDS_INTERSECTING_ED",
     ]
 
+    print(f"LPIS {year} GeoParquet columns: {', '.join(parquet.schema_arrow.names)}")
+
     for number, batch in enumerate(parquet.iter_batches(batch_size=batch_size), start=1):
         gdf = _batch_to_gdf(batch, geometry_column, source_crs)
         rows_seen += len(gdf)
+        gdf, missing_commonage = _prepare_legacy_commonage(gdf, year=int(year))
+        missing_commonage_total += missing_commonage
+        if missing_commonage and int(year) != 2020:
+            raise ValueError(
+                f"LPIS {year} has {missing_commonage:,} commonage rows in batch {number} "
+                "without a usable ownership fraction"
+            )
+
         profile = build_ed_lpis_profile(
             gdf,
             ed_gdf,
@@ -75,7 +200,10 @@ def build_ed_lpis_profile_from_parquet(
         )
         keep = [column for column in numeric_columns if column in profile.columns]
         partials.append(profile[["CSOED_CANONICAL", *keep]])
-        print(f"LPIS {year} batch {number}: {rows_seen:,} source rows processed")
+        print(
+            f"LPIS {year} batch {number}: {rows_seen:,} source rows processed; "
+            f"legacy missing commonage fractions={missing_commonage_total:,}"
+        )
 
     if not partials:
         raise ValueError(f"LPIS {year} contains no readable records")
@@ -92,5 +220,20 @@ def build_ed_lpis_profile_from_parquet(
         if column != "CSOED_CANONICAL":
             result[column] = pd.to_numeric(result[column], errors="coerce").fillna(0.0)
     result.insert(0, "LPIS_YEAR", int(year))
-    result["LPIS_PROFILE_VERSION"] = "2.0"
+    result["LPIS_PROFILE_VERSION"] = "2.1"
+    result["LPIS_SNAPSHOT_COMMONAGE_FRACTION_MISSING_RECORDS"] = missing_commonage_total
+    result["LPIS_SNAPSHOT_ADJUSTED_AREA_COMPLETE"] = missing_commonage_total == 0
+    result["LPIS_SNAPSHOT_ADJUSTED_AREA_STATUS"] = np.where(
+        missing_commonage_total == 0,
+        "COMPLETE",
+        "CLAIMED_AREA_VALID_ADJUSTED_AREA_INCOMPLETE",
+    )
+
+    if missing_commonage_total:
+        print(
+            f"WARNING: LPIS {year} contains {missing_commonage_total:,} commonage records "
+            "whose ownership fraction is absent from the published reduced file. "
+            "Claimed-area composition remains usable; share-adjusted eligible/digitised "
+            "diagnostics are incomplete and are explicitly flagged."
+        )
     return result
