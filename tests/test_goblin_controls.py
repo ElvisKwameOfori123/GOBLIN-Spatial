@@ -16,8 +16,13 @@ ROOT = Path(__file__).resolve().parents[1]
 STYLES_ENDPOINTS = ROOT / "configs/styles_split_gas_adult_endpoints.csv"
 
 
-def _cohort_targets(total_each: int = 1) -> dict[str, int]:
-    return {cohort: total_each for cohort in FINAL_21_COHORTS}
+def _cohort_targets(total_each: int = 1, *, dairy: int | None = None, suckler: int | None = None) -> dict[str, int]:
+    out = {cohort: total_each for cohort in FINAL_21_COHORTS}
+    if dairy is not None:
+        out["dairy_cows"] = dairy
+    if suckler is not None:
+        out["suckler_cows"] = suckler
+    return out
 
 
 def test_pathway_controls_preserve_explicit_quantities() -> None:
@@ -43,8 +48,8 @@ def test_pathway_controls_preserve_explicit_quantities() -> None:
     assert controls.milestone(2050).available_land_residual_ha == 400_000.0
 
 
-def test_complete_cohort_controls_must_close_to_total_cattle() -> None:
-    cohorts = _cohort_targets(10)
+def test_complete_cohort_controls_must_close_to_adults_and_total_cattle() -> None:
+    cohorts = _cohort_targets(10, dairy=20, suckler=20)
     total = sum(cohorts.values())
     milestone = GoblinNationalMilestone(
         year=2050,
@@ -68,6 +73,16 @@ def test_complete_cohort_controls_must_close_to_total_cattle() -> None:
             suckler_cows=20,
             total_cattle=total + 1,
             cattle_cohorts=cohorts,
+        )
+
+    bad_adults = dict(cohorts)
+    bad_adults["dairy_cows"] = 19
+    with pytest.raises(ValueError, match="dairy_cows"):
+        GoblinNationalMilestone(
+            year=2050,
+            dairy_cows=20,
+            suckler_cows=20,
+            cattle_cohorts=bad_adults,
         )
 
 
@@ -146,11 +161,26 @@ def test_same_endpoint_has_different_remaining_reduction_from_2020_and_2025() ->
     assert later["dairy_reduction_n"] == 100_000
     assert earlier["suckler_reduction_n"] == 640_000
     assert later["suckler_reduction_n"] == 540_000
+    assert earlier["adult_reduction_n"] == 840_000
+    assert later["adult_reduction_n"] == 640_000
 
 
-def test_endpoint_above_selected_baseline_is_not_a_reduction_scenario() -> None:
+def test_category_expansion_is_allowed_inside_overall_adult_contraction() -> None:
     milestone = GoblinNationalMilestone(year=2050, dairy_cows=160, suckler_cows=16)
-    with pytest.raises(ValueError, match="reduction-only"):
+    result = milestone.adult_reductions_from_baseline(
+        baseline_dairy_cows=150,
+        baseline_suckler_cows=50,
+    )
+    assert result["change_dairy_cows"] == 10
+    assert result["dairy_reduction_n"] == 0
+    assert result["change_suckler_cows"] == -34
+    assert result["suckler_reduction_n"] == 34
+    assert result["adult_reduction_n"] == 24
+
+
+def test_overall_adult_expansion_is_rejected() -> None:
+    milestone = GoblinNationalMilestone(year=2050, dairy_cows=180, suckler_cows=30)
+    with pytest.raises(ValueError, match="overall adult-cow contraction"):
         milestone.adult_reductions_from_baseline(
             baseline_dairy_cows=150,
             baseline_suckler_cows=50,
