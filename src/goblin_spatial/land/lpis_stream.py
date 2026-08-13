@@ -9,8 +9,11 @@ diagnostics are flagged incomplete rather than inventing an ownership share.
 
 The two published derivatives use a few different semantic flag names. Those
 source names are harmonised here before the shared LPIS normaliser is called so
-the compact ED control preserves permanent-grass and forestry context in both
-snapshots without modifying the frozen source files.
+the compact ED control preserves forestry context in both snapshots without
+modifying the frozen source files. Grass subtypes are left to the shared
+normaliser because the corrected 2020 ``IS_PERMANENT_GRASS`` flag is broader
+than the mutually exclusive core permanent-pasture category and overlaps the
+low-input grass class.
 """
 from __future__ import annotations
 
@@ -29,8 +32,7 @@ from .lpis_spatial import build_ed_lpis_profile
 
 
 _PUBLISHED_SEMANTIC_ALIASES = {
-    # Corrected 2020-v2 source names.
-    "IS_PERMANENT_GRASS": "IS_PERMANENT_PASTURE",
+    # Corrected 2020-v2 source name.
     "IS_FORESTRY_CONTEXT": "IS_FORESTRY_EXISTING",
     # Validated 2025-v1 source names.
     "IS_FORESTRY_ELIGIBLE_2025": "IS_FORESTRY_ELIGIBLE_SOURCE",
@@ -41,10 +43,11 @@ _PUBLISHED_SEMANTIC_ALIASES = {
 def _harmonise_published_semantic_aliases(
     frame: gpd.GeoDataFrame,
 ) -> gpd.GeoDataFrame:
-    """Map published snapshot-specific flag names to the shared LPIS contract.
+    """Map snapshot-specific published flags to the shared LPIS contract.
 
-    Existing canonical columns always win. This makes the mapping safe for
-    future derivatives that already expose the shared names directly.
+    Existing canonical columns always win. Grassland subtype aliases are not
+    copied here: the shared normaliser derives the disjoint subtype classes from
+    ``LAND_USE_GROUP`` (or its crop-description fallback).
     """
 
     out = frame.copy()
