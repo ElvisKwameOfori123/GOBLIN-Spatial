@@ -11,6 +11,14 @@ CONFIG = ROOT / "configs/ireland_2015_2025.yaml"
 ENDPOINTS = ROOT / "configs/styles_split_gas_adult_endpoints.csv"
 
 
+@pytest.fixture(scope="module")
+def full_master():
+    config = load_config(CONFIG)
+    if not config.files["cso_ed_2020"].exists():
+        pytest.skip("external full-data input not present")
+    return build(config)
+
+
 @pytest.mark.full_data
 @pytest.mark.parametrize("baseline_year", [2020, 2025])
 @pytest.mark.parametrize(
@@ -18,15 +26,13 @@ ENDPOINTS = ROOT / "configs/styles_split_gas_adult_endpoints.csv"
     [("SI_SG", 1_600_000, 160_000), ("BE_SG", 1_540_000, 154_000)],
 )
 def test_styles_endpoint_closure(
+    full_master,
     baseline_year: int,
     scenario_id: str,
     target_dairy: int,
     target_suckler: int,
 ) -> None:
-    config = load_config(CONFIG)
-    if not config.files["cso_ed_2020"].exists():
-        pytest.skip("external full-data input not present")
-    master = build(config)
+    master = full_master
     baseline = master.loc[master["YEAR"].eq(baseline_year)]
 
     assert int(baseline["DAIRY_COW"].sum()) >= target_dairy
