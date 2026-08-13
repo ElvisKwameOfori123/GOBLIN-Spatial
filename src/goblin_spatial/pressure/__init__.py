@@ -1,5 +1,10 @@
 """Livestock-pressure and grassland-release accounting."""
 
+from goblin_spatial.pressure.controls import (
+    EXPECTED_PASTURE_COHORTS,
+    fixed_parameter_year,
+    load_pasture_dm_control,
+)
 from goblin_spatial.pressure.goblin_adapter import (
     canonical_goblin_spatial_cohort,
     pasture_dm_profile_from_goblin_animals,
@@ -12,4 +17,7 @@ __all__ = [
     "canonical_goblin_spatial_cohort",
     "pasture_dm_profile_from_goblin_animals",
     "pasture_dm_profiles_from_goblin_frames",
+    "EXPECTED_PASTURE_COHORTS",
+    "load_pasture_dm_control",
+    "fixed_parameter_year",
 ]
