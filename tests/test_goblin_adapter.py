@@ -50,6 +50,78 @@ def _upstream_31_rows():
     return rows
 
 
+def _upstream_reference_scenario_dataframe() -> pd.DataFrame:
+    """Return the public livestock_generation reference fixture.
+
+    The values are copied from the upstream package's ``tests/animal_data_test.py``
+    fixture.  They are used only to exercise the public AnimalData -> cattle_lca /
+    sheep_lca feed path and derive an auditable per-head pasture-DM profile; they
+    are not GOBLIN-Spatial livestock-population assumptions.
+    """
+
+    columns = [
+        "Scenarios",
+        "Cattle systems",
+        "Manure management",
+        "Dairy pop",
+        "Beef pop",
+        "Dairy prod",
+        "Beef prod",
+        "mm_storage",
+        "Cattle EF",
+        "AD prod",
+        "Forest area",
+        "Conifer proportion",
+        "Conifer harvest",
+        "Conifer thinned",
+        "Broadleaf harvest",
+        "Bioenergy area",
+        "Crop area",
+        "Wetland area",
+        "Land rewetting",
+        "Grass management",
+        "Upland sheep pop",
+        "Upland sheep prod",
+        "Lowland sheep pop",
+        "Lowland sheep prod",
+        "Dairy Pasture fertilisation",
+        "Beef Pasture fertilisation",
+        "Broadleaf proportion",
+        "Afforest Year",
+    ]
+    common = [
+        0.0879077282507005,
+        0.500607270596862,
+        0,
+        0,
+        0,
+        0.801458098547012,
+        0.36840211684271,
+        0.0555663357895664,
+        0.126070113756632,
+        0,
+        0,
+        0.0784928061838073,
+        0.120049095269181,
+        0,
+        0.0879200186051467,
+    ]
+    tail = [136.870524806694, 105.00171069052, 0.591628596827221, 2080]
+    data = [
+        [0, "Dairy", "tank solid", 0, 0, *common[:2], *common[2:], 0, 0, 0, 0, *tail],
+        [0, "Dairy", "tank liquid", 172390.09063152, 0, 0.8, 0.500607270596862, *common[2:], 0, 0, 0, 0, *tail],
+        [0, "Beef", "tank solid", 0, 0, *common[:2], *common[2:], 0, 0, 0, 0, *tail],
+        [0, "Beef", "tank liquid", 0, 27807.487070967, *common[:2], *common[2:], 0, 0, 0, 0, *tail],
+        [0, "Lowland sheep", "tank liquid", 0, 0, *common[:2], *common[2:], 0, 0, 37812, 0, *tail],
+        [0, "Upland sheep", "tank liquid", 0, 0, *common[:2], *common[2:], 9453, 0, 0, 0, *tail],
+    ]
+    # The explicit shape assertion protects us from silently shifting fixture
+    # values relative to the upstream 28-column scenario contract.
+    if any(len(row) != len(columns) for row in data):
+        raise AssertionError("upstream reference fixture shape changed")
+    return pd.DataFrame(data, columns=columns)
+
+
 def test_public_goblin_cohort_contract_matches_spatial_31():
     profile = pasture_dm_profile_from_goblin_animals(
         pd.DataFrame(_upstream_31_rows()),
@@ -106,3 +178,34 @@ def test_zero_population_row_still_defines_future_per_head_control():
         sheep_feed=_FakeFeed(),
     )
     assert profile["bulls"] == pytest.approx(4.0 * 365.0e-3)
+
+
+def test_real_upstream_goblin_2020_pasture_profile_contract():
+    """Exercise the real public GOBLIN animal/feed stack, not injected fakes."""
+
+    pytest.importorskip("livestock_generation")
+    pytest.importorskip("cattle_lca")
+    pytest.importorskip("sheep_lca")
+    from livestock_generation.livestock import AnimalData
+
+    animal_class = AnimalData(
+        "ireland",
+        2020,
+        2050,
+        _upstream_reference_scenario_dataframe(),
+    )
+    animals = animal_class.create_baseline_animal_dataframe()
+    profile = pasture_dm_profile_from_goblin_animals(animals)
+
+    expected = set(FINAL_21_COHORTS) | set(GOBLIN_SHEEP_10)
+    assert set(profile) == expected
+    assert len(profile) == 31
+    assert all(value >= 0 for value in profile.values())
+    assert profile["dairy_cows"] > 0
+    assert profile["suckler_cows"] > 0
+    assert profile["Lowland ewes"] > 0
+    assert profile["Upland ewes"] > 0
+
+    print("\nUPSTREAM_GOBLIN_PASTURE_DM_2020_T_PER_HEAD_YEAR")
+    for cohort in [*FINAL_21_COHORTS, *GOBLIN_SHEEP_10]:
+        print(f"{cohort},{profile[cohort]:.12f}")
