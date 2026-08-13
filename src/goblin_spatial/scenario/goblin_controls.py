@@ -14,15 +14,10 @@ No missing national quantities are invented here. National livestock-land
 release, future land-use targets and residual available land are carried as
 separate fields because they have different accounting meanings.
 
-For the principal reduction study, adult GOBLIN values are absolute endpoints.
-The remaining adjustment is always calculated from the selected spatial
-baseline:
-
-    reduction = selected baseline national stock - GOBLIN endpoint
-
-Therefore 2020 and 2025 runs can share the same pathway endpoint while carrying
-different remaining reductions. The principal allocator never rebuilds a future
-ED herd from zero.
+For the principal study, adult GOBLIN values are absolute endpoints. Category
+changes may have different signs, as in SI_SG where dairy can rise while
+sucklers fall sharply. The principal reduction condition applies to total adult
+cows, not independently to each adult category.
 """
 
 from __future__ import annotations
@@ -51,22 +46,6 @@ def _as_non_negative_float(label: str, value: float) -> float:
     if number < 0.0:
         raise ValueError(f"{label} must be non-negative")
     return number
-
-
-def _reduction_from_endpoint(label: str, baseline: int, endpoint: int) -> tuple[int, float]:
-    """Return absolute and fractional reduction for a reduction-only pathway."""
-
-    baseline = _as_non_negative_int(f"baseline_{label}", baseline)
-    endpoint = _as_non_negative_int(f"endpoint_{label}", endpoint)
-    if endpoint > baseline:
-        raise ValueError(
-            f"{label} endpoint ({endpoint}) exceeds selected baseline ({baseline}); "
-            "the principal GOBLIN-Spatial study is reduction-only and does not "
-            "seed or expand livestock to reach an endpoint"
-        )
-    reduction = baseline - endpoint
-    fraction = 0.0 if baseline == 0 else reduction / baseline
-    return reduction, float(fraction)
 
 
 @dataclass(frozen=True)
@@ -129,6 +108,10 @@ class GoblinNationalMilestone:
                 )
                 for cohort in FINAL_21_COHORTS
             }
+            if validated["dairy_cows"] != dairy:
+                raise ValueError("cattle_cohorts[dairy_cows] must equal dairy_cows")
+            if validated["suckler_cows"] != suckler:
+                raise ValueError("cattle_cohorts[suckler_cows] must equal suckler_cows")
             if total is not None and sum(validated.values()) != total:
                 raise ValueError(
                     "sum(cattle_cohorts) must equal total_cattle when both are supplied"
@@ -173,40 +156,53 @@ class GoblinNationalMilestone:
         baseline_dairy_cows: int,
         baseline_suckler_cows: int,
     ) -> dict[str, int | float]:
-        """Calculate the remaining adult adjustment from one selected baseline.
+        """Describe signed category change and the remaining overall adult contraction.
 
-        The milestone stores the destination. This method calculates the distance
-        from the chosen 2020 or 2025 national baseline to that destination. It
-        intentionally rejects expansion because the principal spatial experiment
-        allocates reductions across livestock already present at baseline.
+        Dairy and suckler categories may move in opposite directions. The
+        principal transition requires only that the combined adult-cow endpoint
+        does not exceed the selected baseline total.
         """
 
-        dairy_n, dairy_fraction = _reduction_from_endpoint(
-            "dairy_cows", baseline_dairy_cows, self.dairy_cows
-        )
-        suckler_n, suckler_fraction = _reduction_from_endpoint(
-            "suckler_cows", baseline_suckler_cows, self.suckler_cows
-        )
+        bd = _as_non_negative_int("baseline_dairy_cows", baseline_dairy_cows)
+        bs = _as_non_negative_int("baseline_suckler_cows", baseline_suckler_cows)
+        td = int(self.dairy_cows)
+        ts = int(self.suckler_cows)
+        base_adults = bd + bs
+        target_adults = td + ts
+        if target_adults > base_adults:
+            raise ValueError(
+                "principal pathway requires an overall adult-cow contraction; "
+                f"baseline={base_adults}, endpoint={target_adults}"
+            )
+
+        change_dairy = td - bd
+        change_suckler = ts - bs
+        dairy_reduction = max(0, -change_dairy)
+        suckler_reduction = max(0, -change_suckler)
+        adult_reduction = base_adults - target_adults
+
         return {
-            "baseline_dairy_cows": int(baseline_dairy_cows),
-            "target_dairy_cows": int(self.dairy_cows),
-            "dairy_reduction_n": int(dairy_n),
-            "dairy_reduction_fraction": float(dairy_fraction),
-            "baseline_suckler_cows": int(baseline_suckler_cows),
-            "target_suckler_cows": int(self.suckler_cows),
-            "suckler_reduction_n": int(suckler_n),
-            "suckler_reduction_fraction": float(suckler_fraction),
+            "baseline_dairy_cows": bd,
+            "target_dairy_cows": td,
+            "change_dairy_cows": change_dairy,
+            "dairy_reduction_n": dairy_reduction,
+            "dairy_reduction_fraction": 0.0 if bd == 0 else dairy_reduction / bd,
+            "baseline_suckler_cows": bs,
+            "target_suckler_cows": ts,
+            "change_suckler_cows": change_suckler,
+            "suckler_reduction_n": suckler_reduction,
+            "suckler_reduction_fraction": 0.0 if bs == 0 else suckler_reduction / bs,
+            "baseline_adult_cows": base_adults,
+            "target_adult_cows": target_adults,
+            "change_adult_cows": target_adults - base_adults,
+            "adult_reduction_n": adult_reduction,
+            "adult_reduction_fraction": 0.0 if base_adults == 0 else adult_reduction / base_adults,
         }
 
 
 @dataclass(frozen=True)
 class GoblinPathwayControls:
-    """National controls for one internally consistent pathway identifier.
-
-    The class does not hard-code SI_SG or BE_SG so the package remains reusable.
-    The principal study can use those exact identifiers and must keep livestock,
-    land-release and land-use controls from the same scenario package.
-    """
+    """National controls for one internally consistent pathway identifier."""
 
     scenario_id: str
     baseline_year: int
@@ -254,7 +250,7 @@ class GoblinPathwayControls:
         baseline_suckler_cows: int,
         year: int | None = None,
     ) -> dict[str, int | float]:
-        """Return baseline-minus-endpoint reductions for one pathway milestone."""
+        """Return signed category changes and overall adult contraction."""
 
         milestone = self.milestone(self.target_year if year is None else year)
         return milestone.adult_reductions_from_baseline(
