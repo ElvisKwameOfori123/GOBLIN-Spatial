@@ -27,8 +27,10 @@ ED herd from zero.
 
 from __future__ import annotations
 
+import csv
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from pathlib import Path
 from types import MappingProxyType
 
 from goblin_spatial.cattle.cohorts import FINAL_21_COHORTS
@@ -286,3 +288,62 @@ class GoblinPathwayControls:
             for milestone in self.milestones
             if milestone.livestock_land_release_ha is not None
         }
+
+
+def load_adult_endpoint_controls(
+    path: str | Path,
+    *,
+    scenario_id: str,
+    baseline_year: int,
+) -> GoblinPathwayControls:
+    """Load one source-controlled adult endpoint without inferring other controls.
+
+    Expected CSV fields are ``SCENARIO_ID``, ``TARGET_YEAR``, ``DAIRY_COWS`` and
+    ``SUCKLER_COWS``. ``DAIRY_SUCKLER_RATIO`` and ``SOURCE_NOTE`` are optional.
+    The loader intentionally leaves total cattle, land release and future land-use
+    targets unset unless they are supplied through a richer pathway contract.
+    """
+
+    path = Path(path)
+    with path.open("r", encoding="utf-8-sig", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+
+    requested = str(scenario_id).strip()
+    matches = [row for row in rows if str(row.get("SCENARIO_ID", "")).strip() == requested]
+    if len(matches) != 1:
+        raise ValueError(
+            f"expected exactly one endpoint row for {requested}; found {len(matches)}"
+        )
+    row = matches[0]
+
+    try:
+        target_year = int(row["TARGET_YEAR"])
+        dairy = int(row["DAIRY_COWS"])
+        suckler = int(row["SUCKLER_COWS"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("adult endpoint CSV contains invalid required fields") from exc
+
+    reported_ratio = str(row.get("DAIRY_SUCKLER_RATIO", "")).strip()
+    if reported_ratio:
+        ratio = float(reported_ratio)
+        if suckler == 0:
+            if dairy != 0:
+                raise ValueError("finite dairy:suckler ratio cannot be validated with zero suckler cows")
+        elif abs((dairy / suckler) - ratio) > 1e-9:
+            raise ValueError(
+                f"reported dairy:suckler ratio does not match endpoint counts for {requested}"
+            )
+
+    source_note = str(row.get("SOURCE_NOTE", "")).strip() or None
+    return GoblinPathwayControls(
+        scenario_id=requested,
+        baseline_year=int(baseline_year),
+        milestones=(
+            GoblinNationalMilestone(
+                year=target_year,
+                dairy_cows=dairy,
+                suckler_cows=suckler,
+            ),
+        ),
+        source_note=source_note,
+    )
