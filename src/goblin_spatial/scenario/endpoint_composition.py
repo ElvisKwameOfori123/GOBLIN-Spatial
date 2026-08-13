@@ -15,13 +15,7 @@ def reconcile_endpoint_composition(
     target_dairy: int,
     target_suckler: int,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Allocate exact adult targets subject to universal ED contraction.
-
-    ``preferred_retained`` carries the spatial signal from the selected
-    protection/allocation rule. Final category allocation may move away from
-    that preference where required to satisfy the national dairy:suckler
-    endpoint without introducing a category into an ED where it was absent.
-    """
+    """Allocate exact adult targets subject to universal ED contraction."""
 
     d = np.asarray(base_dairy, dtype=np.int64)
     s = np.asarray(base_suckler, dtype=np.int64)
@@ -38,7 +32,6 @@ def reconcile_endpoint_composition(
     dairy_only = (d > 0) & (s == 0)
     suckler_only = (d == 0) & (s > 0)
     mixed = (d > 0) & (s > 0)
-
     dairy_capacity = int(maximum[dairy_only].sum() + maximum[mixed].sum())
     suckler_capacity = int(maximum[suckler_only].sum() + maximum[mixed].sum())
     if target_dairy > dairy_capacity or target_suckler > suckler_capacity:
@@ -48,11 +41,13 @@ def reconcile_endpoint_composition(
         s.astype(float), adults.astype(float), out=np.zeros(len(adults)), where=adults > 0
     )
     preferred_s = preferred.astype(float) * base_share_s
-
     single_s_capacity = int(maximum[suckler_only].sum())
     mixed_capacity = int(maximum[mixed].sum())
     dairy_only_capacity = int(maximum[dairy_only].sum())
-    max_suckler_in_mixed = max(dairy_only_capacity + mixed_capacity - target_dairy, 0)
+    max_suckler_in_mixed = min(
+        mixed_capacity,
+        max(dairy_only_capacity + mixed_capacity - target_dairy, 0),
+    )
     min_suckler_single = max(target_suckler - max_suckler_in_mixed, 0)
     max_suckler_single = min(target_suckler, single_s_capacity)
     if min_suckler_single > max_suckler_single:
@@ -70,15 +65,11 @@ def reconcile_endpoint_composition(
     scenario_s = np.zeros(len(adults), dtype=np.int64)
     if suckler_only.any():
         scenario_s[suckler_only] = _bounded_integer_allocate(
-            np.maximum(preferred_s[suckler_only], 1e-12),
-            maximum[suckler_only],
-            suckler_single_target,
+            np.maximum(preferred_s[suckler_only], 1e-12), maximum[suckler_only], suckler_single_target
         )
     if mixed.any():
         scenario_s[mixed] = _bounded_integer_allocate(
-            np.maximum(preferred_s[mixed], 1e-12),
-            maximum[mixed],
-            suckler_mixed_target,
+            np.maximum(preferred_s[mixed], 1e-12), maximum[mixed], suckler_mixed_target
         )
 
     remaining = maximum - scenario_s
