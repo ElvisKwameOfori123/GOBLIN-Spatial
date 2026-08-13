@@ -153,9 +153,9 @@ jobs:
           commonage = pd.to_numeric(frame["LPIS_COMMONAGE_GRASS_HA"], errors="raise").to_numpy(float)
           assert (commonage <= claimed + 1e-8).all()
 
-          # The grassland subtype columns are a mutually exclusive accounting
-          # partition. This catches semantic alias errors that can pass row-count
-          # and commonage checks while double-counting a published subtype.
+          # These seven grassland subtype columns are a mutually exclusive
+          # claimed-grass partition. This catches semantic alias errors that can
+          # pass row-count and commonage checks while double-counting a subtype.
           grass_subtypes = [
               "LPIS_PERMANENT_PASTURE_HA",
               "LPIS_LOW_INPUT_GRASS_HA",
@@ -169,17 +169,26 @@ jobs:
           partition_error = (subtype_sum - pd.to_numeric(frame["LPIS_CLAIMED_GRASS_HA"], errors="raise")).abs()
           assert float(partition_error.max()) <= 1e-6, float(partition_error.max())
 
+          context_columns = [
+              "LPIS_FORESTRY_EXISTING_CONTEXT_HA",
+              "LPIS_FORESTRY_ELIGIBLE_CONTEXT_HA",
+          ]
           totals = {
               year: {
-                  column: float(pd.to_numeric(frame.loc[frame["LPIS_YEAR"].eq(year), column], errors="raise").sum())
-                  for column in [*grass_subtypes, "LPIS_FORESTRY_EXISTING_HA", "LPIS_FORESTRY_ELIGIBLE_SOURCE_HA"]
+                  column: float(
+                      pd.to_numeric(
+                          frame.loc[frame["LPIS_YEAR"].eq(year), column],
+                          errors="raise",
+                      ).sum()
+                  )
+                  for column in [*grass_subtypes, *context_columns]
               }
               for year in (2020, 2025)
           }
           assert 3_500_000 < totals[2020]["LPIS_PERMANENT_PASTURE_HA"] < 3_800_000, totals[2020]
           assert totals[2020]["LPIS_LOW_INPUT_GRASS_HA"] > 200_000, totals[2020]
-          assert totals[2020]["LPIS_FORESTRY_EXISTING_HA"] > 0, totals[2020]
-          assert totals[2025]["LPIS_FORESTRY_ELIGIBLE_SOURCE_HA"] > 0, totals[2025]
+          assert totals[2020]["LPIS_FORESTRY_EXISTING_CONTEXT_HA"] > 0, totals[2020]
+          assert totals[2025]["LPIS_FORESTRY_ELIGIBLE_CONTEXT_HA"] > 0, totals[2025]
 
           summary = {
               "rows": int(len(frame)),
