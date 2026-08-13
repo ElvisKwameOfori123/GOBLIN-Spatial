@@ -11,10 +11,11 @@ from goblin_spatial.config import load_config
 from goblin_spatial.data_fetch import fetch_data
 from goblin_spatial.land import LandUseAllocationDefinition
 from goblin_spatial.pipeline import build
+from goblin_spatial.pressure import load_pasture_dm_control
 from goblin_spatial.scenario import (
     build_and_run_cattle_study,
-    load_pasture_dm_profiles,
     make_cattle_scenario,
+    reduction_schedule,
     run_cattle_study,
 )
 
@@ -52,9 +53,10 @@ def _add_cattle_scenario_arguments(parser: argparse.ArgumentParser) -> None:
         "--pasture-dm-controls",
         default=None,
         help=(
-            "Optional CSV of authoritative GOBLIN YEAR/COHORT/"
-            "PASTURE_DM_T_PER_HEAD_YEAR controls. If omitted, the run stops "
-            "after the livestock/SO stage and does not report spared land."
+            "Optional CSV of GOBLIN pasture-DM controls. If omitted, the configured "
+            "frozen 2020 GOBLIN feed profile is used when available. A supplied file "
+            "may be either explicit YEAR x COHORT controls or one fixed PARAMETER_YEAR "
+            "profile reused at all requested years."
         ),
     )
     parser.add_argument(
@@ -158,7 +160,10 @@ def _output_dir(args: argparse.Namespace, cfg) -> Path:
     return cfg.processed_dir / "scenarios" / _scenario_name(args)
 
 
-def _land_use_definition(args: argparse.Namespace) -> LandUseAllocationDefinition | None:
+def _land_use_definition(
+    args: argparse.Namespace,
+    pasture_profiles,
+) -> LandUseAllocationDefinition | None:
     shares = {
         "forest": float(args.forest_share),
         "rewetting": float(args.rewetting_share),
@@ -169,18 +174,31 @@ def _land_use_definition(args: argparse.Namespace) -> LandUseAllocationDefinitio
     }
     if sum(shares.values()) <= 1e-12:
         return None
-    if args.pasture_dm_controls is None:
+    if pasture_profiles is None:
         raise ValueError(
-            "alternative-land shares require --pasture-dm-controls because land "
+            "alternative-land shares require GOBLIN pasture-DM controls because land "
             "cannot be allocated before potential spared grassland is calculated"
         )
     return LandUseAllocationDefinition(**shares)
 
 
-def _pasture_profiles(args: argparse.Namespace):
-    if args.pasture_dm_controls is None:
+def _pasture_profiles(args: argparse.Namespace, cfg, definition):
+    control = (
+        Path(args.pasture_dm_controls)
+        if args.pasture_dm_controls is not None
+        else cfg.files.get("pasture_dm_controls")
+    )
+    if control is None:
         return None
-    return load_pasture_dm_profiles(Path(args.pasture_dm_controls))
+    if not Path(control).exists():
+        raise FileNotFoundError(f"pasture-DM control table not found: {control}")
+
+    schedule = reduction_schedule(definition)
+    years = {
+        int(definition.baseline_year),
+        *schedule["MILESTONE_YEAR"].astype(int).tolist(),
+    }
+    return load_pasture_dm_control(control, required_years=years)
 
 
 def _definition(args: argparse.Namespace):
@@ -221,8 +239,8 @@ def main() -> None:
     if args.command in {"scenario", "run-all"}:
         cfg = load_config(Path(args.config))
         definition = _definition(args)
-        profiles = _pasture_profiles(args)
-        land_use = _land_use_definition(args)
+        profiles = _pasture_profiles(args, cfg, definition)
+        land_use = _land_use_definition(args, profiles)
         output_dir = _output_dir(args, cfg)
 
         if args.command == "run-all":
@@ -262,8 +280,15 @@ def main() -> None:
         print(f"Scenario outputs: {run.output_dir}")
         if profiles is None:
             print(
-                "Grassland release not calculated: no authoritative GOBLIN pasture-DM control table supplied."
+                "Grassland release not calculated: no GOBLIN pasture-DM control table is configured."
             )
+        else:
+            parameter_year = cfg.files.get("pasture_dm_controls")
+            if args.pasture_dm_controls is None and parameter_year is not None:
+                print(
+                    "Grassland release uses the configured fixed-2020 GOBLIN per-head "
+                    "feed profile unless year-specific controls were supplied."
+                )
         return
 
 
