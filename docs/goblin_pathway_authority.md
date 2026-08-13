@@ -39,6 +39,12 @@ The two quantities therefore have different roles:
 
 The reported GOBLIN `Available` land residual is not the same as gross livestock-land release and must remain a separate pathway quantity.
 
+## National reconciliation
+
+Every externally supplied pathway control should be auditable against the spatial result. `build_goblin_reconciliation()` writes a tidy target-versus-spatial-sum table for dairy cows, suckler cows, total cattle when supplied, exact 21-cohort controls when supplied, and authoritative livestock-land release when supplied.
+
+Downstream land-use targets and the GOBLIN available-land residual are retained in the same audit as pending controls until the corresponding land-allocation stage has been completed. This keeps pathway authority visible without pretending that a downstream target has already been spatially realised.
+
 ## Land opportunity and realised use
 
 Soil and LPIS remain downstream. They do not determine livestock reduction and do not change the released-land total. They characterise the opportunity context of EDs to which released land has been attributed.
@@ -66,6 +72,7 @@ Implemented now:
 - optional exact national total-cattle validation;
 - optional exact 21-cohort target route;
 - GOBLIN-controlled national released-land spatialisation using cohort pasture-DM pressure change;
+- national target-versus-ED reconciliation audit;
 - transition land-capacity helpers that prefer the GOBLIN-controlled release;
 - existing independent fixed-feed land-release calculation retained as a diagnostic.
 
