@@ -32,6 +32,13 @@ files:
   se_controls: data/controls/06_SE_Data_Controls.csv
   county_region_map: data/controls/county_region_map.csv
 
+  # FROZEN GOBLIN PASTURE FEED CONTROL
+  # Derived with the pinned public GOBLIN animal/feed packages and retained as
+  # a fixed-2020 management/feed parameterisation for cattle-population-only
+  # scenarios. The same per-head coefficients are reused at future milestones
+  # unless a study explicitly supplies year/scenario-specific GOBLIN controls.
+  pasture_dm_controls: data/controls/pasture/GOBLIN_pasture_dm_2020_fixed.csv
+
   # ED AGRICULTURAL SOIL PROFILE
   # A compact prebuilt profile is preferred when present. During development,
   # the same profile can be regenerated directly from the external Cathal/NFS
