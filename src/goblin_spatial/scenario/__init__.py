@@ -30,6 +30,10 @@ from goblin_spatial.scenario.sequential import (
     run_sequential_scenario,
     standard_reduction_suite,
 )
+from goblin_spatial.scenario.cattle_study import (
+    cattle_reduction_suite,
+    make_cattle_scenario,
+)
 
 __all__ = [
     "NetZeroScenarioDefinition",
@@ -53,4 +57,6 @@ __all__ = [
     "reduction_schedule",
     "run_sequential_scenario",
     "standard_reduction_suite",
+    "make_cattle_scenario",
+    "cattle_reduction_suite",
 ]
