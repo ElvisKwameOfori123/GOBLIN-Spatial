@@ -8,7 +8,7 @@ import geopandas as gpd
 import pandas as pd
 
 from goblin_spatial.config import load_config
-from goblin_spatial.land import build_ed_lpis_profile
+from goblin_spatial.land.lpis_stream import build_ed_lpis_profile_from_parquet
 
 
 def main() -> None:
@@ -19,7 +19,7 @@ def main() -> None:
     p.add_argument("--lpis-2025", default=None)
     p.add_argument("--ed-shapefile", default=None)
     p.add_argument("--output", default=None)
-    p.add_argument("--chunk-size", type=int, default=50000)
+    p.add_argument("--batch-size", type=int, default=50000)
     args = p.parse_args()
 
     cfg = load_config(args.config)
@@ -39,15 +39,13 @@ def main() -> None:
     for year in years:
         supplied = args.lpis_2020 if year == 2020 else args.lpis_2025
         path = Path(supplied) if supplied else cfg.files[f"lpis_{year}_parcels"]
-        if not path.exists():
-            raise FileNotFoundError(path)
-        print(f"Reading LPIS {year}: {path}")
-        profile = build_ed_lpis_profile(
-            gpd.read_parquet(path),
+        print(f"Streaming LPIS {year}: {path}")
+        profile = build_ed_lpis_profile_from_parquet(
+            path,
             ed,
             baseline,
             year=year,
-            chunk_size=args.chunk_size,
+            batch_size=args.batch_size,
         )
         if len(profile) != cfg.expected_eds:
             raise AssertionError("LPIS profile does not contain the exact model ED universe")
