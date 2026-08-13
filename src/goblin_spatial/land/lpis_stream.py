@@ -10,10 +10,11 @@ diagnostics are flagged incomplete rather than inventing an ownership share.
 The two published derivatives use a few different semantic flag names. Those
 source names are harmonised here before the shared LPIS normaliser is called so
 the compact ED control preserves forestry context in both snapshots without
-modifying the frozen source files. Grass subtypes are left to the shared
-normaliser because the corrected 2020 ``IS_PERMANENT_GRASS`` flag is broader
-than the mutually exclusive core permanent-pasture category and overlaps the
-low-input grass class.
+modifying the frozen source files. The corrected 2020 ``IS_PERMANENT_GRASS``
+flag is intentionally not copied directly because it is broader than the
+mutually exclusive core permanent-pasture class and overlaps low-input grass.
+For that snapshot the disjoint permanent-pasture flag is reconstructed from the
+published ``LAND_USE_GROUP`` category instead.
 """
 from __future__ import annotations
 
@@ -43,17 +44,25 @@ _PUBLISHED_SEMANTIC_ALIASES = {
 def _harmonise_published_semantic_aliases(
     frame: gpd.GeoDataFrame,
 ) -> gpd.GeoDataFrame:
-    """Map snapshot-specific published flags to the shared LPIS contract.
+    """Map snapshot-specific published fields to the shared LPIS contract.
 
-    Existing canonical columns always win. Grassland subtype aliases are not
-    copied here: the shared normaliser derives the disjoint subtype classes from
-    ``LAND_USE_GROUP`` (or its crop-description fallback).
+    Existing canonical columns always win. For corrected 2020 data, the source
+    boolean ``IS_PERMANENT_GRASS`` is deliberately ignored because it includes
+    low-input grass. ``LAND_USE_GROUP == GRASS_PERMANENT`` is the disjoint
+    published category used to construct ``IS_PERMANENT_PASTURE``.
     """
 
     out = frame.copy()
     for source, target in _PUBLISHED_SEMANTIC_ALIASES.items():
         if target not in out.columns and source in out.columns:
             out[target] = out[source]
+
+    if "IS_PERMANENT_PASTURE" not in out.columns and "LAND_USE_GROUP" in out.columns:
+        groups = out["LAND_USE_GROUP"].astype("string").str.strip().str.upper()
+        out["IS_PERMANENT_PASTURE"] = groups.isin(
+            {"GRASS_PERMANENT", "PERMANENT_PASTURE"}
+        ).fillna(False)
+
     return out
 
 
