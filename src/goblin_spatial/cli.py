@@ -10,8 +10,12 @@ import pandas as pd
 from goblin_spatial.config import load_config
 from goblin_spatial.data_fetch import fetch_data
 from goblin_spatial.land import (
+    DEFAULT_TARGET_PRIORITY,
     LandUseAllocationDefinition,
     add_spared_land_opportunity_envelope,
+    allocate_spared_land_to_cumulative_targets,
+    read_land_use_targets,
+    summarise_land_target_allocation,
     summarise_spared_land_opportunity_envelope,
 )
 from goblin_spatial.pipeline import build
@@ -81,8 +85,9 @@ def _add_cattle_scenario_arguments(parser: argparse.ArgumentParser) -> None:
         help="Scenario output directory. Defaults under data/processed/scenarios/.",
     )
 
-    # Alternative-land shares are optional policy assumptions. All default to
-    # zero so the CLI never invents a land-use pathway.
+    # Legacy share allocation remains available for experiments, but all shares
+    # default to zero. The preferred publication workflow is opportunity screening
+    # followed by the explicit cumulative-target allocation command.
     parser.add_argument("--forest-share", type=float, default=0.0)
     parser.add_argument("--rewetting-share", type=float, default=0.0)
     parser.add_argument("--ad-grass-share", type=float, default=0.0)
@@ -179,6 +184,54 @@ def _parser() -> argparse.ArgumentParser:
         help="Output directory. Defaults to the scenario-results directory.",
     )
 
+    allocate_parser = sub.add_parser(
+        "allocate-land",
+        help=(
+            "Allocate spared grassland to explicit cumulative national hectare targets "
+            "using ED opportunity scores. No targets are invented by the model."
+        ),
+    )
+    allocate_parser.add_argument(
+        "--config",
+        default="configs/ireland_2015_2025.yaml",
+        help="Path to the YAML build configuration.",
+    )
+    allocate_parser.add_argument(
+        "--scenario-ed-results",
+        required=True,
+        help="Path to scenario_ed_results.csv from a completed cattle scenario.",
+    )
+    allocate_parser.add_argument(
+        "--targets",
+        required=True,
+        help=(
+            "CSV of cumulative national hectare targets. Required columns: "
+            "MILESTONE_YEAR, FOREST_HA, REWETTING_HA, AD_GRASS_HA, WILLOW_HA, "
+            "ENERGY_GRASS_HA, NATURE_HA."
+        ),
+    )
+    allocate_parser.add_argument(
+        "--soil-profile",
+        default=None,
+        help=(
+            "Optional compact ED soil profile. Defaults to agricultural_soil_profile "
+            "in the configuration."
+        ),
+    )
+    allocate_parser.add_argument(
+        "--priority",
+        default=",".join(DEFAULT_TARGET_PRIORITY),
+        help=(
+            "Comma-separated allocation priority containing each land use exactly once. "
+            "Default: %(default)s"
+        ),
+    )
+    allocate_parser.add_argument(
+        "--output-dir",
+        default=None,
+        help="Output directory. Defaults to the scenario-results directory.",
+    )
+
     return parser
 
 
@@ -255,12 +308,7 @@ def _configured_baseline_path(cfg) -> Path:
     return path if path.is_absolute() else cfg.project_root / path
 
 
-def _run_opportunity_screen(args: argparse.Namespace) -> None:
-    cfg = load_config(Path(args.config))
-    scenario_path = Path(args.scenario_ed_results)
-    if not scenario_path.exists():
-        raise FileNotFoundError(f"scenario ED results not found: {scenario_path}")
-
+def _resolve_soil_profile(args: argparse.Namespace, cfg) -> Path:
     soil_path = (
         Path(args.soil_profile)
         if args.soil_profile is not None
@@ -268,12 +316,17 @@ def _run_opportunity_screen(args: argparse.Namespace) -> None:
     )
     if soil_path is None or not Path(soil_path).exists():
         raise FileNotFoundError(
-            "policy-neutral opportunity screening requires the compact ED agricultural-"
-            "soil profile. Generate it with scripts/build_ed_agricultural_soil_profile.py "
-            "or pass --soil-profile explicitly."
+            "downstream land analysis requires the compact ED agricultural-soil profile. "
+            "Generate it with scripts/build_ed_agricultural_soil_profile.py or pass "
+            "--soil-profile explicitly."
         )
+    return Path(soil_path)
 
-    scenario = pd.read_csv(scenario_path, low_memory=False)
+
+def _read_scenario_ed(path: Path) -> pd.DataFrame:
+    if not path.exists():
+        raise FileNotFoundError(f"scenario ED results not found: {path}")
+    scenario = pd.read_csv(path, low_memory=False)
     required = {
         "CSOED",
         "County",
@@ -286,16 +339,24 @@ def _run_opportunity_screen(args: argparse.Namespace) -> None:
         raise ValueError(f"scenario results missing columns: {missing}")
     if scenario[["CSOED", "MILESTONE_YEAR"]].duplicated().any():
         raise ValueError("scenario results must contain one row per ED and milestone")
+    return scenario
 
-    enriched = add_ed_agricultural_soil(scenario, Path(soil_path))
+
+def _run_opportunity_screen(args: argparse.Namespace) -> None:
+    cfg = load_config(Path(args.config))
+    scenario_path = Path(args.scenario_ed_results)
+    scenario = _read_scenario_ed(scenario_path)
+    soil_path = _resolve_soil_profile(args, cfg)
+
+    enriched = (
+        scenario
+        if "GOBLIN_SOIL_G1_SHARE" in scenario.columns
+        else add_ed_agricultural_soil(scenario, soil_path)
+    )
     screened = add_spared_land_opportunity_envelope(enriched)
     national = summarise_spared_land_opportunity_envelope(screened)
 
-    output_dir = (
-        Path(args.output_dir)
-        if args.output_dir is not None
-        else scenario_path.parent
-    )
+    output_dir = Path(args.output_dir) if args.output_dir is not None else scenario_path.parent
     output_dir.mkdir(parents=True, exist_ok=True)
     ed_output = output_dir / "scenario_ed_opportunity_envelope.csv"
     national_output = output_dir / "scenario_national_opportunity_envelope.csv"
@@ -307,6 +368,44 @@ def _run_opportunity_screen(args: argparse.Namespace) -> None:
     print(
         "Opportunity envelopes overlap and are screening diagnostics only; no "
         "alternative-land hectares have been allocated."
+    )
+
+
+def _run_land_target_allocation(args: argparse.Namespace) -> None:
+    cfg = load_config(Path(args.config))
+    scenario_path = Path(args.scenario_ed_results)
+    scenario = _read_scenario_ed(scenario_path)
+    soil_path = _resolve_soil_profile(args, cfg)
+    targets = read_land_use_targets(Path(args.targets))
+    priority = tuple(value.strip().upper() for value in str(args.priority).split(",") if value.strip())
+
+    enriched = (
+        scenario
+        if "GOBLIN_SOIL_G1_SHARE" in scenario.columns
+        else add_ed_agricultural_soil(scenario, soil_path)
+    )
+    allocated = allocate_spared_land_to_cumulative_targets(
+        enriched,
+        targets,
+        priority=priority,
+    )
+    national = summarise_land_target_allocation(allocated)
+
+    output_dir = Path(args.output_dir) if args.output_dir is not None else scenario_path.parent
+    output_dir.mkdir(parents=True, exist_ok=True)
+    ed_output = output_dir / "scenario_ed_land_target_allocation.csv"
+    national_output = output_dir / "scenario_national_land_target_allocation.csv"
+    targets_output = output_dir / "land_use_targets_applied.csv"
+    allocated.to_csv(ed_output, index=False)
+    national.to_csv(national_output, index=False)
+    targets.to_csv(targets_output, index=False)
+
+    print(f"ED land-target allocation: {ed_output}")
+    print(f"National land-target allocation: {national_output}")
+    print(f"Applied cumulative targets: {targets_output}")
+    print(
+        "Targets are explicit user/study inputs. Unmet hectares remain reported and "
+        "unallocated rather than being forced into ineligible EDs."
     )
 
 
@@ -329,6 +428,10 @@ def main() -> None:
 
     if args.command == "opportunity":
         _run_opportunity_screen(args)
+        return
+
+    if args.command == "allocate-land":
+        _run_land_target_allocation(args)
         return
 
     if args.command in {"scenario", "run-all"}:
