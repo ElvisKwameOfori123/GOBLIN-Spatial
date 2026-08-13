@@ -12,6 +12,7 @@ from goblin_spatial.scenario.goblin_controls import (
     load_adult_endpoint_controls,
 )
 from goblin_spatial.scenario.reconciliation import build_goblin_reconciliation
+from goblin_spatial.scenario.principal_endpoint import run_principal_goblin_endpoint
 from goblin_spatial.scenario.net_zero import (
     NetZeroScenarioDefinition,
     build_net_zero_livestock_scenario,
@@ -62,6 +63,7 @@ __all__ = [
     "GoblinPathwayControls",
     "load_adult_endpoint_controls",
     "build_goblin_reconciliation",
+    "run_principal_goblin_endpoint",
     "allocate_adult_livestock_scenario",
     "allocate_cattle_cohort_response",
     "build_ed_cohort_dependency_profile",
