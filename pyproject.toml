@@ -40,6 +40,7 @@ goblin = [
 goblin-spatial = "goblin_spatial.cli:main"
 goblin-spatial-lpis = "goblin_spatial.lpis_cli:main"
 goblin-spatial-opportunity = "goblin_spatial.opportunity_cli:main"
+goblin-spatial-principal = "goblin_spatial.principal_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
