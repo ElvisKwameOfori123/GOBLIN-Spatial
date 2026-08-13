@@ -22,23 +22,22 @@ dependencies = [
 
 [project.optional-dependencies]
 # GIS dependencies are optional because the reconstructed ED baseline can be
-# used without raw polygon data.  Install this extra for ED/SIS overlays.
+# used without raw polygon data. Install this extra for ED/SIS overlays.
 geo = [
   "geopandas>=0.14",
   "shapely>=2.0",
   "pyogrio>=0.7"
 ]
 
-# Public upstream packages coordinated by GOBLIN Lite.  They are optional so
-# the validated ED reconstruction remains independently installable, while the
-# scenario layer can consume authoritative GOBLIN animal/feed controls when
-# required.
+# Exact public upstream versions exercised by the clean GitHub Actions
+# integration test. Pinning them prevents the frozen pasture-DM control from
+# silently drifting when upstream animal/feed implementations change.
 goblin = [
-  "cattle_lca>=0.3.1",
-  "sheep_lca>=0.3.1",
-  "livestock_generation>=0.2.1",
-  "grassland_production>=0.3.6",
-  "landcover_assignment>=0.4.0"
+  "cattle_lca==0.3.1",
+  "sheep_lca==0.3.1",
+  "livestock_generation==0.2.2",
+  "grassland_production==0.3.6",
+  "landcover_assignment==0.4.0"
 ]
 
 [project.scripts]
