@@ -5,6 +5,9 @@ from __future__ import annotations
 from collections.abc import Mapping
 import pandas as pd
 
+from goblin_spatial.pressure.category_release import (
+    allocate_category_resolved_goblin_land_release,
+)
 from goblin_spatial.pressure.national_release import allocate_national_goblin_land_release
 from goblin_spatial.scenario.definition import AllocationRule
 from goblin_spatial.scenario.endpoint_allocation import allocate_adult_endpoint
@@ -39,11 +42,15 @@ def run_principal_goblin_endpoint(
     """Run one absolute GOBLIN endpoint while preserving ED cohort signatures.
 
     National livestock biology and spatial livestock geography are deliberately
-    separated.  Exact 21-cohort controls are used directly when supplied.  If
+    separated. Exact 21-cohort controls are used directly when supplied. If
     only adult endpoints are supplied, an optional national GOBLIN/COHORTS
     reference profile converts those adults into national 21-cohort margins.
     The ED baseline then determines where those margins are represented through
     local, county-receiver and national-orphan relationships.
+
+    When the pathway supplies category-resolved dairy/beef/sheep land-release
+    controls, they take precedence over the older aggregate release spatialiser.
+    Both routes retain the same authoritative national gross land total.
     """
 
     milestone = controls.milestone(controls.target_year)
@@ -102,8 +109,24 @@ def run_principal_goblin_endpoint(
             coefficient_path=coefficient_path,
         )
 
+    system_releases = controls.livestock_land_release_by_system_by_year()
     releases = controls.livestock_land_release_by_year()
-    if releases:
+    if system_releases:
+        if pasture_dm_t_per_head_by_year is None:
+            raise ValueError(
+                "category-resolved GOBLIN land release requires pasture-DM profiles"
+            )
+        if set(system_releases) != {int(controls.target_year)}:
+            raise ValueError(
+                "principal category-resolved endpoint requires a system release "
+                "for the exact target year only"
+            )
+        livestock = allocate_category_resolved_goblin_land_release(
+            livestock,
+            system_releases[int(controls.target_year)],
+            pasture_dm_t_per_head_by_year,
+        )
+    elif releases:
         if pasture_dm_t_per_head_by_year is None:
             raise ValueError("authoritative GOBLIN land release requires pasture-DM profiles")
         livestock = allocate_national_goblin_land_release(
