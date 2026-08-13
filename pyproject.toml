@@ -21,8 +21,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# GIS dependencies are optional because the reconstructed ED baseline can be
-# used without raw polygon data. Install this extra for ED/SIS/LPIS overlays.
 geo = [
   "geopandas>=0.14",
   "shapely>=2.0",
@@ -40,6 +38,7 @@ goblin = [
 
 [project.scripts]
 goblin-spatial = "goblin_spatial.cli:main"
+goblin-spatial-lpis = "goblin_spatial.lpis_cli:main"
 goblin-spatial-opportunity = "goblin_spatial.opportunity_cli:main"
 
 [tool.setuptools.packages.find]
