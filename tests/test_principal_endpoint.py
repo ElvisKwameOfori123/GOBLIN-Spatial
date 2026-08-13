@@ -1,10 +1,20 @@
+from pathlib import Path
+
 import pandas as pd
 
 from goblin_spatial.cattle.cohorts import FINAL_21_COHORTS
 from goblin_spatial.scenario.definition import AllocationRule
 from goblin_spatial.scenario.goblin_controls import GoblinNationalMilestone, GoblinPathwayControls
+from goblin_spatial.scenario.national_cohort_targets import (
+    derive_national_cohort_targets,
+    load_goblin_cohort_reference,
+)
 from goblin_spatial.scenario.principal_endpoint import run_principal_goblin_endpoint
 from goblin_spatial.sheep.cohorts import GOBLIN_SHEEP_10
+
+
+ROOT = Path(__file__).resolve().parents[1]
+REFERENCE = ROOT / "data/controls/cohort2012-2020.csv"
 
 
 def _panel():
@@ -60,3 +70,34 @@ def test_dairy_protection_changes_total_adult_reduction_intensity():
     b = out.loc[out["CSOED"].eq("B")].iloc[0]
     assert a["REDUCTION_ADULT_COWS"] > 0 and b["REDUCTION_ADULT_COWS"] > 0
     assert a["REDUCTION_PCT_ADULT_COWS"] < b["REDUCTION_PCT_ADULT_COWS"]
+
+
+def test_principal_endpoint_closes_to_goblin_derived_21_cohort_targets():
+    controls = _controls(120, 60)
+    out = run_principal_goblin_endpoint(
+        _panel(), controls, expected_eds=2, include_standard_output=False,
+        cohort_reference_path=str(REFERENCE),
+    )
+    reference = load_goblin_cohort_reference(REFERENCE, reference_year=2020)
+    targets = derive_national_cohort_targets(
+        dairy_cows=120, suckler_cows=60, reference_counts=reference,
+    )
+    for cohort in FINAL_21_COHORTS:
+        assert int(out[f"SCENARIO_COHORT_{cohort}"].sum()) == targets[cohort]
+    assert int(out["SCENARIO_TOTAL_CATTLE"].sum()) == sum(targets.values())
+    assert out["NATIONAL_COHORT_TARGETS_APPLIED"].all()
+    assert set(out["NATIONAL_COHORT_TARGET_SOURCE"]) == {"GOBLIN_COHORT_RELATIONSHIP_2020"}
+
+
+def test_national_closure_does_not_flatten_ed_cohort_signature():
+    panel = _panel()
+    panel.loc[panel["CSOED"].eq("A"), "DxD_calves_m"] = 20
+    panel.loc[panel["CSOED"].eq("B"), "DxD_calves_m"] = 5
+    panel["TOTAL_CATTLE"] = panel[FINAL_21_COHORTS].sum(axis=1)
+    out = run_principal_goblin_endpoint(
+        panel, _controls(120, 60), expected_eds=2, include_standard_output=False,
+        cohort_reference_path=str(REFERENCE),
+    )
+    a = int(out.loc[out["CSOED"].eq("A"), "SCENARIO_COHORT_DxD_calves_m"].iloc[0])
+    b = int(out.loc[out["CSOED"].eq("B"), "SCENARIO_COHORT_DxD_calves_m"].iloc[0])
+    assert a > b
