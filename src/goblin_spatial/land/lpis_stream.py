@@ -1,12 +1,16 @@
 """Memory-bounded GeoParquet reader for the LPIS-to-ED bridge.
 
-The published Zenodo-v1 2020 reduced file predates the final commonage-share
-fields. Claimed area is still the valid primary agricultural accounting value.
-When a 2020 commonage row has no recoverable ownership fraction, this reader
-keeps the claimed/commonage information but suppresses share-adjusted eligible,
-digitised and reference diagnostics for that row rather than inventing a share.
-The resulting snapshot is explicitly flagged as incomplete for adjusted-area
-QA. The validated 2025 snapshot remains strict.
+The frozen production path uses the corrected 2020-v2 LPIS derivative and the
+validated 2025-v1 derivative pinned in ``LPIS_SOURCE_PINS.yaml``. Both current
+sources are expected to carry complete commonage fractions. The reader also
+retains a conservative legacy fallback for an explicitly supplied 2020-v1 file:
+claimed area remains usable, while share-adjusted eligible/digitised/reference
+diagnostics are flagged incomplete rather than inventing an ownership share.
+
+The two published derivatives use a few different semantic flag names. Those
+source names are harmonised here before the shared LPIS normaliser is called so
+the compact ED control preserves permanent-grass and forestry context in both
+snapshots without modifying the frozen source files.
 """
 from __future__ import annotations
 
@@ -22,6 +26,32 @@ import shapely
 from goblin_spatial.soil.overlay import canonical_csoed
 from .lpis import LPIS_PROFILE_AREA_COLUMNS
 from .lpis_spatial import build_ed_lpis_profile
+
+
+_PUBLISHED_SEMANTIC_ALIASES = {
+    # Corrected 2020-v2 source names.
+    "IS_PERMANENT_GRASS": "IS_PERMANENT_PASTURE",
+    "IS_FORESTRY_CONTEXT": "IS_FORESTRY_EXISTING",
+    # Validated 2025-v1 source names.
+    "IS_FORESTRY_ELIGIBLE_2025": "IS_FORESTRY_ELIGIBLE_SOURCE",
+    "IS_FORESTRY_INELIGIBLE_2025": "IS_FORESTRY_INELIGIBLE_SOURCE",
+}
+
+
+def _harmonise_published_semantic_aliases(
+    frame: gpd.GeoDataFrame,
+) -> gpd.GeoDataFrame:
+    """Map published snapshot-specific flag names to the shared LPIS contract.
+
+    Existing canonical columns always win. This makes the mapping safe for
+    future derivatives that already expose the shared names directly.
+    """
+
+    out = frame.copy()
+    for source, target in _PUBLISHED_SEMANTIC_ALIASES.items():
+        if target not in out.columns and source in out.columns:
+            out[target] = out[source]
+    return out
 
 
 def _geometry_column(parquet: pq.ParquetFile) -> str:
@@ -69,7 +99,7 @@ def _prepare_legacy_commonage(
     *,
     year: int,
 ) -> tuple[gpd.GeoDataFrame, int]:
-    """Recover commonage fractions where possible and flag 2020-v1 gaps."""
+    """Recover commonage fractions where possible and flag legacy 2020-v1 gaps."""
 
     out = frame.copy()
     common_col = _first_column(out, ("IS_COMMONAGE", "COM_IND", "commonage_ind"))
@@ -182,6 +212,7 @@ def build_ed_lpis_profile_from_parquet(
 
     for number, batch in enumerate(parquet.iter_batches(batch_size=batch_size), start=1):
         gdf = _batch_to_gdf(batch, geometry_column, source_crs)
+        gdf = _harmonise_published_semantic_aliases(gdf)
         rows_seen += len(gdf)
         gdf, missing_commonage = _prepare_legacy_commonage(gdf, year=int(year))
         missing_commonage_total += missing_commonage
