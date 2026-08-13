@@ -10,6 +10,9 @@ already present in EDs, and subtracts the allocated reduction from each ED.
 
 The allocation rule changes *where the reduction lands*. It never changes the
 national reduction itself and never seeds livestock into a new ED footprint.
+For every non-null principal reduction, all EDs that contain the relevant
+baseline livestock participate. Protection changes reduction intensity; it is
+not an exemption. Complete local exit remains permitted.
 """
 
 from __future__ import annotations
@@ -99,7 +102,7 @@ def _protection_multiplier(score: np.ndarray, strength: float) -> np.ndarray:
 def _bounded_integer_allocate(
     weights: np.ndarray, capacities: np.ndarray, target: int
 ) -> np.ndarray:
-    """Allocate an integer reduction without exceeding per-ED baseline counts."""
+    """Allocate an integer reduction without exceeding per-ED capacity."""
 
     weights = np.asarray(weights, dtype=float)
     capacities = np.asarray(capacities, dtype=np.int64)
@@ -177,7 +180,8 @@ def _rule_cut_weights(
         score = _fixed_random_score(baseline, scenario.random_seed)
         # Keep animal availability in the weighting while perturbing the
         # proportional incidence. The small floor prevents an ED with livestock
-        # from becoming mechanically impossible to cut.
+        # from becoming mechanically impossible to cut after the participation
+        # floor has been applied.
         return raw * (0.05 + score), score
 
     if rule == AllocationRule.DAIRY_PROTECTION:
@@ -243,7 +247,16 @@ def _allocate_reduction(
     reduction_fraction: float,
     cut_weights: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray, int]:
-    """Allocate the number to remove, then subtract it from the baseline."""
+    """Allocate a national reduction across all eligible baseline EDs.
+
+    A non-null reduction uses universal participation: every ED with a positive
+    baseline count for the relevant livestock category receives at least one
+    animal of reduction, provided such an integer allocation is feasible. The
+    remaining reduction is distributed by the selected rule weights. Protection
+    therefore lowers relative reduction intensity but never creates an exemption.
+    Complete local exit is allowed when an ED's allocated reduction equals its
+    baseline capacity.
+    """
 
     base = np.asarray(base, dtype=np.int64)
     if (base < 0).any():
@@ -261,7 +274,25 @@ def _allocate_reduction(
         reductions = base.copy()
         return np.zeros(len(base), dtype=np.int64), reductions, target_total
 
-    reductions = _bounded_integer_allocate(cut_weights, base, reduction_total)
+    eligible = base > 0
+    eligible_count = int(eligible.sum())
+    if reduction_total < eligible_count:
+        raise ValueError(
+            "universal-participation reduction is not integer-feasible: "
+            f"national reduction={reduction_total}, eligible EDs={eligible_count}. "
+            "Every ED with the relevant baseline livestock must receive at least "
+            "one animal of reduction in a non-null principal scenario."
+        )
+
+    participation_floor = eligible.astype(np.int64)
+    remaining_capacity = base - participation_floor
+    remaining_reduction = reduction_total - eligible_count
+    additional = _bounded_integer_allocate(
+        cut_weights,
+        remaining_capacity,
+        remaining_reduction,
+    )
+    reductions = participation_floor + additional
     scenario = base - reductions
 
     if int(reductions.sum()) != reduction_total:
@@ -274,6 +305,8 @@ def _allocate_reduction(
         raise AssertionError("ED scenario count is outside baseline reduction bounds")
     if ((base == 0) & (scenario > 0)).any():
         raise AssertionError("scenario seeded livestock into a zero-footprint ED")
+    if ((base > 0) & (reductions <= 0)).any():
+        raise AssertionError("eligible ED was exempted from a non-null reduction")
     return scenario.astype(np.int64), reductions.astype(np.int64), target_total
 
 
@@ -330,6 +363,12 @@ def allocate_adult_livestock_scenario(
             raise AssertionError(f"national reduction failed for {column}")
         if not np.array_equal(rounded - reductions, scenario_values):
             raise AssertionError(f"baseline-minus-reduction identity failed for {column}")
+        if national_reduction > 0:
+            eligible = rounded > 0
+            if (reductions[eligible] <= 0).any():
+                raise AssertionError(
+                    f"universal participation failed for {column}: an eligible ED was exempted"
+                )
 
     out["BASE_ADULT_COWS"] = out["BASE_DAIRY_COW"] + out["BASE_OTHER_COW"]
     out["REDUCTION_ADULT_COWS"] = (
