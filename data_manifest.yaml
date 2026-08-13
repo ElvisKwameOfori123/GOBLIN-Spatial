@@ -1,4 +1,4 @@
-manifest_version: "0.7.0"
+manifest_version: "0.8.0"
 release: "ireland-2015-2025-dev"
 status: "development"
 
@@ -130,8 +130,18 @@ datasets:
     description: "Compact ED-level GOBLIN production-soil and forestry-context profile generated from the Cathal/NFS source."
     source: "external"
     destination: "data/controls/soil/ED_GOBLIN_soil_profile.csv.xz"
+    sha256: "c9fd0c19b642254466a65bb4dc2f8cbaf1d7c9023de1ca39083699453dfe3a1b"
     required: false
-    note: "Generated locally by scripts/build_ed_agricultural_soil_profile.py rather than downloaded. Agricultural use-range classes 1-2 map to GOBLIN soil Group 1, classes 3-4 to Group 2, and classes 5-6 to Group 3. Source UAA weights shares; validated ALL_GRASSLAND remains the authoritative ED hectare total. Forest Yield Class and Irish Forest Soil fields are retained only as downstream opportunity context."
+    note: "Generated locally by scripts/build_ed_agricultural_soil_profile.py rather than downloaded. Agricultural use-range classes 1-2 map to GOBLIN soil Group 1, classes 3-4 to Group 2, and classes 5-6 to Group 3. Source UAA weights shares; validated ALL_GRASSLAND remains the authoritative ED hectare total. Forest Yield Class and Irish Forest Soil fields are retained only as downstream opportunity context. The checksum pins the validated compact profile used for the current opportunity-screen audit."
+
+  ed_opportunity_screen_audit:
+    module: [soil, land, scenario]
+    description: "Versioned audit of the policy-neutral ED land-opportunity screening formulas and source-profile diagnostics."
+    source: "git"
+    path: "data/controls/soil/ED_opportunity_screen_audit.json"
+    git_tracked: true
+    required: false
+    note: "Documents the GOBLIN production-soil score, forestry context score, conservative peat/cutover rewetting screen and the non-additive opportunity-envelope boundary."
 
   saps_ed_geography:
     module: [soil, spatial]
