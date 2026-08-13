@@ -83,7 +83,8 @@ def build_endpoint_cattle_state(
     for cohort in FINAL_21_COHORTS:
         bcol = f"BASE_COHORT_{cohort}"
         scol = f"SCENARIO_COHORT_{cohort}"
-        base_columns.append(bcol); scenario_columns.append(scol)
+        base_columns.append(bcol)
+        scenario_columns.append(scol)
         out[bcol] = base[cohort]
         out[scol] = scenario[cohort]
         out[f"CHANGE_COHORT_{cohort}"] = scenario[cohort] - base[cohort]
@@ -91,8 +92,10 @@ def build_endpoint_cattle_state(
             out[f"ENDPOINT_MULTIPLIER_{cohort}"] = multipliers[cohort]
             out[f"ENDPOINT_MULTIPLIER_SOURCE_{cohort}"] = sources[cohort]
 
-    out["BASE_TOTAL_CATTLE"] = out[base_columns].sum(axis=1).astype(np.int64)
-    out["SCENARIO_TOTAL_CATTLE"] = out[scenario_columns].sum(axis=1).astype(np.int64)
+    out["BASE_GOBLIN_21_CATTLE_TOTAL"] = out[base_columns].sum(axis=1).astype(np.int64)
+    out["SCENARIO_GOBLIN_21_CATTLE_TOTAL"] = out[scenario_columns].sum(axis=1).astype(np.int64)
+    out["BASE_TOTAL_CATTLE"] = out["BASE_GOBLIN_21_CATTLE_TOTAL"]
+    out["SCENARIO_TOTAL_CATTLE"] = out["SCENARIO_GOBLIN_21_CATTLE_TOTAL"]
     out["CUMULATIVE_REDUCTION_TOTAL_CATTLE"] = out["BASE_TOTAL_CATTLE"] - out["SCENARIO_TOTAL_CATTLE"]
     out["ED_CATTLE_DECLINE_RECONCILIATION"] = adjustment
     if "TOTAL_CATTLE" in out.columns:
@@ -104,11 +107,19 @@ def build_endpoint_cattle_state(
 
 
 def add_fixed_sheep_context(frame: pd.DataFrame) -> pd.DataFrame:
-    """Attach the unchanged ten sheep cohorts required by downstream valuation."""
+    """Attach unchanged ten sheep cohorts and explicit sheep totals."""
 
     out = frame.copy()
+    base_columns = []
+    scenario_columns = []
     for cohort in GOBLIN_SHEEP_10:
         values = _integer_array(out, cohort)
-        out[f"BASE_SHEEP_COHORT_{cohort}"] = values
-        out[f"SCENARIO_SHEEP_COHORT_{cohort}"] = values
+        bcol = f"BASE_SHEEP_COHORT_{cohort}"
+        scol = f"SCENARIO_SHEEP_COHORT_{cohort}"
+        base_columns.append(bcol)
+        scenario_columns.append(scol)
+        out[bcol] = values
+        out[scol] = values
+    out["BASE_GOBLIN_10_SHEEP_TOTAL"] = out[base_columns].sum(axis=1).astype(np.int64)
+    out["SCENARIO_GOBLIN_10_SHEEP_TOTAL"] = out[scenario_columns].sum(axis=1).astype(np.int64)
     return out
