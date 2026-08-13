@@ -64,7 +64,7 @@ def allocate_adult_endpoint(
         hybrid_weights=hybrid_weights,
     )
     cut_weights, protection_score = _rule_cut_weights(baseline, base_adults, rule)
-    preferred_retained, _ = _allocate_reduction_total(
+    preferred_retained, preferred_reduction = _allocate_reduction_total(
         base_adults, baseline_adults - target_adults, cut_weights
     )
     scenario_dairy, scenario_suckler = reconcile_endpoint_composition(
@@ -96,6 +96,9 @@ def allocate_adult_endpoint(
         out=np.zeros(len(base_adults)), where=base_adults > 0,
     )
     out["PREFERRED_SCENARIO_ADULT_COWS"] = preferred_retained
+    out["PREFERRED_REDUCTION_ADULT_COWS"] = preferred_reduction
+    out["COMPOSITION_RECONCILIATION_ADULT_COWS"] = scenario_adults - preferred_retained
+    out["COMPOSITION_RECONCILIATION_REDUCTION"] = adult_reductions - preferred_reduction
     out["CUT_WEIGHT_ADULT_COWS"] = cut_weights
     if protection_score is not None:
         out["PROTECTION_SCORE_ADULT_COWS"] = protection_score
@@ -108,4 +111,6 @@ def allocate_adult_endpoint(
         raise AssertionError("an adult-cattle ED was exempted from the pathway contraction")
     if int(scenario_dairy.sum()) != target_dairy or int(scenario_suckler.sum()) != target_suckler:
         raise AssertionError("national adult endpoint failed exact closure")
+    if int(out["COMPOSITION_RECONCILIATION_ADULT_COWS"].sum()) != 0:
+        raise AssertionError("composition reconciliation changed the national adult endpoint")
     return out
