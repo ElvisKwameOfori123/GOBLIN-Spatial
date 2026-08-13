@@ -11,6 +11,13 @@ from goblin_spatial.scenario.goblin_controls import (
     GoblinPathwayControls,
     load_adult_endpoint_controls,
 )
+from goblin_spatial.scenario.styles_pathway_controls import (
+    load_styles_split_gas_pathway_controls,
+)
+from goblin_spatial.scenario.national_cohort_targets import (
+    derive_national_cohort_targets,
+    load_goblin_cohort_reference,
+)
 from goblin_spatial.scenario.endpoint_change import signed_adult_endpoint_change
 from goblin_spatial.scenario.reconciliation import build_goblin_reconciliation
 from goblin_spatial.scenario.principal_endpoint import run_principal_goblin_endpoint
@@ -62,6 +69,9 @@ __all__ = [
     "GoblinNationalMilestone",
     "GoblinPathwayControls",
     "load_adult_endpoint_controls",
+    "load_styles_split_gas_pathway_controls",
+    "derive_national_cohort_targets",
+    "load_goblin_cohort_reference",
     "signed_adult_endpoint_change",
     "build_goblin_reconciliation",
     "run_principal_goblin_endpoint",
