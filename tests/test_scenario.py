@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pandas as pd
+import pytest
 
 from goblin_spatial.scenario import (
     AllocationRule,
@@ -71,6 +72,12 @@ def test_prorata_reduction_closes_and_preserves_footprint():
     assert (out["SCENARIO_DAIRY_COW"] <= out["BASE_DAIRY_COW"]).all()
     assert (out["SCENARIO_OTHER_COW"] <= out["BASE_OTHER_COW"]).all()
     assert (out["SCENARIO_TOTAL_SHEEP"] <= out["BASE_TOTAL_SHEEP"]).all()
+
+    # Every ED that has the relevant baseline livestock participates.
+    for column in ["DAIRY_COW", "OTHER_COW", "TOTAL_SHEEP"]:
+        eligible = out[f"BASE_{column}"] > 0
+        assert (out.loc[eligible, f"REDUCTION_{column}"] > 0).all()
+
     zero = out.loc[out["CSOED"] == "D"].iloc[0]
     assert zero["SCENARIO_DAIRY_COW"] == 0
     assert zero["SCENARIO_OTHER_COW"] == 0
@@ -104,7 +111,7 @@ def test_null_scenario_reproduces_selected_baseline_exactly():
         assert int(out[f"REDUCTION_{column}"].sum()) == 0
 
 
-def test_score_weighting_protects_higher_score_ed():
+def test_score_weighting_protects_higher_score_ed_without_exemption():
     scenario = ScenarioDefinition(
         name="protect_core",
         baseline_year=2020,
@@ -119,9 +126,10 @@ def test_score_weighting_protects_higher_score_ed():
 
     assert int(out["SCENARIO_DAIRY_COW"].sum()) == 100
     assert a["REDUCTION_PCT_DAIRY_COW"] < c["REDUCTION_PCT_DAIRY_COW"]
+    assert (out.loc[out["BASE_DAIRY_COW"] > 0, "REDUCTION_DAIRY_COW"] > 0).all()
 
 
-def test_dairy_protection_cuts_high_dairy_ed_less_than_low_dairy_ed():
+def test_dairy_protection_cuts_high_dairy_ed_less_but_never_exempts_it():
     scenario = ScenarioDefinition(
         name="dairy_protection",
         baseline_year=2020,
@@ -137,12 +145,56 @@ def test_dairy_protection_cuts_high_dairy_ed_less_than_low_dairy_ed():
     assert int(out["REDUCTION_DAIRY_COW"].sum()) == 100
     assert int(out["SCENARIO_DAIRY_COW"].sum()) == 100
 
-    # But the incidence changes: the high-dairy ED is deliberately protected.
+    # Protection changes intensity, not participation.
     assert high_dairy["BASE_DAIRY_COW"] > low_dairy["BASE_DAIRY_COW"]
+    assert high_dairy["REDUCTION_DAIRY_COW"] > 0
+    assert low_dairy["REDUCTION_DAIRY_COW"] > 0
     assert (
         high_dairy["REDUCTION_PCT_DAIRY_COW"]
         < low_dairy["REDUCTION_PCT_DAIRY_COW"]
     )
+
+
+def test_universal_participation_can_produce_complete_local_exit():
+    panel = pd.DataFrame(
+        [
+            {"YEAR": 2020, "CSOED": "A", "DAIRY_COW": 1, "OTHER_COW": 0, "TOTAL_SHEEP": 0},
+            {"YEAR": 2020, "CSOED": "B", "DAIRY_COW": 9, "OTHER_COW": 0, "TOTAL_SHEEP": 0},
+        ]
+    )
+    scenario = ScenarioDefinition(
+        name="shared_reduction_with_exit",
+        baseline_year=2020,
+        target_year=2050,
+        dairy_reduction=0.20,  # remove 2 animals, one from each eligible ED
+    )
+    out = allocate_adult_livestock_scenario(panel, scenario, expected_eds=2)
+
+    a = out.loc[out["CSOED"] == "A"].iloc[0]
+    b = out.loc[out["CSOED"] == "B"].iloc[0]
+    assert a["REDUCTION_DAIRY_COW"] == 1
+    assert a["SCENARIO_DAIRY_COW"] == 0
+    assert b["REDUCTION_DAIRY_COW"] == 1
+    assert b["SCENARIO_DAIRY_COW"] == 8
+    assert int(out["SCENARIO_DAIRY_COW"].sum()) == 8
+
+
+def test_universal_participation_fails_if_integer_reduction_is_too_small():
+    panel = pd.DataFrame(
+        [
+            {"YEAR": 2020, "CSOED": "A", "DAIRY_COW": 5, "OTHER_COW": 0, "TOTAL_SHEEP": 0},
+            {"YEAR": 2020, "CSOED": "B", "DAIRY_COW": 5, "OTHER_COW": 0, "TOTAL_SHEEP": 0},
+            {"YEAR": 2020, "CSOED": "C", "DAIRY_COW": 5, "OTHER_COW": 0, "TOTAL_SHEEP": 0},
+        ]
+    )
+    scenario = ScenarioDefinition(
+        name="too_small_for_universal_participation",
+        baseline_year=2020,
+        target_year=2050,
+        dairy_reduction=0.10,
+    )
+    with pytest.raises(ValueError, match="universal-participation"):
+        allocate_adult_livestock_scenario(panel, scenario, expected_eds=3)
 
 
 def test_baseline_minus_reduction_identity_with_five_plus_seven_example():
