@@ -2,85 +2,91 @@
 
 ## Purpose
 
-GOBLIN-Spatial does not replace the national GOBLIN scenario. National GOBLIN supplies the pathway quantities; GOBLIN-Spatial resolves where the transition occurs across the validated ED baseline.
+GOBLIN-Spatial does not replace national GOBLIN. GOBLIN supplies the pathway quantities; GOBLIN-Spatial resolves where the transition occurs across the validated ED baseline.
 
-For the planned transition study, the principal pathway identifiers are `SI_SG` and `BE_SG`. Exact pathway values must come from the corresponding GOBLIN outputs. They must not be inferred from unrelated rows or mixed across pathway families.
+The principal study pathways are `SI_SG` and `BE_SG`. Their 2050 adult endpoints are source-controlled from Styles et al. (2025):
 
-## Baseline
+- `SI_SG`: 1,600,000 dairy cows + 160,000 suckler cows;
+- `BE_SG`: 1,540,000 dairy cows + 154,000 suckler cows.
 
-The validated historical reconstruction is unchanged. A future scenario can start from either 2020 or 2025. A 2025 run measures the remaining adjustment from the 2025 ED state to the relevant national endpoint; it does not reapply a percentage derived from 2020.
+## Baseline and adult transition
 
-## Livestock authority
+The historical reconstruction is unchanged. The scenario can start from 2020 or 2025 and uses the same national endpoint from either starting year.
 
-Adult dairy and suckler populations remain the biological drivers of the spatial cohort response. DxD and DxB followers respond to dairy, BxB followers respond to suckler, and bulls respond to the combined adult-cow signal. Local ED relationships are used first, county receiver relationships second, and national fallback only for true county orphans.
+The validated adult baselines are:
 
-After the response, total cattle is the sum of the solved 21 cattle cohorts. The control hierarchy is:
+- 2020: 1,567,600 dairy + 983,500 suckler;
+- 2025: 1,588,100 dairy + 778,800 suckler.
 
-1. exact 21 national cohort targets, when GOBLIN supplies all of them;
-2. adult dairy/suckler targets plus an authoritative national total-cattle target;
-3. adult targets only, with total cattle reported as the resulting diagnostic.
+Both pathways therefore reduce total adult cows substantially. SI_SG nevertheless increases dairy slightly relative to either baseline while sharply reducing sucklers. The principal spatial allocation is consequently the **overall adult-cow contraction**, not a requirement that dairy and sucklers each decline in every ED.
 
-No missing national cohort target is invented. Where a national total-cattle target is supplied, a mismatch is currently reported as an explicit failure rather than silently rebalanced. A reconciliation method should be added only after its scientific rule is agreed.
+Every ED with adult cattle participates in the total adult contraction. Protection changes reduction intensity rather than granting exemption. Complete local adult-cattle exit is allowed. The retained adult stock is then reconciled to the exact national dairy:suckler endpoint inside existing category footprints, so no dairy or suckler category is seeded into an ED where it was absent at baseline.
+
+## Cohort response and total cattle
+
+DxD and DxB followers respond to the scenario-to-baseline dairy-parent multiplier. BxB followers respond to the suckler-parent multiplier. Bulls respond to the combined adult-cow multiplier. The local ED, county receiver and national orphan hierarchy is preserved.
+
+After propagation:
+
+`SCENARIO_TOTAL_CATTLE = sum(21 scenario cattle cohorts)`
+
+Every cattle-bearing ED must finish below its selected baseline total cattle in the principal transition. Individual dairy-linked cohorts may rise where the pathway becomes more dairy-oriented, but the complete cattle stock contracts locally.
+
+The national control hierarchy remains:
+
+1. exact 21 cohort targets, only if supplied explicitly by GOBLIN;
+2. adult endpoints plus an authoritative total-cattle target, if supplied;
+3. adult endpoints only, with total cattle an endogenous diagnostic.
+
+No missing total-cattle or cohort target is invented.
 
 The principal study remains cattle-focused and keeps sheep fixed unless a later study explicitly changes that boundary.
 
 ## Land authority
 
-`POTENTIAL_SPARED_GRASSLAND_HA` remains the internally calculated fixed-feed GOBLIN-Spatial diagnostic:
+`POTENTIAL_SPARED_GRASSLAND_HA` remains the internal fixed-feed diagnostic:
 
 `ED livestock -> cohort pasture DM -> required grassland -> potential spared grassland`.
 
-When the originating GOBLIN pathway supplies an authoritative national livestock-land release, that national total controls the principal pathway analysis. `allocate_national_goblin_land_release()` distributes only that known national total across EDs using the geography of cohort-specific pasture-DM pressure reduction, with `ALL_GRASSLAND` as the ED capacity bound.
+When the matching GOBLIN pathway supplies an authoritative gross livestock-land release, that national total controls the principal pathway analysis. `allocate_national_goblin_land_release()` spatialises it using cohort-specific pasture-DM pressure reduction, with `ALL_GRASSLAND` as the ED capacity bound.
 
-The two quantities therefore have different roles:
+- `GOBLIN_RELEASED_GRASSLAND_HA`: authoritative external national release spatialised to EDs;
+- `POTENTIAL_SPARED_GRASSLAND_HA`: independent diagnostic.
 
-- `GOBLIN_RELEASED_GRASSLAND_HA`: authoritative national GOBLIN total spatialised across EDs;
-- `POTENTIAL_SPARED_GRASSLAND_HA`: independent GOBLIN-Spatial diagnostic for reconciliation and sensitivity analysis.
-
-The reported GOBLIN `Available` land residual is not the same as gross livestock-land release and must remain a separate pathway quantity.
-
-## National reconciliation
-
-Every externally supplied pathway control should be auditable against the spatial result. `build_goblin_reconciliation()` writes a tidy target-versus-spatial-sum table for dairy cows, suckler cows, total cattle when supplied, exact 21-cohort controls when supplied, and authoritative livestock-land release when supplied.
-
-Downstream land-use targets and the GOBLIN available-land residual are retained in the same audit as pending controls until the corresponding land-allocation stage has been completed. This keeps pathway authority visible without pretending that a downstream target has already been spatially realised.
+The GOBLIN `Available` residual is not gross livestock-land release and must remain separate.
 
 ## Land opportunity and realised use
 
-Soil and LPIS remain downstream. They do not determine livestock reduction and do not change the released-land total. They characterise the opportunity context of EDs to which released land has been attributed.
+Soil and LPIS are downstream. They do not determine livestock reduction or change the released-land total. They characterise the opportunity context of EDs to which released land has been attributed.
 
-Transition land helpers prefer `GOBLIN_RELEASED_GRASSLAND_HA` when it is available and fall back to `POTENTIAL_SPARED_GRASSLAND_HA` only when an external GOBLIN release has not been supplied.
+`released land -> opportunity -> explicit land-use target allocation`
 
-The accounting boundary remains:
+Opportunity is not realised conversion. Future uses are allocated only when explicit national hectare targets are supplied from the same pathway or another stated source. Unmet targets are reported rather than forced into ineligible EDs.
 
-`released land -> opportunity -> explicit land-use target allocation`.
+## National reconciliation
 
-Opportunity scores are screening evidence, not realised conversion. Future land uses are allocated only when explicit national hectare targets are supplied from the same GOBLIN pathway or another stated policy/study source. Unmet targets are reported rather than forced into ineligible EDs.
-
-## Spatial policy experiment
-
-The national endpoint must remain identical across allocation rules. `PRORATA`, `DAIRY_PROTECTION`, and other supported protection/sensitivity rules change only where the transition lands. Protection therefore redistributes the national adjustment; it does not remove it.
-
-The main policy outputs are the geography of livestock reduction, total-cattle and cohort change, Standard Output production-value exposure, the geography of released land, and the compatibility of that land with alternative enterprises and land uses.
+`build_goblin_reconciliation()` audits externally supplied national controls against the ED spatial sums for dairy, suckler, total cattle when supplied, exact cohorts when supplied, and authoritative livestock-land release when supplied.
 
 ## Current implementation boundary
 
 Implemented now:
 
-- external GOBLIN pathway-control data classes;
-- explicit ED and national total-cattle accounting;
-- optional exact national total-cattle validation;
-- optional exact 21-cohort target route;
-- GOBLIN-controlled national released-land spatialisation using cohort pasture-DM pressure change;
+- source-controlled SI_SG / BE_SG adult endpoints;
+- total-adult contraction allocation with universal ED participation;
+- exact dairy/suckler endpoint reconciliation inside existing footprints;
+- signed adult composition change, including SI_SG dairy increase;
+- local/county/national signed cohort multipliers;
+- ED total-cattle contraction reconciliation;
+- exact total-cattle validation when an external target is supplied;
+- GOBLIN-controlled national land-release spatialisation;
 - national target-versus-ED reconciliation audit;
-- transition land-capacity helpers that prefer the GOBLIN-controlled release;
-- existing independent fixed-feed land-release calculation retained as a diagnostic.
+- fixed-feed land-release diagnostic retained separately.
 
-Still requiring substantive inputs/decisions:
+Still requiring authoritative pathway inputs:
 
-- authoritative `SI_SG` and `BE_SG` livestock, land-release and land-use target values;
-- a scientifically agreed reconciliation rule if adult-driven cohorts do not close to a supplied aggregate total-cattle target;
-- final vulnerability/productivity indicators before those protection rules are used substantively;
-- full principal-study CLI wiring after the national pathway inputs are frozen.
+- exact gross livestock-land release for SI_SG and BE_SG;
+- exact future land-use targets from those same scenario packages;
+- any exact national total-cattle or 21-cohort endpoint if GOBLIN reports them;
+- final vulnerability/productivity indicators before those protection rules are used substantively.
 
 The historical baseline must not be rebuilt or altered by these downstream changes.
