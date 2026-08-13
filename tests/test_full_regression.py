@@ -206,12 +206,13 @@ def test_complete_build_regression() -> None:
     assert bxb_reductions and int(dairy[bxb_reductions].to_numpy().sum()) == 0
     assert dairy_origin_reductions and int(suckler[dairy_origin_reductions].to_numpy().sum()) == 0
 
-    # The real Irish scenario must contain county-dependent cohort locations,
-    # demonstrating that rearing/finishing geography is participating in the
-    # transition rather than being ignored when its local adult herd is small.
+    # The real Irish scenario must contain orphan/receiver EDs: EDs that have a
+    # young-stock cohort but no corresponding parent adults. Their follower
+    # reduction must still be positive when the relevant county breeding adults
+    # contract.
     both = results["BOTH_30_FROM_2020"].ed
     source_col = "REDUCTION_SIGNAL_SOURCE_DxB_calves_m"
     reduction_col = "CUMULATIVE_REDUCTION_COHORT_DxB_calves_m"
-    receiver_mask = both[source_col].isin(["MIXED_ED_COUNTY", "COUNTY_RECEIVER"])
+    receiver_mask = both[source_col] == "COUNTY_RECEIVER"
     assert receiver_mask.any()
     assert (both.loc[receiver_mask, reduction_col] > 0).any()
