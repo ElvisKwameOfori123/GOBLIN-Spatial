@@ -1,4 +1,4 @@
-"""Top-level one-command GOBLIN-Spatial build pipeline."""
+"""Top-level one-command GOBLIN-Spatial historical baseline pipeline."""
 
 from __future__ import annotations
 
@@ -12,11 +12,6 @@ from goblin_spatial.export import export_clean_workbook
 from goblin_spatial.land import add_land
 from goblin_spatial.se import add_se
 from goblin_spatial.sheep import add_sheep_cohorts, build_sheep_panel
-from goblin_spatial.soil import (
-    add_ed_agricultural_soil,
-    build_ed_agricultural_soil_profile,
-)
-from goblin_spatial.standard_output import add_baseline_standard_output
 from goblin_spatial.validation import validate_master
 
 
@@ -108,44 +103,21 @@ def _output_path(
     return path if path.is_absolute() else config.project_root / path
 
 
-def _add_agricultural_soil_if_available(
-    master: pd.DataFrame, cfg: SpatialConfig
-) -> pd.DataFrame:
-    """Attach the ED production-soil profile when a configured source exists.
-
-    A versioned compact ED profile is preferred. During development it can be
-    rebuilt from the external Cathal/NFS holding-linked source. Holding rows are
-    collapsed immediately to ED area-weighted shares and are never merged into
-    the livestock master. If neither input is present, the validated baseline
-    build remains available without soil enrichment.
-    """
-
-    profile_path = cfg.files.get("agricultural_soil_profile")
-    source_path = cfg.files.get("agricultural_soil_source")
-
-    if profile_path is not None and profile_path.exists():
-        return add_ed_agricultural_soil(master, profile_path)
-
-    if source_path is not None and source_path.exists():
-        profile = build_ed_agricultural_soil_profile(source_path)
-        generated = cfg.interim_dir / "ed_agricultural_soil_profile.csv"
-        profile.to_csv(generated, index=False, float_format="%.10f")
-        return add_ed_agricultural_soil(master, profile)
-
-    return master
-
-
 def build(config: str | Path | SpatialConfig) -> pd.DataFrame:
-    """Run the complete GOBLIN-Spatial data-generation workflow.
+    """Build the validated 2015-2025 historical ED baseline.
 
-    One call executes cattle, sheep, livestock merge, land, SE, optional ED
-    agricultural-soil context, fixed-2020 Standard Output valuation, validation
-    and final export. The scientific modules remain callable independently for
-    development, while normal users need only ``goblin-spatial build``.
+    One call executes cattle, cattle cohorts, sheep, sheep cohorts, the livestock
+    merge, land reconciliation and structural-economic (SE) enrichment, followed
+    by validation and export.  This is the formal historical-baseline boundary.
 
-    Row ordering is aligned deliberately with the frozen reference stages.
-    This matters only for deterministic largest-remainder tie-breaking, but it
-    ensures exact ED-level regression rather than merely exact aggregate totals.
+    Agricultural soil, Standard Output valuation, future livestock scenarios,
+    grassland release and alternative-land allocation are downstream analytical
+    layers.  They must not silently redefine the historical baseline returned by
+    ``goblin-spatial build``.
+
+    Row ordering is aligned deliberately with the frozen reference stages. This
+    matters only for deterministic largest-remainder tie-breaking, but it ensures
+    exact ED-level regression rather than merely exact aggregate totals.
     """
 
     cfg = (
@@ -172,20 +144,6 @@ def build(config: str | Path | SpatialConfig) -> pd.DataFrame:
     master = merge_livestock(cattle, sheep)
     master = add_land(master, cfg)
     master = add_se(master, cfg)
-
-    # Production soil is a static ED context. Source UAA only estimates soil
-    # shares; validated ALL_GRASSLAND remains the hectare authority.
-    master = _add_agricultural_soil_if_available(master, cfg)
-
-    # SO is a downstream valuation/exposure layer. It never changes the physical
-    # livestock, land, cohort reconciliation or soil allocation. Runtime mapping
-    # is explicit in YAML, while the original IFS extract remains an audit
-    # control. This keeps the baseline build reproducible and transparent.
-    master = add_baseline_standard_output(
-        master,
-        mapping_path=cfg.files.get("standard_output_mapping"),
-        coefficient_path=cfg.files.get("standard_output_coefficients"),
-    )
     master = _canonical_order(master)
 
     validation = validate_master(master, cfg)
@@ -207,8 +165,8 @@ def build(config: str | Path | SpatialConfig) -> pd.DataFrame:
     validation_path = cfg.processed_dir / "validation_summary.csv"
     pd.DataFrame([validation]).to_csv(validation_path, index=False)
 
-    print(f"Validated master: {master_path}")
-    print(f"Clean workbook: {workbook_path}")
+    print(f"Validated historical baseline: {master_path}")
+    print(f"Clean baseline workbook: {workbook_path}")
     print(f"Validation summary: {validation_path}")
 
     return master
