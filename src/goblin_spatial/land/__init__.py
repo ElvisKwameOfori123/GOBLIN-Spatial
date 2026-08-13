@@ -12,14 +12,26 @@ from .opportunity import (
     allocate_spared_land_sequentially,
 )
 from .panel import add_land
+from .targets import (
+    DEFAULT_TARGET_PRIORITY,
+    TARGET_COLUMNS,
+    allocate_spared_land_to_cumulative_targets,
+    read_land_use_targets,
+    summarise_land_target_allocation,
+)
 
 __all__ = [
+    "DEFAULT_TARGET_PRIORITY",
     "LAND_USES",
     "LandUseAllocationDefinition",
     "OPPORTUNITY_ENVELOPE_NOTE",
+    "TARGET_COLUMNS",
     "add_ed_land_opportunity_scores",
     "add_land",
     "add_spared_land_opportunity_envelope",
     "allocate_spared_land_sequentially",
+    "allocate_spared_land_to_cumulative_targets",
+    "read_land_use_targets",
+    "summarise_land_target_allocation",
     "summarise_spared_land_opportunity_envelope",
 ]
