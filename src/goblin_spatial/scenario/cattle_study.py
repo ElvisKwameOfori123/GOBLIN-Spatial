@@ -3,13 +3,22 @@
 The principal GOBLIN-Spatial study changes dairy and/or suckler cows only. Sheep
 remain fixed at the selected 2020 or 2025 baseline and continue to contribute to
 grassland demand as unchanged context.
+
+For externally supplied GOBLIN pathways, adult values are treated as absolute
+national endpoints. GOBLIN-Spatial calculates the remaining adjustment as
+``selected baseline - endpoint`` and then allocates that reduction across the
+existing ED livestock footprint.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 
+import pandas as pd
+
+from goblin_spatial.dynamics.baseline import select_baseline_year
 from goblin_spatial.scenario.definition import AllocationRule
+from goblin_spatial.scenario.goblin_controls import GoblinPathwayControls
 from goblin_spatial.scenario.sequential import SequentialScenarioDefinition
 
 
@@ -57,6 +66,51 @@ def make_cattle_scenario(
             None if milestone_years is None else tuple(int(y) for y in milestone_years)
         ),
         milestone_reductions=expanded,
+    )
+
+
+def make_cattle_scenario_from_goblin_endpoint(
+    panel: pd.DataFrame,
+    controls: GoblinPathwayControls,
+    *,
+    allocation_rule: AllocationRule = AllocationRule.PRORATA,
+    random_seed: int = 42,
+    expected_eds: int | None = None,
+    milestone_years: Sequence[int] | None = None,
+) -> SequentialScenarioDefinition:
+    """Translate an absolute GOBLIN adult endpoint into baseline reductions.
+
+    The selected ED baseline remains the spatial stock. The pathway milestone is
+    the national destination. This helper calculates the remaining dairy and
+    suckler reductions from the selected baseline and constructs the existing
+    reduction-allocation scenario. Sheep remain unchanged.
+    """
+
+    baseline = select_baseline_year(
+        panel,
+        controls.baseline_year,
+        expected_eds=expected_eds,
+    )
+    for column in ("DAIRY_COW", "OTHER_COW"):
+        if column not in baseline.columns:
+            raise ValueError(f"GOBLIN endpoint scenario requires baseline column {column}")
+
+    baseline_dairy = int(pd.to_numeric(baseline["DAIRY_COW"], errors="raise").sum())
+    baseline_suckler = int(pd.to_numeric(baseline["OTHER_COW"], errors="raise").sum())
+    reductions = controls.adult_reductions_from_baseline(
+        baseline_dairy_cows=baseline_dairy,
+        baseline_suckler_cows=baseline_suckler,
+    )
+
+    return make_cattle_scenario(
+        name=controls.scenario_id,
+        baseline_year=controls.baseline_year,
+        target_year=controls.target_year,
+        dairy_reduction=float(reductions["dairy_reduction_fraction"]),
+        suckler_reduction=float(reductions["suckler_reduction_fraction"]),
+        allocation_rule=allocation_rule,
+        random_seed=random_seed,
+        milestone_years=milestone_years,
     )
 
 
