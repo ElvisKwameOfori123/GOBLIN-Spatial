@@ -10,6 +10,7 @@ from goblin_spatial.scenario.goblin_controls import (
     GoblinNationalMilestone,
     GoblinPathwayControls,
 )
+from goblin_spatial.scenario.reconciliation import build_goblin_reconciliation
 from goblin_spatial.scenario.net_zero import (
     NetZeroScenarioDefinition,
     build_net_zero_livestock_scenario,
@@ -57,6 +58,7 @@ __all__ = [
     "ScenarioDefinition",
     "GoblinNationalMilestone",
     "GoblinPathwayControls",
+    "build_goblin_reconciliation",
     "allocate_adult_livestock_scenario",
     "allocate_cattle_cohort_response",
     "build_ed_cohort_dependency_profile",
