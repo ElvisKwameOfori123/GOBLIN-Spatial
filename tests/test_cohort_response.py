@@ -1,4 +1,4 @@
-"""Tests for national-biological / ED-spatial cattle cohort response."""
+"""Tests for the simple ED adult-to-cohort ripple rule."""
 
 from __future__ import annotations
 
@@ -82,7 +82,27 @@ def test_cohort_response_subtracts_from_existing_ed_cohorts_and_closes_nationall
     assert int(out["SCENARIO_GOBLIN_21_CATTLE_TOTAL"].sum()) == sum(targets.values())
 
 
-def test_receiver_rearing_ed_uses_same_county_reduction_signal():
+def test_local_ed_uses_its_own_parent_reduction_rate():
+    signal, source = _reduction_signal(
+        base_adults=np.array([100, 100]),
+        adult_reductions=np.array([20, 60]),
+        cohort_base=np.array([80, 20]),
+        counties=np.array(["X", "X"], dtype=object),
+    )
+
+    # Each ED keeps its own observed adult-to-cohort relationship.  Therefore
+    # the cohort reduction rate is the same as that ED's parent-adult rate.
+    assert source[0] == "LOCAL_ED"
+    assert source[1] == "LOCAL_ED"
+    assert signal[0] == pytest.approx(0.20)
+    assert signal[1] == pytest.approx(0.60)
+
+    # Equivalent head logic: adult reduction * baseline cohort/adult ratio.
+    assert 20 * (80 / 100) == pytest.approx(80 * signal[0])
+    assert 60 * (20 / 100) == pytest.approx(20 * signal[1])
+
+
+def test_orphan_ed_uses_same_county_parent_reduction_rate():
     frame = _adult_scenario()
     targets = _targets(frame)
     out = allocate_cattle_cohort_response(frame, targets)
@@ -95,8 +115,13 @@ def test_receiver_rearing_ed_uses_same_county_reduction_signal():
     assert c["REDUCTION_SIGNAL_SOURCE_DxB_calves_m"] == "COUNTY_RECEIVER"
     assert c["REDUCTION_SIGNAL_DxB_calves_m"] == pytest.approx(expected_county_rate)
 
+    # Same identity for an orphan/receiver ED:
+    # county adult reduction * orphan cohort/county adults.
+    expected_head = 20 * (5 / 120)
+    assert expected_head == pytest.approx(5 * expected_county_rate)
 
-def test_reduction_signal_is_ed_first_county_second_and_orphan_last():
+
+def test_reduction_signal_is_local_first_county_orphan_second_national_last():
     signal, source = _reduction_signal(
         base_adults=np.array([100, 0, 100, 0, 0]),
         adult_reductions=np.array([50, 0, 10, 0, 0]),
@@ -118,27 +143,7 @@ def test_reduction_signal_is_ed_first_county_second_and_orphan_last():
     assert source[4] == "NATIONAL_ORPHAN"
 
 
-def test_mixed_ed_blends_local_and_county_rearing_dependence_without_fixed_factor():
-    # National coefficient is 100 cohort / 200 adults = 0.5 cohort per adult.
-    # ED A has 100 adults and 80 cohort head: 50 are locally supportable and 30
-    # are inferred receiver/rearing stock. Hence local share=0.625 and county
-    # dependence share=0.375. Local adult reduction is 20%, while the county
-    # reduction is 40%; the effective cohort signal is therefore 27.5%.
-    signal, source = _reduction_signal(
-        base_adults=np.array([100, 100]),
-        adult_reductions=np.array([20, 60]),
-        cohort_base=np.array([80, 20]),
-        counties=np.array(["X", "X"], dtype=object),
-    )
-
-    expected = 0.625 * 0.20 + 0.375 * 0.40
-    assert source[0] == "MIXED_ED_COUNTY"
-    assert signal[0] == pytest.approx(expected)
-    assert source[1] == "LOCAL_ED"
-    assert signal[1] == pytest.approx(0.60)
-
-
-def test_dependency_profile_exposes_ed_cohort_roles_for_paper_and_audit():
+def test_dependency_profile_records_local_ratios_and_orphan_county_ratios():
     frame = pd.DataFrame(
         {
             "YEAR": [2020, 2020, 2020],
@@ -164,9 +169,9 @@ def test_dependency_profile_exposes_ed_cohort_roles_for_paper_and_audit():
     assert set(profile["YEAR"]) == {2020}
     assert len(profile) == 3 * (len(FINAL_21_COHORTS) - 2)
     assert {
-        "COHORT_PER_ADULT_COEFFICIENT",
-        "LOCAL_SUPPORT_SHARE",
-        "COUNTY_DEPENDENCY_SHARE",
+        "ED_COHORT_PER_ADULT_RATIO",
+        "ORPHAN_COHORT_PER_COUNTY_ADULT_RATIO",
+        "ORPHAN_SHARE_OF_COUNTY_COHORT",
         "COHORT_SPATIAL_ROLE",
     }.issubset(profile.columns)
 
@@ -176,10 +181,14 @@ def test_dependency_profile_exposes_ed_cohort_roles_for_paper_and_audit():
     dxb_c = profile.loc[
         (profile["CSOED"] == "C") & (profile["COHORT"] == "DxB_calves_m")
     ].iloc[0]
-    assert dxb_a["COHORT_SPATIAL_ROLE"] == "MIXED_ED_COUNTY"
-    assert 0 < dxb_a["COUNTY_DEPENDENCY_SHARE"] < 1
+
+    assert dxb_a["COHORT_SPATIAL_ROLE"] == "LOCAL_ED"
+    assert dxb_a["ED_COHORT_PER_ADULT_RATIO"] == pytest.approx(80 / 100)
+
     assert dxb_c["COHORT_SPATIAL_ROLE"] == "COUNTY_RECEIVER"
-    assert dxb_c["COUNTY_DEPENDENCY_SHARE"] == pytest.approx(1.0)
+    assert dxb_c["ED_COHORT_PER_ADULT_RATIO"] == 0
+    assert dxb_c["ORPHAN_COHORT_PER_COUNTY_ADULT_RATIO"] == pytest.approx(20 / 200)
+    assert dxb_c["ORPHAN_SHARE_OF_COUNTY_COHORT"] == pytest.approx(20 / 120)
 
 
 def test_cohort_response_rejects_adult_target_inconsistent_with_adult_allocation():
