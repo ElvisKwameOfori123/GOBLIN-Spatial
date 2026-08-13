@@ -29,6 +29,7 @@ files:
 
   # GOBLIN + SE CONTROLS
   goblin_cohorts: data/controls/cohort2012-2020.csv
+  styles_split_gas_pathway_controls: configs/styles_split_gas_pathway_controls.csv
   se_controls: data/controls/06_SE_Data_Controls.csv
   county_region_map: data/controls/county_region_map.csv
 
