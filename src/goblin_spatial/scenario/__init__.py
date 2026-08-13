@@ -2,7 +2,10 @@
 
 from goblin_spatial.scenario.definition import AllocationRule, ScenarioDefinition
 from goblin_spatial.scenario.allocation import allocate_adult_livestock_scenario
-from goblin_spatial.scenario.cohort_response import allocate_cattle_cohort_response
+from goblin_spatial.scenario.cohort_response import (
+    allocate_cattle_cohort_response,
+    build_ed_cohort_dependency_profile,
+)
 from goblin_spatial.scenario.net_zero import (
     NetZeroScenarioDefinition,
     build_net_zero_livestock_scenario,
@@ -36,6 +39,7 @@ __all__ = [
     "ScenarioDefinition",
     "allocate_adult_livestock_scenario",
     "allocate_cattle_cohort_response",
+    "build_ed_cohort_dependency_profile",
     "NationalMilestone",
     "TransitionPathwayDefinition",
     "build_transition_pathway",
