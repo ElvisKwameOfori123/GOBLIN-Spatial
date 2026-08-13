@@ -1,233 +1,126 @@
 # GOBLIN-Spatial scenario architecture
 
-## Principal study design
+## Study boundary
 
-The principal GOBLIN-Spatial scenario is a **single configurable net-zero livestock-reduction experiment**. It is not organised around Policy, SplitGas, AllGas or other pathway labels.
+The principal study is cattle focused. The validated historical ED baseline remains the foundation. A scenario selects either the 2020 or 2025 ED state, applies dairy- and/or suckler-cow reductions, propagates those reductions through the 21 cattle cohorts, values Standard Output exposure, calculates GOBLIN grassland requirement and potential spared grassland, and then screens alternative land opportunities at ED level.
 
-The user selects:
+Sheep remain unchanged context in the principal study.
 
-- the immutable ED baseline year: `2020` or `2025`;
-- the net-zero target year;
-- the dairy-cow reduction fraction;
-- the suckler-cow reduction fraction;
-- the sheep reduction fraction.
+## One sequential scenario engine
 
-Changing those controls and rerunning the model must be sufficient to produce a new spatial scenario. The validated baseline is never rewritten.
+The study workflow is:
 
-The principal interface is:
+`validated ED baseline -> select 2020/2025 -> dairy/suckler reduction -> 2030/2040/2050 cattle cohorts -> Standard Output exposure -> grassland release -> ED soil opportunity -> alternative land allocation`
 
-```python
-run_net_zero_scenario(
-    panel,
-    baseline_year=...,
-    target_year=...,
-    dairy_reduction=...,
-    suckler_reduction=...,
-    sheep_reduction=...,
-)
-```
+Dairy and suckler reductions are independently editable. If milestone reductions are not supplied, the engine interpolates from zero at the selected baseline year to the requested endpoint. Direct milestone reductions can be supplied instead.
 
-The lower-level pathway/allocation modules remain in the repository as experimental/general infrastructure, but they are not the principal study definition.
-
-## Fixed starting state
-
-GOBLIN-Spatial contains validated annual ED states and allows the scenario study to begin from either 2020 or 2025.
-
-`Baseline(e,k) = validated observed/reconstructed activity for ED e and livestock class k in the selected baseline year`
-
-The selector only chooses the starting state. It does not smooth, redistribute or otherwise alter it.
-
-A 2020 scenario and a 2025 scenario therefore begin from different observed/reconstructed livestock geographies, but within any single run the selected baseline is fixed.
-
-## Adult cattle reductions are the scenario controls
-
-The core cattle assumptions are reductions in the adult breeding populations:
-
-- dairy cows;
-- suckler cows.
+## Adult cows are the scenario controls
 
 For adult class k:
 
 `NationalReduction(k) = round(BaselineNationalTotal(k) * ReductionFraction(k))`
 
-The principal engine distributes that reduction pro-rata across the existing ED adult footprint and subtracts it from the baseline:
+The adult reduction is allocated across the existing ED footprint and subtracted from the selected baseline. No adult livestock is seeded into an ED where that class was absent.
 
-`ScenarioAdult(e,k) = BaselineAdult(e,k) - AdultReduction(e,k)`
+The young cattle response is not entered independently. It follows from the relationship already observed between adult cows and follower cohorts in each ED.
 
-No livestock is seeded into an ED where the relevant adult class was absent.
+## Simple ED adult-to-cohort ripple
 
-The important modelling choice is that **young cattle do not receive independently invented national reduction assumptions**. Their response follows from the adult reduction and the observed ED cohort structure.
+For DxD and DxB cohorts, the parent population is dairy cows. For BxB cohorts, the parent population is suckler cows. Bulls follow the combined adult-cow population.
 
-## Adult and young cattle are one herd adjustment
-
-Each validated ED already contains its own relationship between adult breeding stock and young/follower cohorts. The net-zero engine preserves that heterogeneity.
-
-For an active breeding ED:
+If an ED contains the relevant parent adults, its follower cohort uses that ED's own realised adult reduction rate:
 
 `FollowerReductionRate(e,k) = AdultReduction(e,origin(k)) / BaselineAdult(e,origin(k))`
 
-and the continuous implied follower reduction is:
-
-`ImpliedFollowerReduction(e,k) = BaselineFollower(e,k) * FollowerReductionRate(e,k)`
-
-which is algebraically equivalent to:
-
-`AdultReduction(e,origin(k)) * BaselineFollower(e,k) / BaselineAdult(e,origin(k))`
-
-Thus changing one adult reduction assumption automatically changes the associated young cattle throughout the model.
-
-The origin logic is:
-
-- DxD and DxB followers respond to the dairy-cow reduction signal;
-- BxB followers respond to the suckler-cow reduction signal;
-- bulls respond to the combined adult-cow reduction signal.
-
-The integer scenario closes to the rounded sum of these ED-level implied reductions. There is no separate external national target for every young cohort in the principal net-zero engine.
-
-## Breeding, rearing and finishing geography
-
-The baseline livestock geography can separate breeding from rearing/finishing activity. An ED may therefore contain young cattle even when it contains few or no corresponding breeding cows. Such an ED must not be frozen simply because its local adult denominator is zero.
-
-The response hierarchy is:
-
-`local breeding ED -> same-county receiver/rearing/finishing ED -> national orphan fallback`
-
-1. **Local breeding ED**: use its own realised adult reduction rate.
-2. **Same-county receiver/rearing/finishing ED**: when the follower cohort exists but the matching adult class is absent locally, inherit the realised reduction rate of the corresponding breeding adults in that county.
-3. **National orphan fallback**: only when the follower cohort exists in a county with no corresponding breeding adults at all, use the national adult reduction rate.
-
-The model records the signal source for every follower cohort as `LOCAL_ED`, `COUNTY_RECEIVER`, `NATIONAL_ORPHAN` or `NONE` so this behaviour is auditable.
-
-This structure allows finishing/rearing locations to contract when the breeding stock supplying the production chain contracts, while still preserving local and county livestock geography.
-
-## Sheep
-
-The current principal control is a reduction fraction applied to `TOTAL_SHEEP`. The resulting ED total-sheep reduction is disaggregated through the existing ten GOBLIN sheep cohorts in proportion to the cohorts already present in each ED. This preserves local lowland/upland and age structure and does not invent separate national young-sheep targets.
-
-If the study later fixes a specifically ewe-led sheep mechanism, that should be introduced explicitly rather than silently changing the meaning of the current `sheep_reduction` control.
-
-## Complete livestock state
-
-The scenario therefore produces a full baseline and scenario state for:
-
-- 21 cattle cohorts;
-- 10 sheep cohorts;
-- 31 livestock cohorts in total.
-
-For cattle cohort k:
-
-- `BASE_COHORT_k`
-- `REDUCTION_COHORT_k`
-- `SCENARIO_COHORT_k`
-- `REDUCTION_SIGNAL_k`
-- `REDUCTION_SIGNAL_SOURCE_k`
-
-For sheep cohort k:
-
-- `BASE_SHEEP_COHORT_k`
-- `REDUCTION_SHEEP_COHORT_k`
-- `SCENARIO_SHEEP_COHORT_k`
-
-Every scenario count obeys:
-
-`Scenario = Baseline - Reduction`
-
-and no scenario cohort may become negative.
-
-## Parameter reaction is the central scenario test
-
-The scenario engine must satisfy a simple reaction property:
-
-- hold the baseline fixed;
-- change one adult reduction parameter;
-- the corresponding adult scenario changes;
-- related follower cohorts change automatically;
-- unrelated livestock groups remain unchanged unless their own control changes.
-
-For example, increasing only the dairy-cow reduction must reduce dairy cows and dairy-origin DxD/DxB followers, including same-county finishing/rearing EDs, while BxB cohorts remain unchanged when the suckler reduction remains unchanged.
-
-This is tested directly in `tests/test_net_zero.py`.
-
-## Standard Output is downstream
-
-Standard Output is evaluated only after the physical 31-cohort scenario has been solved:
-
-`BaselineSO(e) = sum_k BaselineActivity(e,k) * SOCoefficient(e,k)`
-
-`ScenarioSO(e) = sum_k ScenarioActivity(e,k) * SOCoefficient(e,k)`
-
-`SOExposure(e) = BaselineSO(e) - ScenarioSO(e)`
-
-Changing an SO coefficient must never change livestock numbers. Changing a livestock scenario parameter can change SO because the underlying physical activities change.
-
-SO is production-value exposure, not farm income, profit or welfare.
-
-## LSU is a diagnostic, not the land-release equation
-
-Scenario LSU may be calculated from the reconciled livestock state for reporting and stocking-pressure diagnostics. It is not the primary spared-grassland equation.
-
-GOBLIN-Spatial follows the feed-balance sequence:
-
-`31-cohort livestock population -> pasture dry-matter demand -> effective grass supply -> required grassland`
-
-For ED e:
-
-`PastureDM(e) = sum_k Population(e,k) * PastureDMPerHead(k)`
-
-The selected baseline is calibrated as the fixed point:
-
-`BaselineEffectiveSupply(e) = BaselinePastureDM(e) / BaselineGrassland(e)`
-
-Then:
-
-`ScenarioRequiredGrassland(e) = ScenarioPastureDM(e) / ScenarioEffectiveSupply(e)`
-
 and:
 
-`PotentialSparedGrassland(e) = max(0, BaselineGrassland(e) - ScenarioRequiredGrassland(e))`
+`FollowerReduction(e,k) = BaselineFollower(e,k) * FollowerReductionRate(e,k)`
 
-If scenario demand exceeds the baseline land capacity, the model reports the additional grassland requirement rather than hiding it.
+which is exactly equivalent to:
 
-## Spared land is not automatic conversion
+`FollowerReduction(e,k) = AdultReduction(e,origin(k)) * BaselineFollower(e,k) / BaselineAdult(e,origin(k))`
 
-The analytical distinction remains:
+So the baseline adult-to-cohort ratio in each ED is preserved as the adult population contracts.
+
+## Orphan / receiver EDs
+
+Some EDs contain a young-stock cohort but no corresponding parent adults. These are receiver/orphan EDs for that cohort. They are not frozen during a cattle reduction.
+
+Their baseline relationship is recorded relative to the relevant parent adults elsewhere in the same county:
+
+`OrphanRatio(e,k) = BaselineFollower(e,k) / CountyBaselineAdult(origin(k))`
+
+When the county parent-adult population contracts:
+
+`OrphanReduction(e,k) = CountyAdultReduction(origin(k)) * OrphanRatio(e,k)`
+
+which is equivalent to:
+
+`OrphanReduction(e,k) = BaselineFollower(e,k) * CountyAdultReductionRate(origin(k))`
+
+Therefore a receiver ED loses young stock when the breeding-cow population supplying that county falls. No arbitrary 30%, 50% or other spillover factor is imposed: the observed baseline orphan-cohort-to-county-adult relationship determines the size of the ripple.
+
+Only if the cohort exists in a county with no corresponding parent adults at all is the national adult reduction rate used as a fallback.
+
+The model records the source for every cohort as:
+
+- `LOCAL_ED`
+- `COUNTY_RECEIVER`
+- `NATIONAL_ORPHAN`
+- `NONE`
+
+## ED relationship audit table
+
+`build_ed_cohort_dependency_profile()` records, for every ED x follower cohort:
+
+- baseline year
+- ED and county
+- cohort
+- parent adult origin
+- baseline parent adults
+- baseline cohort head
+- `ED_COHORT_PER_ADULT_RATIO`
+- county parent-adult total
+- county cohort total
+- `ORPHAN_COHORT_PER_COUNTY_ADULT_RATIO`
+- `ORPHAN_SHARE_OF_COUNTY_COHORT`
+- cohort spatial role
+
+These are transparent accounting relationships. They are not claimed to be observed animal-movement links.
+
+## National biological closure
+
+GOBLIN/COHORTS remains authoritative for the national biological target of each cattle cohort. GOBLIN-Spatial uses the local and county ripple relationships only to determine where the required national cohort reduction falls.
+
+The integer allocation is bounded by the existing ED cohort stock and closes exactly to the national cohort target.
+
+## Cattle-only study scenarios
+
+The study-facing interface keeps sheep fixed and supports:
+
+- dairy-only reduction
+- suckler-only reduction
+- combined dairy + suckler reduction
+- reproducible randomised spatial-incidence sensitivity for the same national endpoint
+
+The same engine works from a 2020 or 2025 starting state and for any endpoint reduction fraction.
+
+## Standard Output
+
+Standard Output is calculated only after the physical cattle state has been solved. It reports production-value exposure and never drives animal allocation.
+
+## Grassland release
+
+The solved cattle pathway, with unchanged sheep context, is passed to GOBLIN pasture/feed accounting:
+
+`scenario livestock -> pasture dry-matter demand -> required grassland -> potential spared grassland`
+
+The validated ED `ALL_GRASSLAND` remains the controlling land total. Potential spared grassland and any additional grassland requirement are reported separately.
+
+## Alternative land opportunity
+
+Potential release is not automatic land-use conversion:
 
 `PotentialRelease != Opportunity != RealisedConversion`
 
-A hectare no longer required for livestock feed is not automatically forestry, rewetting, cropland, bioenergy or nature land. Soil, capability and other suitability screening occurs only after potential release has been calculated.
-
-## Principal workflow
-
-```text
-validated annual ED panel
-        |
-        +--> choose baseline year: 2020 or 2025
-        |
-        +--> edit net-zero controls
-             - dairy reduction
-             - suckler reduction
-             - sheep reduction
-             - target year
-        |
-        +--> pro-rata adult livestock reduction from existing ED footprint
-        |
-        +--> ED adult-to-young cohort response
-        |
-        +--> same-county rearing/finishing response
-        |
-        +--> national orphan fallback only where required
-        |
-        +--> complete 21 cattle + 10 sheep scenario
-        |
-        +--> Standard Output exposure
-        |
-        +--> pasture dry-matter demand
-        |
-        +--> required grassland
-        |
-        +--> potential spared grassland
-        |
-        +--> downstream land-opportunity screening
-```
-
-The principal study question is therefore not which named national policy pathway is chosen. It is how the validated Irish ED livestock system reacts spatially to a specified net-zero reduction in the adult livestock controls, given the observed breeding/rearing/finishing and cohort structure of each place.
+ED soil and forest context are used only after potential release has been calculated to screen where forestry, rewetting, AD grass, willow, energy grass and nature/restoration may be plausible.
