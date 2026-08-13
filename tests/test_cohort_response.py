@@ -8,7 +8,10 @@ import pytest
 
 from goblin_spatial.cattle.cohorts import FINAL_21_COHORTS
 from goblin_spatial.scenario import allocate_cattle_cohort_response
-from goblin_spatial.scenario.cohort_response import _reduction_signal
+from goblin_spatial.scenario.cohort_response import (
+    _reduction_signal,
+    build_ed_cohort_dependency_profile,
+)
 
 
 def _adult_scenario() -> pd.DataFrame:
@@ -84,9 +87,6 @@ def test_receiver_rearing_ed_uses_same_county_reduction_signal():
     targets = _targets(frame)
     out = allocate_cattle_cohort_response(frame, targets)
 
-    # C has no dairy cows but contains dairy-origin animals. It therefore uses
-    # the dairy reduction rate of its own county rather than being excluded or
-    # automatically inheriting a national receiver rate.
     c = out.loc[out["CSOED"] == "C"].iloc[0]
     expected_county_rate = 20 / 120
 
@@ -104,22 +104,82 @@ def test_reduction_signal_is_ed_first_county_second_and_orphan_last():
         counties=np.array(["X", "X", "Y", "Y", "Z"], dtype=object),
     )
 
-    # Breeding EDs use their own local adult reduction rates.
     assert signal[0] == pytest.approx(0.50)
     assert signal[2] == pytest.approx(0.10)
     assert source[0] == "LOCAL_ED"
     assert source[2] == "LOCAL_ED"
 
-    # Receiver EDs inherit only their own county's breeding reduction rate.
     assert signal[1] == pytest.approx(0.50)
     assert signal[3] == pytest.approx(0.10)
     assert source[1] == "COUNTY_RECEIVER"
     assert source[3] == "COUNTY_RECEIVER"
 
-    # County Z has a cohort but no corresponding breeding adults: only this
-    # sparse orphan case uses the national fallback rate (60 / 200 = 0.30).
     assert signal[4] == pytest.approx(0.30)
     assert source[4] == "NATIONAL_ORPHAN"
+
+
+def test_mixed_ed_blends_local_and_county_rearing_dependence_without_fixed_factor():
+    # National coefficient is 100 cohort / 200 adults = 0.5 cohort per adult.
+    # ED A has 100 adults and 80 cohort head: 50 are locally supportable and 30
+    # are inferred receiver/rearing stock. Hence local share=0.625 and county
+    # dependence share=0.375. Local adult reduction is 20%, while the county
+    # reduction is 40%; the effective cohort signal is therefore 27.5%.
+    signal, source = _reduction_signal(
+        base_adults=np.array([100, 100]),
+        adult_reductions=np.array([20, 60]),
+        cohort_base=np.array([80, 20]),
+        counties=np.array(["X", "X"], dtype=object),
+    )
+
+    expected = 0.625 * 0.20 + 0.375 * 0.40
+    assert source[0] == "MIXED_ED_COUNTY"
+    assert signal[0] == pytest.approx(expected)
+    assert source[1] == "LOCAL_ED"
+    assert signal[1] == pytest.approx(0.60)
+
+
+def test_dependency_profile_exposes_ed_cohort_roles_for_paper_and_audit():
+    frame = pd.DataFrame(
+        {
+            "YEAR": [2020, 2020, 2020],
+            "CSOED": ["A", "B", "C"],
+            "County": ["X", "X", "X"],
+            "DAIRY_COW": [100, 100, 0],
+            "OTHER_COW": [50, 50, 0],
+        }
+    )
+    for cohort in FINAL_21_COHORTS:
+        if cohort == "dairy_cows":
+            frame[cohort] = frame["DAIRY_COW"]
+        elif cohort == "suckler_cows":
+            frame[cohort] = frame["OTHER_COW"]
+        elif cohort == "bulls":
+            frame[cohort] = [5, 5, 2]
+        elif cohort.startswith("DxD_") or cohort.startswith("DxB_"):
+            frame[cohort] = [80, 20, 20]
+        else:
+            frame[cohort] = [20, 20, 10]
+
+    profile = build_ed_cohort_dependency_profile(frame)
+    assert set(profile["YEAR"]) == {2020}
+    assert len(profile) == 3 * (len(FINAL_21_COHORTS) - 2)
+    assert {
+        "COHORT_PER_ADULT_COEFFICIENT",
+        "LOCAL_SUPPORT_SHARE",
+        "COUNTY_DEPENDENCY_SHARE",
+        "COHORT_SPATIAL_ROLE",
+    }.issubset(profile.columns)
+
+    dxb_a = profile.loc[
+        (profile["CSOED"] == "A") & (profile["COHORT"] == "DxB_calves_m")
+    ].iloc[0]
+    dxb_c = profile.loc[
+        (profile["CSOED"] == "C") & (profile["COHORT"] == "DxB_calves_m")
+    ].iloc[0]
+    assert dxb_a["COHORT_SPATIAL_ROLE"] == "MIXED_ED_COUNTY"
+    assert 0 < dxb_a["COUNTY_DEPENDENCY_SHARE"] < 1
+    assert dxb_c["COHORT_SPATIAL_ROLE"] == "COUNTY_RECEIVER"
+    assert dxb_c["COUNTY_DEPENDENCY_SHARE"] == pytest.approx(1.0)
 
 
 def test_cohort_response_rejects_adult_target_inconsistent_with_adult_allocation():
