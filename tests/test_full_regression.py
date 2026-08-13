@@ -8,9 +8,11 @@ import pytest
 from goblin_spatial.config import load_config
 from goblin_spatial.export import build_clean_sheets
 from goblin_spatial.pipeline import build
+from goblin_spatial.pressure import load_pasture_dm_control
 from goblin_spatial.scenario import (
     PRE_ADULT_CATTLE_COHORTS,
     make_cattle_scenario,
+    reduction_schedule,
     run_cattle_study,
 )
 
@@ -82,6 +84,45 @@ def _assert_cattle_scenario_closure(
     assert (result.ed["SCENARIO_GOBLIN_31_LIVESTOCK_TOTAL"] >= 0).all()
 
 
+def _pasture_profiles(config, definition):
+    control = config.files["pasture_dm_controls"]
+    assert control.exists(), f"missing frozen pasture-DM control: {control}"
+    schedule = reduction_schedule(definition)
+    years = {
+        int(definition.baseline_year),
+        *schedule["MILESTONE_YEAR"].astype(int).tolist(),
+    }
+    return load_pasture_dm_control(control, required_years=years)
+
+
+def _assert_grassland_closure(run) -> None:
+    ed = run.scenario.ed
+    required = {
+        "SCENARIO_REQUIRED_GRASSLAND_HA",
+        "SIGNED_GRASSLAND_BALANCE_HA",
+        "POTENTIAL_SPARED_GRASSLAND_HA",
+        "ADDITIONAL_GRASSLAND_REQUIRED_HA",
+        "RETAINED_GRASSLAND_WITHIN_BASELINE_HA",
+    }
+    assert required.issubset(ed.columns)
+    assert (ed["POTENTIAL_SPARED_GRASSLAND_HA"] >= -1e-9).all()
+    assert (ed["POTENTIAL_SPARED_GRASSLAND_HA"] <= ed["ALL_GRASSLAND"] + 1e-8).all()
+
+    # With a fixed per-head feed profile and a cattle-reduction-only scenario,
+    # no ED should require more grassland than its selected baseline state.
+    assert float(ed["ADDITIONAL_GRASSLAND_REQUIRED_HA"].max()) <= 1e-8
+    assert np.allclose(
+        ed["SCENARIO_REQUIRED_GRASSLAND_HA"]
+        + ed["SIGNED_GRASSLAND_BALANCE_HA"],
+        ed["ALL_GRASSLAND"],
+        atol=1e-7,
+    )
+
+    ordered = ed.sort_values(["CSOED", "MILESTONE_YEAR"], kind="stable")
+    diff = ordered.groupby("CSOED", sort=False)["POTENTIAL_SPARED_GRASSLAND_HA"].diff()
+    assert (diff.dropna() >= -1e-7).all()
+
+
 @pytest.mark.full_data
 def test_complete_build_regression() -> None:
     config = load_config(CONFIG)
@@ -129,8 +170,8 @@ def test_complete_build_regression() -> None:
     assert "Soil_Profile" not in sheets
 
     # Real-data scenario acceptance test. The principal study changes cattle
-    # only; sheep remain fixed context. Standard Output is attached here, after
-    # the physical herd is solved, not in the historical baseline.
+    # only; sheep remain fixed context. Standard Output and GOBLIN-style
+    # grassland release are attached here, after the physical herd is solved.
     scenarios = [
         make_cattle_scenario(
             name="DAIRY_30_FROM_2020",
@@ -170,6 +211,7 @@ def test_complete_build_regression() -> None:
             config=config,
             expected_eds=2857,
             include_standard_output=True,
+            pasture_dm_t_per_head_by_year=_pasture_profiles(config, definition),
         )
         runs[definition.name] = run
         _assert_cattle_scenario_closure(
@@ -178,6 +220,7 @@ def test_complete_build_regression() -> None:
             dairy=definition.dairy_reduction,
             suckler=definition.suckler_reduction,
         )
+        _assert_grassland_closure(run)
 
         # Every real run must expose the exact ED x 18 pre-adult relationship
         # table and the milestone-specific long cohort audit.
@@ -228,3 +271,12 @@ def test_complete_build_regression() -> None:
     receiver_audit = audit["COHORT_SPATIAL_ROLE"] == "COUNTY_RECEIVER"
     assert receiver_audit.any()
     assert (audit.loc[receiver_audit, "CUMULATIVE_REDUCTION_HEAD"] > 0).any()
+
+    # Print the two principal real-data land-release diagnostics so the CI log
+    # records the actual outcome produced by the frozen GOBLIN feed profile.
+    for name in ("BOTH_30_FROM_2020", "BOTH_30_FROM_2025"):
+        national = runs[name].scenario.national.set_index("MILESTONE_YEAR")
+        print(
+            f"REAL_{name}_2050_POTENTIAL_SPARED_GRASSLAND_HA="
+            f"{float(national.loc[2050, 'POTENTIAL_SPARED_GRASSLAND_HA']):.6f}"
+        )
