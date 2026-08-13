@@ -37,6 +37,7 @@ from goblin_spatial.scenario.sequential import (
 )
 from goblin_spatial.scenario.cattle_study import (
     make_cattle_scenario,
+    make_cattle_scenario_from_goblin_endpoint,
     cattle_reduction_suite,
 )
 from goblin_spatial.scenario.study_workflow import (
@@ -76,6 +77,7 @@ __all__ = [
     "run_sequential_scenario",
     "standard_reduction_suite",
     "make_cattle_scenario",
+    "make_cattle_scenario_from_goblin_endpoint",
     "cattle_reduction_suite",
     "PRE_ADULT_CATTLE_COHORTS",
     "CattleStudyRun",
