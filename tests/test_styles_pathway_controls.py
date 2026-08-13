@@ -17,6 +17,12 @@ def test_si_split_gas_land_accounting_closes_exactly():
     assert milestone.dairy_cows == 1_600_000
     assert milestone.suckler_cows == 160_000
     assert milestone.livestock_land_release_ha == 1_593_000.0
+    assert dict(milestone.livestock_land_release_by_system_ha) == {
+        "DAIRY": 53_000.0,
+        "BEEF": 1_534_000.0,
+        "SHEEP": 6_000.0,
+    }
+    assert sum(milestone.livestock_land_release_by_system_ha.values()) == milestone.livestock_land_release_ha
     assert milestone.land_use_targets_ha["AD_GRASS"] == 130_000.0
     assert milestone.land_use_targets_ha["FOREST"] == 374_000.0
     assert milestone.available_land_residual_ha == 1_089_000.0
@@ -31,6 +37,12 @@ def test_be_split_gas_land_accounting_closes_exactly():
     assert milestone.dairy_cows == 1_540_000
     assert milestone.suckler_cows == 154_000
     assert milestone.livestock_land_release_ha == 1_587_000.0
+    assert dict(milestone.livestock_land_release_by_system_ha) == {
+        "DAIRY": 89_000.0,
+        "BEEF": 1_492_000.0,
+        "SHEEP": 6_000.0,
+    }
+    assert sum(milestone.livestock_land_release_by_system_ha.values()) == milestone.livestock_land_release_ha
     assert milestone.land_use_targets_ha["AD_GRASS"] == 130_000.0
     assert milestone.land_use_targets_ha["BIOREFINERY_GRASS"] == 180_000.0
     assert milestone.land_use_targets_ha["WILLOW"] == 400_000.0
@@ -48,5 +60,6 @@ def test_2025_run_keeps_livestock_endpoint_but_withholds_2020_land_release():
     assert milestone.dairy_cows == 1_600_000
     assert milestone.suckler_cows == 160_000
     assert milestone.livestock_land_release_ha is None
+    assert dict(milestone.livestock_land_release_by_system_ha) == {}
     assert dict(milestone.land_use_targets_ha) == {}
     assert milestone.available_land_residual_ha is None
