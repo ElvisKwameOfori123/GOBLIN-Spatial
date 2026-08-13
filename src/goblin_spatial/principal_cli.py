@@ -31,12 +31,8 @@ def _parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument("scenario", choices=("SI_SG", "BE_SG"))
-    parser.add_argument(
-        "--config", default="configs/ireland_2015_2025.yaml"
-    )
-    parser.add_argument(
-        "--baseline-year", type=int, choices=(2020, 2025), default=2020
-    )
+    parser.add_argument("--config", default="configs/ireland_2015_2025.yaml")
+    parser.add_argument("--baseline-year", type=int, choices=(2020, 2025), default=2020)
     parser.add_argument(
         "--allocation-rule",
         choices=tuple(rule.value for rule in AllocationRule),
@@ -202,12 +198,17 @@ def main() -> None:
 
     soil_profile = _required_file(cfg, "agricultural_soil_profile")
     lpis_profile = _required_file(cfg, "lpis_ed_profile")
-    enriched = add_ed_agricultural_soil(ed, soil_profile)
-    enriched = add_ed_lpis_context(
-        enriched,
-        lpis_profile,
-        baseline_year=int(args.baseline_year),
+    enriched = (
+        ed
+        if "GOBLIN_SOIL_G1_SHARE" in ed.columns
+        else add_ed_agricultural_soil(ed, soil_profile)
     )
+    if "LPIS_GRASS_CONTEXT_AVAILABLE" not in enriched.columns:
+        enriched = add_ed_lpis_context(
+            enriched,
+            lpis_profile,
+            baseline_year=int(args.baseline_year),
+        )
     allocated = allocate_styles_released_land_targets(
         enriched,
         controls,
