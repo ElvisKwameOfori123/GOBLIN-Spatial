@@ -13,6 +13,16 @@ The contract supports three levels of cattle control:
 No missing national quantities are invented here. National livestock-land
 release, future land-use targets and residual available land are carried as
 separate fields because they have different accounting meanings.
+
+For the principal reduction study, adult GOBLIN values are absolute endpoints.
+The remaining adjustment is always calculated from the selected spatial
+baseline:
+
+    reduction = selected baseline national stock - GOBLIN endpoint
+
+Therefore 2020 and 2025 runs can share the same pathway endpoint while carrying
+different remaining reductions. The principal allocator never rebuilds a future
+ED herd from zero.
 """
 
 from __future__ import annotations
@@ -39,6 +49,22 @@ def _as_non_negative_float(label: str, value: float) -> float:
     if number < 0.0:
         raise ValueError(f"{label} must be non-negative")
     return number
+
+
+def _reduction_from_endpoint(label: str, baseline: int, endpoint: int) -> tuple[int, float]:
+    """Return absolute and fractional reduction for a reduction-only pathway."""
+
+    baseline = _as_non_negative_int(f"baseline_{label}", baseline)
+    endpoint = _as_non_negative_int(f"endpoint_{label}", endpoint)
+    if endpoint > baseline:
+        raise ValueError(
+            f"{label} endpoint ({endpoint}) exceeds selected baseline ({baseline}); "
+            "the principal GOBLIN-Spatial study is reduction-only and does not "
+            "seed or expand livestock to reach an endpoint"
+        )
+    reduction = baseline - endpoint
+    fraction = 0.0 if baseline == 0 else reduction / baseline
+    return reduction, float(fraction)
 
 
 @dataclass(frozen=True)
@@ -139,6 +165,37 @@ class GoblinNationalMilestone:
                 ),
             )
 
+    def adult_reductions_from_baseline(
+        self,
+        *,
+        baseline_dairy_cows: int,
+        baseline_suckler_cows: int,
+    ) -> dict[str, int | float]:
+        """Calculate the remaining adult adjustment from one selected baseline.
+
+        The milestone stores the destination. This method calculates the distance
+        from the chosen 2020 or 2025 national baseline to that destination. It
+        intentionally rejects expansion because the principal spatial experiment
+        allocates reductions across livestock already present at baseline.
+        """
+
+        dairy_n, dairy_fraction = _reduction_from_endpoint(
+            "dairy_cows", baseline_dairy_cows, self.dairy_cows
+        )
+        suckler_n, suckler_fraction = _reduction_from_endpoint(
+            "suckler_cows", baseline_suckler_cows, self.suckler_cows
+        )
+        return {
+            "baseline_dairy_cows": int(baseline_dairy_cows),
+            "target_dairy_cows": int(self.dairy_cows),
+            "dairy_reduction_n": int(dairy_n),
+            "dairy_reduction_fraction": float(dairy_fraction),
+            "baseline_suckler_cows": int(baseline_suckler_cows),
+            "target_suckler_cows": int(self.suckler_cows),
+            "suckler_reduction_n": int(suckler_n),
+            "suckler_reduction_fraction": float(suckler_fraction),
+        }
+
 
 @dataclass(frozen=True)
 class GoblinPathwayControls:
@@ -187,6 +244,21 @@ class GoblinPathwayControls:
             if milestone.year == year:
                 return milestone
         raise KeyError(f"no GOBLIN national milestone for year {year}")
+
+    def adult_reductions_from_baseline(
+        self,
+        *,
+        baseline_dairy_cows: int,
+        baseline_suckler_cows: int,
+        year: int | None = None,
+    ) -> dict[str, int | float]:
+        """Return baseline-minus-endpoint reductions for one pathway milestone."""
+
+        milestone = self.milestone(self.target_year if year is None else year)
+        return milestone.adult_reductions_from_baseline(
+            baseline_dairy_cows=baseline_dairy_cows,
+            baseline_suckler_cows=baseline_suckler_cows,
+        )
 
     def total_cattle_targets_by_year(self) -> dict[int, int]:
         """Return only explicitly supplied national total-cattle targets."""
