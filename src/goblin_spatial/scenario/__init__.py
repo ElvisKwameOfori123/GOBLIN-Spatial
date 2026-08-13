@@ -11,6 +11,7 @@ from goblin_spatial.scenario.goblin_controls import (
     GoblinPathwayControls,
     load_adult_endpoint_controls,
 )
+from goblin_spatial.scenario.endpoint_change import signed_adult_endpoint_change
 from goblin_spatial.scenario.reconciliation import build_goblin_reconciliation
 from goblin_spatial.scenario.principal_endpoint import run_principal_goblin_endpoint
 from goblin_spatial.scenario.net_zero import (
@@ -39,7 +40,6 @@ from goblin_spatial.scenario.sequential import (
 )
 from goblin_spatial.scenario.cattle_study import (
     make_cattle_scenario,
-    make_cattle_scenario_from_goblin_endpoint,
     cattle_reduction_suite,
 )
 from goblin_spatial.scenario.study_workflow import (
@@ -62,6 +62,7 @@ __all__ = [
     "GoblinNationalMilestone",
     "GoblinPathwayControls",
     "load_adult_endpoint_controls",
+    "signed_adult_endpoint_change",
     "build_goblin_reconciliation",
     "run_principal_goblin_endpoint",
     "allocate_adult_livestock_scenario",
@@ -81,7 +82,6 @@ __all__ = [
     "run_sequential_scenario",
     "standard_reduction_suite",
     "make_cattle_scenario",
-    "make_cattle_scenario_from_goblin_endpoint",
     "cattle_reduction_suite",
     "PRE_ADULT_CATTLE_COHORTS",
     "CattleStudyRun",
