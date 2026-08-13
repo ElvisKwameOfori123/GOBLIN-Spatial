@@ -11,48 +11,51 @@ The source-controlled adult endpoints are in `configs/styles_split_gas_adult_end
 
 Both endpoints use the reported 10:1 dairy:suckler profile. These values are adult controls only. They do not create a total-cattle target or a gross released-land target unless those quantities are supplied separately from the matching GOBLIN pathway.
 
-## Reduction calculation
+## Baseline-to-endpoint adjustment
 
-GOBLIN-Spatial does not build a future ED herd from zero. For baseline year `b` and pathway `p`:
+GOBLIN-Spatial does not build a future ED herd from zero. The selected 2020 or 2025 spatial herd is reduced and re-composed to the same national endpoint.
 
-`national reduction(b,p) = national GOBLIN-Spatial baseline(b) - national pathway endpoint(p)`
+The validated national adult baselines are:
 
-The 2020 and 2025 analyses therefore use the same pathway destination but can have different remaining reductions.
+- 2020: 1,567,600 dairy + 983,500 suckler = 2,551,100 adult cows;
+- 2025: 1,588,100 dairy + 778,800 suckler = 2,366,900 adult cows.
 
-If an endpoint exceeds the selected baseline for an adult category, the principal reduction-only study fails rather than expanding or seeding that category.
+Therefore both SI_SG and BE_SG are large **overall adult-cow contractions** from either baseline. However, SI_SG is not a dairy reduction: its 1.600 million dairy endpoint is 32,400 above the 2020 dairy baseline and 11,900 above the 2025 dairy baseline. The pathway combines a small dairy increase with a very large suckler reduction.
+
+The principal spatial quantity allocated by the protection rules is therefore:
+
+`total adult-cow reduction = baseline adult cows - pathway adult endpoint`
+
+not an independent requirement that every livestock category must decline in every ED.
 
 ## Principal endpoint route
 
-`run_principal_goblin_endpoint()` is the study-facing route for the currently sourced Styles controls. It treats 2050 as the only livestock milestone because the source-controlled file currently contains a 2050 adult endpoint only.
-
-It therefore does **not** manufacture 2030 or 2040 livestock reductions by linear interpolation. The older generic sequential machinery remains useful for sensitivity analysis and for future pathway work, but it should become part of the principal SI_SG/BE_SG analysis only when matching intermediate national milestones are explicitly sourced or an interpolation assumption is deliberately declared.
+`run_principal_goblin_endpoint()` uses the sourced 2050 endpoint only. It does not manufacture 2030 or 2040 livestock reductions. Earlier milestones should enter the principal study only when matching national GOBLIN values are explicitly sourced or an interpolation assumption is deliberately declared.
 
 The principal route is:
 
-`selected baseline -> baseline minus 2050 endpoint -> ED reduction allocation -> 21-cattle-cohort response -> total cattle`
+`selected baseline -> universal total-adult contraction -> exact dairy/suckler composition -> 21-cattle-cohort response -> total cattle`
 
 ## Universal ED participation
 
-For every non-null adult reduction, every ED with a positive baseline stock of that category participates in the reduction.
+Every ED with adult cattle at baseline participates in the overall adult-cow contraction. Protection changes the intensity of that total reduction; it does not exempt an adult-cattle ED. Complete local adult-cattle exit is allowed.
 
-Protection changes reduction intensity, not participation. A protected ED still reduces, but by less than it otherwise would; the unchanged national reduction is consequently shifted toward other EDs.
+The retained adult herd is then reconciled to the exact pathway dairy:suckler composition. A category is never seeded into an ED where it was absent at baseline, but category shares can change within mixed dairy+suckler EDs. This is how SI_SG can increase dairy nationally while total adult cows still decline everywhere.
 
-An ED may reach zero in a livestock category if its allocated reduction equals its baseline stock. Zero-baseline EDs remain zero.
-
-Because counts are integer, a non-null reduction must be large enough to remove at least one animal from each eligible ED. Otherwise the universal-participation allocation is declared infeasible.
+At the end of the cohort response, every cattle-bearing ED must contain fewer total cattle than at baseline. Individual dairy-linked cohorts may increase where the pathway becomes more dairy-oriented, but the complete cattle population must contract in every ED.
 
 ## Biological response and total cattle
 
-Dairy reductions drive DxD and DxB follower changes. Suckler reductions drive BxB follower changes. Bulls respond to the combined adult-cow signal. Existing local, county-receiver and national-orphan relationships remain unchanged.
+DxD and DxB cohorts follow the scenario-to-baseline dairy-parent multiplier; BxB cohorts follow the suckler-parent multiplier; bulls follow the combined adult-cow multiplier. The existing local, county-receiver and national-orphan hierarchy is retained.
 
 After the response:
 
 `SCENARIO_TOTAL_CATTLE = sum(21 scenario cattle cohorts)`
 
-An external national total-cattle or exact 21-cohort target is used only when the matching GOBLIN pathway supplies it explicitly.
+An external national total-cattle or exact 21-cohort target is enforced only when the matching GOBLIN pathway supplies it explicitly.
 
 ## Land boundary
 
-The national adult endpoint does not by itself define gross land release. When a matching GOBLIN gross livestock-land release is later supplied, that national hectare total is spatialised using the geography of cohort-specific pasture-DM pressure reduction. The existing internally calculated `POTENTIAL_SPARED_GRASSLAND_HA` remains a separate diagnostic.
+The adult endpoint does not by itself define gross land release. When a matching GOBLIN gross livestock-land release is supplied, that national hectare total is spatialised using the geography of cohort-specific pasture-DM pressure reduction. The existing internally calculated `POTENTIAL_SPARED_GRASSLAND_HA` remains a separate diagnostic.
 
 `Available` residual land must not be substituted for gross livestock-land release.
