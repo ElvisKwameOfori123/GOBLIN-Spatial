@@ -11,8 +11,9 @@ The contract supports three levels of cattle control:
 3. exact national targets for all 21 cattle cohorts.
 
 No missing national quantities are invented here. National livestock-land
-release, future land-use targets and residual available land are carried as
-separate fields because they have different accounting meanings.
+release, optional category-resolved livestock-land release, future land-use
+targets and residual available land are carried as separate fields because they
+have different accounting meanings.
 
 For the principal study, adult GOBLIN values are absolute endpoints. Category
 changes may have different signs, as in SI_SG where dairy can rise while
@@ -59,8 +60,10 @@ class GoblinNationalMilestone:
 
     ``livestock_land_release_ha`` is gross national land release attributable to
     the livestock transition when the originating pathway supplies it.
-    ``available_land_residual_ha`` is kept separately and must not be treated as
-    the same quantity.
+    ``livestock_land_release_by_system_ha`` can additionally carry an exact
+    decomposition such as dairy/beef/sheep.  When both are supplied the system
+    components must close to the gross total. ``available_land_residual_ha`` is
+    kept separately and must not be treated as the same quantity.
     """
 
     year: int
@@ -69,6 +72,7 @@ class GoblinNationalMilestone:
     total_cattle: int | None = None
     cattle_cohorts: Mapping[str, int] | None = None
     livestock_land_release_ha: float | None = None
+    livestock_land_release_by_system_ha: Mapping[str, float] = field(default_factory=dict)
     land_use_targets_ha: Mapping[str, float] = field(default_factory=dict)
     available_land_residual_ha: float | None = None
 
@@ -120,14 +124,38 @@ class GoblinNationalMilestone:
                 self, "cattle_cohorts", MappingProxyType(validated)
             )
 
+        gross_release = None
         if self.livestock_land_release_ha is not None:
+            gross_release = _as_non_negative_float(
+                "livestock_land_release_ha", self.livestock_land_release_ha
+            )
             object.__setattr__(
                 self,
                 "livestock_land_release_ha",
-                _as_non_negative_float(
-                    "livestock_land_release_ha", self.livestock_land_release_ha
-                ),
+                gross_release,
             )
+
+        system_release = {}
+        for raw_name, raw_value in dict(self.livestock_land_release_by_system_ha).items():
+            name = str(raw_name).strip().upper()
+            if not name:
+                raise ValueError("livestock land-release system names cannot be empty")
+            if name in system_release:
+                raise ValueError(f"duplicate livestock land-release system: {name}")
+            system_release[name] = _as_non_negative_float(
+                f"livestock_land_release_by_system_ha[{name}]", raw_value
+            )
+        if gross_release is not None and system_release:
+            if abs(sum(system_release.values()) - gross_release) > 1e-6:
+                raise ValueError(
+                    "category-resolved livestock land release must sum to gross "
+                    "livestock_land_release_ha"
+                )
+        object.__setattr__(
+            self,
+            "livestock_land_release_by_system_ha",
+            MappingProxyType(system_release),
+        )
 
         targets = {}
         for raw_name, raw_value in dict(self.land_use_targets_ha).items():
@@ -283,6 +311,15 @@ class GoblinPathwayControls:
             milestone.year: float(milestone.livestock_land_release_ha)
             for milestone in self.milestones
             if milestone.livestock_land_release_ha is not None
+        }
+
+    def livestock_land_release_by_system_by_year(self) -> dict[int, dict[str, float]]:
+        """Return only explicitly supplied category-resolved land-release controls."""
+
+        return {
+            milestone.year: dict(milestone.livestock_land_release_by_system_ha)
+            for milestone in self.milestones
+            if milestone.livestock_land_release_by_system_ha
         }
 
 
