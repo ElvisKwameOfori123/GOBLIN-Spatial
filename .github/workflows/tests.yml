@@ -52,4 +52,4 @@ jobs:
 
       - name: Run full 2015-2025 regression
         if: steps.full_data.outputs.available == 'true'
-        run: pytest -q -m full_data
+        run: pytest -q -s -m full_data
