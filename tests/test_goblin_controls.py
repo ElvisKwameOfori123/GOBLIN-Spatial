@@ -1,12 +1,19 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from goblin_spatial.cattle.cohorts import FINAL_21_COHORTS
 from goblin_spatial.scenario.goblin_controls import (
     GoblinNationalMilestone,
     GoblinPathwayControls,
+    load_adult_endpoint_controls,
 )
+
+
+ROOT = Path(__file__).resolve().parents[1]
+STYLES_ENDPOINTS = ROOT / "configs/styles_split_gas_adult_endpoints.csv"
 
 
 def _cohort_targets(total_each: int = 1) -> dict[str, int]:
@@ -148,3 +155,23 @@ def test_endpoint_above_selected_baseline_is_not_a_reduction_scenario() -> None:
             baseline_dairy_cows=150,
             baseline_suckler_cows=50,
         )
+
+
+def test_frozen_styles_split_gas_adult_endpoints_are_exact() -> None:
+    si = load_adult_endpoint_controls(
+        STYLES_ENDPOINTS,
+        scenario_id="SI_SG",
+        baseline_year=2020,
+    )
+    be = load_adult_endpoint_controls(
+        STYLES_ENDPOINTS,
+        scenario_id="BE_SG",
+        baseline_year=2025,
+    )
+
+    assert si.milestone(2050).dairy_cows == 1_600_000
+    assert si.milestone(2050).suckler_cows == 160_000
+    assert be.milestone(2050).dairy_cows == 1_540_000
+    assert be.milestone(2050).suckler_cows == 154_000
+    assert si.milestone(2050).total_cattle is None
+    assert be.milestone(2050).livestock_land_release_ha is None
