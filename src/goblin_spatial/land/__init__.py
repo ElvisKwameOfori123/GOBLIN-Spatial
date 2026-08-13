@@ -19,6 +19,9 @@ from .targets import (
     read_land_use_targets,
     summarise_land_target_allocation,
 )
+from .lpis import add_ed_lpis_context, read_ed_lpis_profile
+from .lpis_spatial import build_ed_lpis_profile
+from .opportunity_v2 import add_ed_land_opportunity_scores_v2
 
 __all__ = [
     "DEFAULT_TARGET_PRIORITY",
@@ -27,10 +30,14 @@ __all__ = [
     "OPPORTUNITY_ENVELOPE_NOTE",
     "TARGET_COLUMNS",
     "add_ed_land_opportunity_scores",
+    "add_ed_land_opportunity_scores_v2",
+    "add_ed_lpis_context",
     "add_land",
     "add_spared_land_opportunity_envelope",
     "allocate_spared_land_sequentially",
     "allocate_spared_land_to_cumulative_targets",
+    "build_ed_lpis_profile",
+    "read_ed_lpis_profile",
     "read_land_use_targets",
     "summarise_land_target_allocation",
     "summarise_spared_land_opportunity_envelope",
