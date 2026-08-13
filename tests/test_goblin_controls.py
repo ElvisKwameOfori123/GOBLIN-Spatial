@@ -116,3 +116,35 @@ def test_total_cattle_cannot_be_smaller_than_adult_cows() -> None:
             suckler_cows=100,
             total_cattle=199,
         )
+
+
+def test_same_endpoint_has_different_remaining_reduction_from_2020_and_2025() -> None:
+    milestone = GoblinNationalMilestone(
+        year=2050,
+        dairy_cows=1_600_000,
+        suckler_cows=160_000,
+    )
+    earlier = milestone.adult_reductions_from_baseline(
+        baseline_dairy_cows=1_800_000,
+        baseline_suckler_cows=800_000,
+    )
+    later = milestone.adult_reductions_from_baseline(
+        baseline_dairy_cows=1_700_000,
+        baseline_suckler_cows=700_000,
+    )
+
+    assert earlier["target_dairy_cows"] == later["target_dairy_cows"] == 1_600_000
+    assert earlier["target_suckler_cows"] == later["target_suckler_cows"] == 160_000
+    assert earlier["dairy_reduction_n"] == 200_000
+    assert later["dairy_reduction_n"] == 100_000
+    assert earlier["suckler_reduction_n"] == 640_000
+    assert later["suckler_reduction_n"] == 540_000
+
+
+def test_endpoint_above_selected_baseline_is_not_a_reduction_scenario() -> None:
+    milestone = GoblinNationalMilestone(year=2050, dairy_cows=160, suckler_cows=16)
+    with pytest.raises(ValueError, match="reduction-only"):
+        milestone.adult_reductions_from_baseline(
+            baseline_dairy_cows=150,
+            baseline_suckler_cows=50,
+        )
