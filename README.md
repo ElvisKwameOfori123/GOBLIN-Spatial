@@ -94,6 +94,12 @@ These rules are deliberate components of the spatial reconstruction and should b
 pip install -e .
 ```
 
+Install the optional upstream GOBLIN feed/land packages when reproducing pasture-DM and spared-land stages:
+
+```bash
+pip install -e ".[goblin]"
+```
+
 ## Data
 
 The complete Ireland 2015-2025 development input bundle is currently versioned directly in GitHub for simple and reproducible use. The manifest pins the two principal full-data CSVs by SHA256 checksum:
@@ -101,7 +107,7 @@ The complete Ireland 2015-2025 development input bundle is currently versioned d
 - `data/raw/cattle/CSO_ED_2020.csv`
 - `data/raw/land/AQA06_Unpivoted_2013_2025.csv`
 
-The cattle, sheep, GOBLIN cohort, SE and county-region controls are also tracked in the repository. Before a public v1.0 release, larger/raw source files can be moved to a versioned Zenodo record or stable official source without changing the scientific module API.
+The cattle, sheep, GOBLIN cohort, SE and county-region controls are also tracked in the repository. The agricultural-soil layer is a downstream scenario enrichment and is not required to reconstruct the historical baseline. Before a public v1.0 release, larger/raw source files can be moved to a versioned Zenodo record or stable official source without changing the scientific module API.
 
 To verify the complete data contract:
 
@@ -109,7 +115,7 @@ To verify the complete data contract:
 goblin-spatial fetch-data --verify-only
 ```
 
-## One-command build
+## One-command historical build
 
 ```bash
 goblin-spatial build --config configs/ireland_2015_2025.yaml
@@ -133,7 +139,77 @@ VALIDATE
 EXPORT
 ```
 
+This is the formal historical-baseline boundary. Soil, Standard Output, future scenarios, grassland release and land-use allocation are downstream study layers rather than requirements for constructing the baseline.
+
 The normal user runs one command. Developers can call any module independently when updating or testing one part of the framework.
+
+## Cattle transition study
+
+The principal transition study is cattle focused. Sheep remain fixed context while dairy and suckler reductions are independently editable. A scenario can start from either the validated 2020 or 2025 ED state.
+
+The cattle baseline contains **18 distinct pre-adult cohorts** — six DxD, six DxB and six BxB age-sex cohorts — plus dairy cows, suckler cows and bulls, giving 21 cattle cohorts in total. The scenario ripple is calculated separately for every pre-adult cohort.
+
+For an ED that contains the relevant parent adults, the cohort follows that ED's own realised adult-cow reduction rate. If an ED contains a cohort but no matching parent adults, that ED×cohort relationship is treated as a county receiver and follows the reduction rate of the relevant parent adults in the same county. A national fallback is used only where the county itself has no matching parent adults.
+
+Run a scenario from an already built baseline:
+
+```bash
+goblin-spatial scenario \
+  --baseline-year 2020 \
+  --target-year 2050 \
+  --dairy-reduction 0.30 \
+  --suckler-reduction 0.30
+```
+
+Or build the baseline and run the scenario in one command:
+
+```bash
+goblin-spatial run-all \
+  --baseline-year 2020 \
+  --target-year 2050 \
+  --dairy-reduction 0.30 \
+  --suckler-reduction 0.30
+```
+
+A scenario writes:
+
+```text
+data/processed/scenarios/<scenario>/
+├── scenario_schedule.csv
+├── scenario_national_summary.csv
+├── scenario_ed_results.csv
+├── baseline_ed_18_cohort_relationships.csv
+└── scenario_ed_18_cohort_audit.csv
+```
+
+The two audit tables make the adult-to-cohort ripple explicit for every ED and every one of the 18 pre-adult cohorts, including county-receiver relationships.
+
+Standard Output is evaluated downstream after the physical herd has been solved. It never changes animal allocation.
+
+### Grassland release guardrail
+
+Spared grassland is calculated only when the user supplies an authoritative GOBLIN pasture-DM control table with columns:
+
+```text
+YEAR, COHORT, PASTURE_DM_T_PER_HEAD_YEAR
+```
+
+For example:
+
+```bash
+goblin-spatial scenario \
+  --baseline-year 2020 \
+  --target-year 2050 \
+  --dairy-reduction 0.30 \
+  --suckler-reduction 0.30 \
+  --pasture-dm-controls data/controls/pasture/goblin_pasture_dm.csv
+```
+
+If those controls are absent, the model stops after livestock/cohort and Standard Output results rather than inventing pasture coefficients or reporting unsupported spared hectares.
+
+Alternative-land shares also default to zero. Forestry, rewetting, AD grass, willow, energy grass and nature/restoration allocations are performed only when the user explicitly supplies shares and the spared-land stage has already been completed.
+
+See `docs/scenario_architecture.md` for the full study contract.
 
 ## Scientific accounting constraints
 
@@ -162,7 +238,7 @@ The final validator also reports the difference between the preserved reported a
 
 ## Outputs
 
-A successful build writes:
+A successful historical build writes:
 
 ```text
 data/processed/
@@ -171,7 +247,7 @@ data/processed/
 └── validation_summary.csv
 ```
 
-The clean workbook contains four sheets:
+The clean historical workbook contains four sheets:
 
 | Sheet | Coverage | Content |
 |---|---|---|
@@ -184,9 +260,9 @@ For the validated reference build, the CSO sheets contain **35 columns**, the GO
 
 ## What GOBLIN-Spatial can support
 
-The validated 2015-2025 spatial baseline is the principal output of the current package. Because it links nationally controlled agricultural populations with fine-scale geography, it can subsequently support applications including:
+The validated 2015-2025 spatial baseline is the principal historical output. Because it links nationally controlled agricultural populations with fine-scale geography, it can subsequently support applications including:
 
-- spatialisation of national GOBLIN pathways;
+- spatial cattle-transition analysis;
 - local livestock-pressure analysis;
 - potential grassland-release analysis;
 - catchment-scale agricultural analysis;
@@ -214,6 +290,10 @@ GOBLIN-Spatial/
 │   ├── sheep/
 │   ├── land/
 │   ├── se/
+│   ├── scenario/
+│   ├── pressure/
+│   ├── soil/
+│   ├── standard_output/
 │   ├── reconciliation/
 │   ├── validation/
 │   ├── export/
@@ -228,15 +308,17 @@ GOBLIN-Spatial/
 
 The cattle module reproduces all official ED, county and national cattle controls exactly while enforcing the corrected sparse ED-informed DxD/DxB/BxB support. In the 2020 baseline, 1,142 of 1,463 zero-dairy EDs retain zero dairy-origin young stock, while 321 receiver/rearing EDs provide the movement-aware exception required for exact closure.
 
-The modular sheep composition/cohort stage reproduces the validated sheep enrichment and all 10 GOBLIN sheep cohorts exactly. The modular land and SE stages reproduce the validated Script 6 accounting to floating-point precision. The final validation/export layer reproduces the clean-workbook dimensions: 31,427 all-year rows, 2,857 2020 rows, 35 CSO columns and 50 GOBLIN columns.
+The modular sheep composition/cohort stage reproduces the validated sheep enrichment and all 10 GOBLIN sheep cohorts exactly. The modular land and SE stages reproduce the validated Script 6 accounting to floating-point precision. The final historical validation/export layer reproduces the clean-workbook dimensions: 31,427 all-year rows, 2,857 2020 rows, 35 CSO columns and 50 GOBLIN columns.
 
-The complete input bundle is now Git-tracked, and GitHub Actions automatically runs both compact tests and the full 2015-2025 regression on each relevant update.
+The cattle-study regression additionally runs real Irish dairy-only, suckler-only and combined 30% reductions from the 2020 baseline plus a combined 30% reduction from 2025. It verifies unchanged sheep, exact adult endpoints, non-negative cohort states, all 18 ED×cohort relationships, county-receiver ripple behaviour and downstream Standard Output exposure.
+
+GitHub Actions automatically runs both compact tests and the full 2015-2025 regression on each relevant update.
 
 ## Status
 
-**Validated Ireland 2015-2025 spatial agricultural baseline complete. Modular Python package implemented. Complete input bundle Git-tracked and full-data CI regression active.**
+**Validated Ireland 2015-2025 spatial agricultural baseline complete. Cattle-only sequential transition workflow implemented and regression-tested.**
 
-The current package should be regarded as a validated spatial baseline and data-generation framework. Future extensions can use this foundation to allocate national GOBLIN pathways and analyse their local agricultural and land-use consequences.
+The remaining empirical gate for reported spared-hectare results is a pinned authoritative GOBLIN pasture-DM control table derived from upstream GOBLIN animal/feed definitions. Until that control is supplied, the model deliberately does not claim real spared-grassland quantities.
 
 ## Author
 
