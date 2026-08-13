@@ -1,4 +1,4 @@
-manifest_version: "0.6.0"
+manifest_version: "0.7.0"
 release: "ireland-2015-2025-dev"
 status: "development"
 
@@ -89,6 +89,16 @@ datasets:
     path: "data/controls/cohort2012-2020.csv"
     git_tracked: true
     required: true
+
+  goblin_pasture_dm_2020_fixed:
+    module: [scenario, pressure, land]
+    description: "Frozen 31-cohort GOBLIN pasture dry-matter requirements used by the cattle-only population-reduction study under fixed 2020 feed/management parameters."
+    source: "git"
+    path: "data/controls/pasture/GOBLIN_pasture_dm_2020_fixed.csv"
+    git_tracked: true
+    sha256: "084fc151e40fc7f499f62932da6181802f3b124c30c5427b88346581fa454d8f"
+    required: true
+    note: "Derived and parity-tested against pinned public packages livestock_generation 0.2.2, cattle_lca 0.3.1 and sheep_lca 0.3.1. This is a fixed-2020 per-head feed parameterisation reused at future milestones in the principal cattle-population-only scenario; year/scenario-specific GOBLIN controls should replace it when feed or productivity management changes."
 
   se_controls:
     module: [se]
