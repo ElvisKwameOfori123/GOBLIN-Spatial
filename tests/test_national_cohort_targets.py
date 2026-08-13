@@ -18,7 +18,7 @@ def test_reference_loads_complete_2020_cattle_profile():
     assert reference["suckler_cows"] == 953.0
 
 
-def test_adult_endpoints_generate_complete_exact_21_cohort_target():
+def test_si_adult_endpoint_generates_complete_21_cohort_target():
     reference = load_goblin_cohort_reference(REFERENCE, reference_year=2020)
     targets = derive_national_cohort_targets(
         dairy_cows=1_600_000,
@@ -28,7 +28,21 @@ def test_adult_endpoints_generate_complete_exact_21_cohort_target():
     assert set(targets) == set(FINAL_21_COHORTS)
     assert targets["dairy_cows"] == 1_600_000
     assert targets["suckler_cows"] == 160_000
-    assert sum(targets.values()) > 1_760_000
+    # COHORTS-implied total from the frozen 2020 biological relationship.
+    # This is not labelled as a directly reported Styles total-cattle endpoint.
+    assert sum(targets.values()) == 4_841_014
+
+
+def test_be_adult_endpoint_generates_complete_21_cohort_target():
+    reference = load_goblin_cohort_reference(REFERENCE, reference_year=2020)
+    targets = derive_national_cohort_targets(
+        dairy_cows=1_540_000,
+        suckler_cows=154_000,
+        reference_counts=reference,
+    )
+    assert targets["dairy_cows"] == 1_540_000
+    assert targets["suckler_cows"] == 154_000
+    assert sum(targets.values()) == 4_659_476
 
 
 def test_exact_total_cattle_override_reconciles_followers_only():
