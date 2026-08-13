@@ -88,6 +88,20 @@ def build_goblin_reconciliation(
                 "LAND_RELEASE",
             )
 
+        for system, target in milestone.livestock_land_release_by_system_ha.items():
+            column = f"GOBLIN_RELEASED_{str(system).upper()}_LAND_HA"
+            if column not in block.columns:
+                raise ValueError(
+                    "GOBLIN pathway supplies category-resolved livestock land release "
+                    f"but scenario output is missing {column}"
+                )
+            add_closed(
+                f"LIVESTOCK_LAND_RELEASE::{str(system).upper()}",
+                target,
+                pd.to_numeric(block[column], errors="raise").sum(),
+                "LAND_RELEASE_CATEGORY",
+            )
+
         for land_use, target in milestone.land_use_targets_ha.items():
             rows.append(
                 {
