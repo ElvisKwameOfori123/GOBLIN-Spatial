@@ -28,6 +28,9 @@ jobs:
       - name: Verify Git-tracked inputs
         run: goblin-spatial fetch-data --verify-only --tracked-only
 
+      - name: Probe authoritative GOBLIN pasture-DM profile
+        run: pytest -q -s tests/test_goblin_adapter.py::test_real_upstream_goblin_2020_pasture_profile_contract
+
       - name: Run compact-data tests
         run: pytest -q -m "not full_data"
 
