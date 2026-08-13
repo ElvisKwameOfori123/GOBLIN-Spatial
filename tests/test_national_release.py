@@ -5,7 +5,10 @@ import pandas as pd
 import pytest
 
 from goblin_spatial.cattle.cohorts import FINAL_21_COHORTS
-from goblin_spatial.pressure import allocate_national_goblin_land_release
+from goblin_spatial.pressure import (
+    allocate_category_resolved_goblin_land_release,
+    allocate_national_goblin_land_release,
+)
 from goblin_spatial.sheep.cohorts import GOBLIN_SHEEP_10
 
 
@@ -67,3 +70,85 @@ def test_positive_release_requires_pressure_reduction():
     profiles = {y: _profile() for y in (2020, 2030, 2050)}
     with pytest.raises(ValueError, match="cannot be spatialised"):
         allocate_national_goblin_land_release(frame, {2030: 100.0, 2050: 200.0}, profiles)
+
+
+def _category_profile():
+    return {c: 1.0 for c in (*FINAL_21_COHORTS, *GOBLIN_SHEEP_10)}
+
+
+def _category_frame():
+    rows = []
+    for ed, grass, bd, sd, bs, ss, sheep in [
+        ("A", 120.0, 20, 25, 30, 10, 20),
+        ("B", 180.0, 10, 12, 50, 20, 30),
+    ]:
+        row = {
+            "CSOED": ed,
+            "County": "Test",
+            "PATHWAY_BASELINE_YEAR": 2020,
+            "MILESTONE_YEAR": 2050,
+            "ALL_GRASSLAND": grass,
+        }
+        for cohort in FINAL_21_COHORTS:
+            base = 0
+            scenario = 0
+            if cohort == "dairy_cows":
+                base, scenario = bd, sd
+            elif cohort == "suckler_cows":
+                base, scenario = bs, ss
+            elif cohort == "bulls":
+                base, scenario = 2, 1
+            elif cohort.startswith("DxD_") or cohort.startswith("DxB_"):
+                base, scenario = (4 if ed == "A" else 2), (5 if ed == "A" else 3)
+            elif cohort.startswith("BxB_"):
+                base, scenario = (6 if ed == "A" else 10), (2 if ed == "A" else 4)
+            row[f"BASE_COHORT_{cohort}"] = base
+            row[f"SCENARIO_COHORT_{cohort}"] = scenario
+        for cohort in GOBLIN_SHEEP_10:
+            row[f"BASE_SHEEP_COHORT_{cohort}"] = sheep
+            row[f"SCENARIO_SHEEP_COHORT_{cohort}"] = sheep
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def test_category_release_closes_system_targets_and_shared_ed_capacity():
+    profiles = {2020: _category_profile(), 2050: _category_profile()}
+    out = allocate_category_resolved_goblin_land_release(
+        _category_frame(),
+        {"DAIRY": 20.0, "BEEF": 100.0, "SHEEP": 10.0},
+        profiles,
+    )
+    assert out["GOBLIN_RELEASED_DAIRY_LAND_HA"].sum() == pytest.approx(20.0)
+    assert out["GOBLIN_RELEASED_BEEF_LAND_HA"].sum() == pytest.approx(100.0)
+    assert out["GOBLIN_RELEASED_SHEEP_LAND_HA"].sum() == pytest.approx(10.0)
+    assert out["GOBLIN_RELEASED_GRASSLAND_HA"].sum() == pytest.approx(130.0)
+    assert (out["GOBLIN_RELEASED_GRASSLAND_HA"] <= out["ALL_GRASSLAND"] + 1e-9).all()
+
+
+def test_category_release_handles_dairy_land_efficiency_with_more_dairy_heads():
+    profiles = {2020: _category_profile(), 2050: _category_profile()}
+    out = allocate_category_resolved_goblin_land_release(
+        _category_frame(),
+        {"DAIRY": 15.0, "BEEF": 0.0, "SHEEP": 0.0},
+        profiles,
+    )
+    assert (
+        out["SCENARIO_DAIRY_SYSTEM_PASTURE_DM_T"]
+        > out["BASE_DAIRY_SYSTEM_PASTURE_DM_T"]
+    ).all()
+    assert out["GOBLIN_RELEASED_DAIRY_LAND_HA"].sum() == pytest.approx(15.0)
+    assert (out["GOBLIN_RELEASED_DAIRY_LAND_HA"] > 0).all()
+
+
+def test_category_release_handles_fixed_sheep_with_sourced_land_efficiency_shift():
+    profiles = {2020: _category_profile(), 2050: _category_profile()}
+    out = allocate_category_resolved_goblin_land_release(
+        _category_frame(),
+        {"DAIRY": 0.0, "BEEF": 0.0, "SHEEP": 6.0},
+        profiles,
+    )
+    assert np.allclose(
+        out["BASE_SHEEP_SYSTEM_PASTURE_DM_T"],
+        out["SCENARIO_SHEEP_SYSTEM_PASTURE_DM_T"],
+    )
+    assert out["GOBLIN_RELEASED_SHEEP_LAND_HA"].sum() == pytest.approx(6.0)
