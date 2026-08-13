@@ -2,15 +2,22 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pandas as pd
 import pytest
 
 from goblin_spatial.cattle.cohorts import FINAL_21_COHORTS
+from goblin_spatial.pressure import load_pasture_dm_control
 from goblin_spatial.pressure.goblin_adapter import (
     canonical_goblin_spatial_cohort,
     pasture_dm_profile_from_goblin_animals,
 )
 from goblin_spatial.sheep.cohorts import GOBLIN_SHEEP_10
+
+
+ROOT = Path(__file__).resolve().parents[1]
+FROZEN_CONTROL = ROOT / "data/controls/pasture/GOBLIN_pasture_dm_2020_fixed.csv"
 
 
 class _FakeFeed:
@@ -54,7 +61,7 @@ def _upstream_reference_scenario_dataframe() -> pd.DataFrame:
     """Return the public livestock_generation reference fixture.
 
     The values are copied from the upstream package's ``tests/animal_data_test.py``
-    fixture.  They are used only to exercise the public AnimalData -> cattle_lca /
+    fixture. They are used only to exercise the public AnimalData -> cattle_lca /
     sheep_lca feed path and derive an auditable per-head pasture-DM profile; they
     are not GOBLIN-Spatial livestock-population assumptions.
     """
@@ -115,11 +122,25 @@ def _upstream_reference_scenario_dataframe() -> pd.DataFrame:
         [0, "Lowland sheep", "tank liquid", 0, 0, *common[:2], *common[2:], 0, 0, 37812, 0, *tail],
         [0, "Upland sheep", "tank liquid", 0, 0, *common[:2], *common[2:], 9453, 0, 0, 0, *tail],
     ]
-    # The explicit shape assertion protects us from silently shifting fixture
-    # values relative to the upstream 28-column scenario contract.
     if any(len(row) != len(columns) for row in data):
         raise AssertionError("upstream reference fixture shape changed")
     return pd.DataFrame(data, columns=columns)
+
+
+def _real_upstream_profile() -> dict[str, float]:
+    pytest.importorskip("livestock_generation")
+    pytest.importorskip("cattle_lca")
+    pytest.importorskip("sheep_lca")
+    from livestock_generation.livestock import AnimalData
+
+    animal_class = AnimalData(
+        "ireland",
+        2020,
+        2050,
+        _upstream_reference_scenario_dataframe(),
+    )
+    animals = animal_class.create_baseline_animal_dataframe()
+    return pasture_dm_profile_from_goblin_animals(animals)
 
 
 def test_public_goblin_cohort_contract_matches_spatial_31():
@@ -149,8 +170,6 @@ def test_upstream_sheep_grazing_preserves_lowland_upland_identity():
 
 def test_duplicate_upstream_rows_are_population_weighted():
     rows = _upstream_31_rows()
-    # Replace the dairy row with two management/productivity rows.  Per-head DM
-    # is 1 and 3 kg/day with populations 1 and 3 -> weighted mean 2.5 kg/day.
     rows = [row for row in rows if row["cohort"] != "dairy_cows"]
     rows.extend(
         [
@@ -180,23 +199,22 @@ def test_zero_population_row_still_defines_future_per_head_control():
     assert profile["bulls"] == pytest.approx(4.0 * 365.0e-3)
 
 
+def test_fixed_control_expands_without_mutating_cohort_values():
+    profiles = load_pasture_dm_control(
+        FROZEN_CONTROL,
+        required_years=(2020, 2025, 2030, 2040, 2050),
+    )
+    assert set(profiles) == {2020, 2025, 2030, 2040, 2050}
+    expected = set(FINAL_21_COHORTS) | set(GOBLIN_SHEEP_10)
+    assert all(set(profile) == expected for profile in profiles.values())
+    assert profiles[2020] == profiles[2025] == profiles[2030] == profiles[2040] == profiles[2050]
+    assert profiles[2020] is not profiles[2050]
+
+
 def test_real_upstream_goblin_2020_pasture_profile_contract():
     """Exercise the real public GOBLIN animal/feed stack, not injected fakes."""
 
-    pytest.importorskip("livestock_generation")
-    pytest.importorskip("cattle_lca")
-    pytest.importorskip("sheep_lca")
-    from livestock_generation.livestock import AnimalData
-
-    animal_class = AnimalData(
-        "ireland",
-        2020,
-        2050,
-        _upstream_reference_scenario_dataframe(),
-    )
-    animals = animal_class.create_baseline_animal_dataframe()
-    profile = pasture_dm_profile_from_goblin_animals(animals)
-
+    profile = _real_upstream_profile()
     expected = set(FINAL_21_COHORTS) | set(GOBLIN_SHEEP_10)
     assert set(profile) == expected
     assert len(profile) == 31
@@ -209,3 +227,13 @@ def test_real_upstream_goblin_2020_pasture_profile_contract():
     print("\nUPSTREAM_GOBLIN_PASTURE_DM_2020_T_PER_HEAD_YEAR")
     for cohort in [*FINAL_21_COHORTS, *GOBLIN_SHEEP_10]:
         print(f"{cohort},{profile[cohort]:.12f}")
+
+
+def test_frozen_2020_control_reproduces_real_upstream_goblin_profile():
+    """Fail if the frozen control diverges from the pinned upstream implementations."""
+
+    live = _real_upstream_profile()
+    frozen = load_pasture_dm_control(FROZEN_CONTROL, required_years=(2020,))[2020]
+    assert set(frozen) == set(live)
+    for cohort, value in live.items():
+        assert frozen[cohort] == pytest.approx(value, abs=5e-12, rel=0.0), cohort
