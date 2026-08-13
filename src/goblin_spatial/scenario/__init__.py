@@ -31,8 +31,8 @@ from goblin_spatial.scenario.sequential import (
     standard_reduction_suite,
 )
 from goblin_spatial.scenario.cattle_study import (
-    cattle_reduction_suite,
     make_cattle_scenario,
+    cattle_reduction_suite,
 )
 
 __all__ = [
