@@ -15,6 +15,7 @@ from goblin_spatial.baseline import (
     add_standard_output,
     build_cattle_baseline,
     build_sheep_baseline,
+    build_signatures,
     merge_livestock,
 )
 from goblin_spatial.config import SpatialConfig, load_config
@@ -81,16 +82,16 @@ def build(config: str | Path | SpatialConfig) -> pd.DataFrame:
 
 
 def run_baseline(config: str | Path | SpatialConfig) -> pd.DataFrame:
-    """Build the complete historical baseline through Stage 08 Standard Output.
+    """Build the complete historical baseline through Stage 09 ED signatures.
 
     Final baseline order:
 
         cattle -> sheep -> merge -> land/farm structure/SE -> clean baseline
-        -> fixed-2020 Standard Output
+        -> 08 fixed-2020 Standard Output -> 09 frozen ED cohort signatures
 
-    Stage 08 is the final historical-baseline stage. Stages 08B and 08C are
-    downstream soil-context preparation for scenario analysis and are therefore
-    deliberately excluded from this function.
+    Stage 09 is a baseline output describing pre-scenario cohort geography. It
+    does not run a scenario. Stages 08B and 08C are downstream soil-context
+    preparation and are deliberately excluded from this historical baseline.
     """
 
     cfg = _config(config)
@@ -106,5 +107,15 @@ def run_baseline(config: str | Path | SpatialConfig) -> pd.DataFrame:
     output.parent.mkdir(parents=True, exist_ok=True)
     valued.to_csv(output, index=False)
 
-    print(f"Complete baseline through Standard Output: {output}")
+    signatures = build_signatures(valued, cfg)
+    signature_output = _output_path(
+        cfg,
+        "ed_signatures",
+        "data/processed/09_GOBLIN_Spatial_ED_Cohort_Signatures_2020.csv",
+    )
+    signature_output.parent.mkdir(parents=True, exist_ok=True)
+    signatures.to_csv(signature_output, index=False)
+
+    print(f"Baseline through Standard Output: {output}")
+    print(f"Final Stage 09 ED signatures: {signature_output}")
     return valued
