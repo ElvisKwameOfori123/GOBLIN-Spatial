@@ -31,28 +31,38 @@ jobs:
       - name: Verify Git-tracked and staged inputs
         run: goblin-spatial fetch-data --verify-only --tracked-only
 
-      - name: Run historical baseline contract tests
-        run: pytest -q tests/test_baseline_contract.py
+      - name: Run historical baseline tests
+        run: |
+          pytest -q \
+            tests/test_baseline_contract.py \
+            tests/test_cattle.py \
+            tests/test_data_fetch.py \
+            tests/test_export_schema.py \
+            tests/test_input_data.py \
+            tests/test_standard_output.py
 
-      - name: Run compact-data tests
-        run: pytest -q -m "not full_data"
-
-      # The historical baseline regression is intentionally independent of
-      # 08B/08C soil, LPIS, ED geometry and SC1-SC3. Those belong downstream
-      # of the Stage-09 baseline and will be tested when scenario refactoring
-      # resumes.
+      # Scenario, 08B/08C, LPIS and released-land tests are deliberately not
+      # collected in this workflow while the v1 historical baseline is being
+      # migrated. They keep their own source files for the later scenario pass.
       - name: Detect complete historical baseline bundle
         id: full_data
         shell: bash
         run: |
-          if [[ -f data/raw/cattle/CSO_ED_2020.csv && -f data/raw/land/AQA06_Unpivoted_2013_2025.csv ]]; then
+          if [[ -f data/inputs/baseline/01_CSO_ED_Agricultural_Baseline_2020.csv \
+             && -f data/inputs/baseline/01_CSO_AAA10_Cattle_County_2015_2025.csv \
+             && -f data/inputs/baseline/03_CSO_AAA09_Sheep_County_Region_2015_2025.xlsx \
+             && -f data/inputs/baseline/05A_DAFM_Sheep_Breed_Anchors_2016_2020_2022_2025.csv \
+             && -f data/inputs/baseline/05C_Cattle_Cohort_Relationships_2012_2020.csv \
+             && -f data/inputs/baseline/06_CSO_AQA06_Agricultural_Land_Use.xlsx \
+             && -f data/inputs/baseline/06_Farm_Structure_Demographic_Controls.csv \
+             && -f data/inputs/baseline/08_IFS2020_Standard_Output_Mapping.xlsx ]]; then
             echo "available=true" >> "$GITHUB_OUTPUT"
-            echo "Historical baseline inputs detected."
+            echo "Canonical historical baseline inputs detected."
           else
             echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "Historical baseline inputs not present; full regression will be skipped."
+            echo "Canonical historical baseline inputs not yet committed; full regression will be skipped."
           fi
 
       - name: Run full 2015-2025 historical regression
         if: steps.full_data.outputs.available == 'true'
-        run: pytest -q -s -m full_data
+        run: pytest -q -s tests/test_full_baseline_regression.py
