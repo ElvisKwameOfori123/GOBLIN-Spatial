@@ -12,9 +12,17 @@ The historical baseline is anchored to the **2020 CSO Electoral Division agricul
 
 ## Packaged baseline status
 
-The compact historical input package under `data/inputs/baseline/` is generated from the pinned Zenodo v1 record by `scripts/package_baseline_inputs.py`. The packaging helper verifies every file against the SHA256 recorded in `data_manifest.yaml` before the file is accepted in GitHub. Once all packaged files pass, only those historical-baseline manifest entries are activated from `git_pending` to `git`.
+The compact historical input package under `data/inputs/baseline/` is generated from the pinned Zenodo v1 record by `scripts/package_baseline_inputs.py`. The packaging helper verifies every file against the SHA256 recorded in `data_manifest.yaml` before the file is accepted in GitHub. Only verified historical-baseline entries are activated as `source: git`.
 
-The package includes the eight production inputs used by Stages 01-08 plus the separate DAFM county-sheep hold-out validation file. Soil, LPIS, ED geometry and SC1-SC3 controls are deliberately excluded from this packaging step.
+The package contains the eight production inputs used by Stages 01-08 plus the separate DAFM county-sheep hold-out validation file. Soil, LPIS, ED geometry and SC1-SC3 controls are deliberately excluded from this packaging step.
+
+The migration is guarded by three CI layers:
+
+1. **checksum verification** of all nine Git-tracked baseline/validation files against `data_manifest.yaml`;
+2. **legacy-input equivalence tests** for the eight production inputs, comparing byte identity where possible and production-semantic tables where file formats or provenance fields changed;
+3. a **complete Stage 01-09 baseline rebuild** checking the ED-year universe, cattle and sheep cohort closure, land accounting, Standard Output fields and Stage 09 signature structure.
+
+The DAFM county-sheep hold-out has no equivalent legacy Git-tracked source and is therefore verified by its pinned SHA256 rather than by an old-versus-new table comparison.
 
 ## Intended v1 layout
 
@@ -57,7 +65,7 @@ data/inputs/baseline/
 
 `06_CSO_AQA06_Agricultural_Land_Use.xlsx` and `06_Farm_Structure_Demographic_Controls.csv` supply crop, land, holding-size and holder-demographic controls.
 
-`08_IFS2020_Standard_Output_Mapping.xlsx` supplies the fixed IFS-2020 Standard Output mapping used to calculate agricultural production-value exposure.
+`08_IFS2020_Standard_Output_Mapping.xlsx` supplies the fixed IFS-2020 Standard Output mapping used to calculate agricultural production-value exposure. The frozen workbook adds clearer descriptive/provenance fields, while CI verifies that the runtime mapping keys and coefficients remain identical to the validated legacy control.
 
 ## DAFM county sheep hold-out
 
