@@ -1,4 +1,9 @@
-"""Command-line interface for GOBLIN-Spatial."""
+"""Command-line interface for GOBLIN-Spatial.
+
+Baseline and data-management commands are intentionally import-independent from
+the unfinished scenario stack. Scenario, soil-opportunity and land-allocation
+modules are imported lazily only when those commands are explicitly requested.
+"""
 
 from __future__ import annotations
 
@@ -9,24 +14,19 @@ import pandas as pd
 
 from goblin_spatial.config import load_config
 from goblin_spatial.data_fetch import fetch_data
-from goblin_spatial.land import (
-    DEFAULT_TARGET_PRIORITY,
-    LandUseAllocationDefinition,
-    add_spared_land_opportunity_envelope,
-    allocate_spared_land_to_cumulative_targets,
-    read_land_use_targets,
-    summarise_land_target_allocation,
-    summarise_spared_land_opportunity_envelope,
+from goblin_spatial.pipeline import run_baseline
+
+
+# CLI-only display default. The scientific target allocator validates the same
+# priority again when the downstream command is actually invoked.
+CLI_DEFAULT_TARGET_PRIORITY = (
+    "REWETTING",
+    "FOREST",
+    "AD_GRASS",
+    "WILLOW",
+    "ENERGY_GRASS",
+    "NATURE",
 )
-from goblin_spatial.pipeline import build
-from goblin_spatial.pressure import load_pasture_dm_control
-from goblin_spatial.scenario import (
-    build_and_run_cattle_study,
-    make_cattle_scenario,
-    reduction_schedule,
-    run_cattle_study,
-)
-from goblin_spatial.soil import add_ed_agricultural_soil
 
 
 def _add_cattle_scenario_arguments(parser: argparse.ArgumentParser) -> None:
@@ -63,9 +63,7 @@ def _add_cattle_scenario_arguments(parser: argparse.ArgumentParser) -> None:
         default=None,
         help=(
             "Optional CSV of GOBLIN pasture-DM controls. If omitted, the configured "
-            "frozen 2020 GOBLIN feed profile is used when available. A supplied file "
-            "may be either explicit YEAR x COHORT controls or one fixed PARAMETER_YEAR "
-            "profile reused at all requested years."
+            "frozen 2020 GOBLIN feed profile is used when available."
         ),
     )
     parser.add_argument(
@@ -85,9 +83,7 @@ def _add_cattle_scenario_arguments(parser: argparse.ArgumentParser) -> None:
         help="Scenario output directory. Defaults under data/processed/scenarios/.",
     )
 
-    # Legacy share allocation remains available for experiments, but all shares
-    # default to zero. The preferred publication workflow is opportunity screening
-    # followed by the explicit cumulative-target allocation command.
+    # Legacy share controls remain exposed only for backwards compatibility.
     parser.add_argument("--forest-share", type=float, default=0.0)
     parser.add_argument("--rewetting-share", type=float, default=0.0)
     parser.add_argument("--ad-grass-share", type=float, default=0.0)
@@ -125,7 +121,7 @@ def _parser() -> argparse.ArgumentParser:
 
     build_parser = sub.add_parser(
         "build",
-        help="Build the validated 2015-2025 historical baseline through land and SE.",
+        help="Build the complete 2015-2025 historical baseline through Stage 09.",
     )
     build_parser.add_argument(
         "--config",
@@ -133,9 +129,11 @@ def _parser() -> argparse.ArgumentParser:
         help="Path to the YAML build configuration.",
     )
 
+    # The following commands are retained during migration but their modules are
+    # deliberately loaded only after the user explicitly selects the command.
     scenario_parser = sub.add_parser(
         "scenario",
-        help="Run a cattle-only scenario from an existing validated baseline.",
+        help="Run a cattle scenario from an existing validated baseline.",
     )
     _add_cattle_scenario_arguments(scenario_parser)
     scenario_parser.add_argument(
@@ -188,7 +186,7 @@ def _parser() -> argparse.ArgumentParser:
         "allocate-land",
         help=(
             "Allocate spared grassland to explicit cumulative national hectare targets "
-            "using ED opportunity scores. No targets are invented by the model."
+            "using ED opportunity scores."
         ),
     )
     allocate_parser.add_argument(
@@ -220,7 +218,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     allocate_parser.add_argument(
         "--priority",
-        default=",".join(DEFAULT_TARGET_PRIORITY),
+        default=",".join(CLI_DEFAULT_TARGET_PRIORITY),
         help=(
             "Comma-separated allocation priority containing each land use exactly once. "
             "Default: %(default)s"
@@ -249,10 +247,9 @@ def _output_dir(args: argparse.Namespace, cfg) -> Path:
     return cfg.processed_dir / "scenarios" / _scenario_name(args)
 
 
-def _land_use_definition(
-    args: argparse.Namespace,
-    pasture_profiles,
-) -> LandUseAllocationDefinition | None:
+def _land_use_definition(args: argparse.Namespace, pasture_profiles):
+    from goblin_spatial.land.opportunity import LandUseAllocationDefinition
+
     shares = {
         "forest": float(args.forest_share),
         "rewetting": float(args.rewetting_share),
@@ -272,6 +269,11 @@ def _land_use_definition(
 
 
 def _pasture_profiles(args: argparse.Namespace, cfg, definition):
+    # Scenario imports are deliberately lazy so baseline commands do not depend
+    # on the unfinished scenario package during the v1 migration.
+    from goblin_spatial.pressure import load_pasture_dm_control
+    from goblin_spatial.scenario import reduction_schedule
+
     control = (
         Path(args.pasture_dm_controls)
         if args.pasture_dm_controls is not None
@@ -291,6 +293,8 @@ def _pasture_profiles(args: argparse.Namespace, cfg, definition):
 
 
 def _definition(args: argparse.Namespace):
+    from goblin_spatial.scenario import make_cattle_scenario
+
     return make_cattle_scenario(
         name=_scenario_name(args),
         baseline_year=int(args.baseline_year),
@@ -343,6 +347,12 @@ def _read_scenario_ed(path: Path) -> pd.DataFrame:
 
 
 def _run_opportunity_screen(args: argparse.Namespace) -> None:
+    from goblin_spatial.land.envelope import (
+        add_spared_land_opportunity_envelope,
+        summarise_spared_land_opportunity_envelope,
+    )
+    from goblin_spatial.soil.context_v2 import add_ed_agricultural_soil
+
     cfg = load_config(Path(args.config))
     scenario_path = Path(args.scenario_ed_results)
     scenario = _read_scenario_ed(scenario_path)
@@ -356,7 +366,9 @@ def _run_opportunity_screen(args: argparse.Namespace) -> None:
     screened = add_spared_land_opportunity_envelope(enriched)
     national = summarise_spared_land_opportunity_envelope(screened)
 
-    output_dir = Path(args.output_dir) if args.output_dir is not None else scenario_path.parent
+    output_dir = (
+        Path(args.output_dir) if args.output_dir is not None else scenario_path.parent
+    )
     output_dir.mkdir(parents=True, exist_ok=True)
     ed_output = output_dir / "scenario_ed_opportunity_envelope.csv"
     national_output = output_dir / "scenario_national_opportunity_envelope.csv"
@@ -365,19 +377,26 @@ def _run_opportunity_screen(args: argparse.Namespace) -> None:
 
     print(f"ED opportunity envelope: {ed_output}")
     print(f"National opportunity envelope: {national_output}")
-    print(
-        "Opportunity envelopes overlap and are screening diagnostics only; no "
-        "alternative-land hectares have been allocated."
-    )
 
 
 def _run_land_target_allocation(args: argparse.Namespace) -> None:
+    from goblin_spatial.land.targets import (
+        allocate_spared_land_to_cumulative_targets,
+        read_land_use_targets,
+        summarise_land_target_allocation,
+    )
+    from goblin_spatial.soil.context_v2 import add_ed_agricultural_soil
+
     cfg = load_config(Path(args.config))
     scenario_path = Path(args.scenario_ed_results)
     scenario = _read_scenario_ed(scenario_path)
     soil_path = _resolve_soil_profile(args, cfg)
     targets = read_land_use_targets(Path(args.targets))
-    priority = tuple(value.strip().upper() for value in str(args.priority).split(",") if value.strip())
+    priority = tuple(
+        value.strip().upper()
+        for value in str(args.priority).split(",")
+        if value.strip()
+    )
 
     enriched = (
         scenario
@@ -391,7 +410,9 @@ def _run_land_target_allocation(args: argparse.Namespace) -> None:
     )
     national = summarise_land_target_allocation(allocated)
 
-    output_dir = Path(args.output_dir) if args.output_dir is not None else scenario_path.parent
+    output_dir = (
+        Path(args.output_dir) if args.output_dir is not None else scenario_path.parent
+    )
     output_dir.mkdir(parents=True, exist_ok=True)
     ed_output = output_dir / "scenario_ed_land_target_allocation.csv"
     national_output = output_dir / "scenario_national_land_target_allocation.csv"
@@ -403,10 +424,6 @@ def _run_land_target_allocation(args: argparse.Namespace) -> None:
     print(f"ED land-target allocation: {ed_output}")
     print(f"National land-target allocation: {national_output}")
     print(f"Applied cumulative targets: {targets_output}")
-    print(
-        "Targets are explicit user/study inputs. Unmet hectares remain reported and "
-        "unallocated rather than being forced into ineligible EDs."
-    )
 
 
 def main() -> None:
@@ -422,8 +439,11 @@ def main() -> None:
         return
 
     if args.command == "build":
-        result = build(Path(args.config))
-        print(f"GOBLIN-Spatial historical baseline complete: {len(result):,} rows")
+        result = run_baseline(Path(args.config))
+        print(
+            "GOBLIN-Spatial historical baseline through Stage 09 complete: "
+            f"{len(result):,} ED-year rows"
+        )
         return
 
     if args.command == "opportunity":
@@ -435,6 +455,13 @@ def main() -> None:
         return
 
     if args.command in {"scenario", "run-all"}:
+        # Do not import scenario execution code unless a scenario command is
+        # explicitly requested. This keeps baseline/data commands independent.
+        from goblin_spatial.scenario import (
+            build_and_run_cattle_study,
+            run_cattle_study,
+        )
+
         cfg = load_config(Path(args.config))
         definition = _definition(args)
         profiles = _pasture_profiles(args, cfg, definition)
@@ -459,7 +486,8 @@ def main() -> None:
             )
             if not master_path.exists():
                 raise FileNotFoundError(
-                    f"historical baseline not found: {master_path}. Run 'goblin-spatial build' first."
+                    f"historical baseline not found: {master_path}. "
+                    "Run 'goblin-spatial build' first."
                 )
             panel = pd.read_csv(master_path)
             run = run_cattle_study(
@@ -476,17 +504,6 @@ def main() -> None:
 
         print(f"GOBLIN-Spatial cattle scenario complete: {definition.name}")
         print(f"Scenario outputs: {run.output_dir}")
-        if profiles is None:
-            print(
-                "Grassland release not calculated: no GOBLIN pasture-DM control table is configured."
-            )
-        else:
-            parameter_year = cfg.files.get("pasture_dm_controls")
-            if args.pasture_dm_controls is None and parameter_year is not None:
-                print(
-                    "Grassland release uses the configured fixed-2020 GOBLIN per-head "
-                    "feed profile unless year-specific controls were supplied."
-                )
         return
 
 
