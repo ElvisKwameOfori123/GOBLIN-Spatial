@@ -13,52 +13,89 @@ paths:
   interim: data/interim
   processed: data/processed
 
+# During the v1 migration, a file entry may be a preference-ordered list.
+# The canonical data/inputs path is selected when present; otherwise the
+# validated legacy path keeps the development branch runnable until the exact
+# frozen copy has been committed or fetched and regression-tested.
 files:
-  # CATTLE
-  cso_ed_2020: data/raw/cattle/CSO_ED_2020.csv
-  cso_cattle_county: data/raw/cattle/CSO_county_WIDE_2015_2025.csv.xz
+  # CATTLE: stages 01, 02, 05C
+  cso_ed_2020:
+    - data/inputs/baseline/01_CSO_ED_Agricultural_Baseline_2020.csv
+    - data/raw/cattle/CSO_ED_2020.csv
+  cso_cattle_county:
+    - data/inputs/baseline/01_CSO_AAA10_Cattle_County_2015_2025.csv
+    - data/raw/cattle/CSO_county_WIDE_2015_2025.csv.xz
 
-  # SHEEP
+  # SHEEP: stages 03_0, 03A, 03B, 05A, 05B, 05D
+  # The current legacy panel still consumes the split county/region controls.
+  # The combined frozen workbook and DAFM 03_0 input are declared now, but the
+  # final internal switch waits for exact 03_0 regression parity.
   cso_sheep_county: data/raw/sheep/CSO_Sheep_County_WIDE_2015_2025.csv.xz
   cso_sheep_region: data/raw/sheep/CSO_Sheep_Region_WIDE_2015_2025.csv.xz
-  cso_sheep_workbook: data/raw/sheep/CSO_Sheep_County_and_Region_WIDE_2015_2025.xlsx
-  sheep_breed_anchors: data/raw/sheep/DAFM_Sheep_Breed_Anchors_2016_2020_2022_2025.zip
+  cso_sheep_workbook:
+    - data/inputs/baseline/03_CSO_AAA09_Sheep_County_Region_2015_2025.xlsx
+    - data/raw/sheep/CSO_Sheep_County_and_Region_WIDE_2015_2025.xlsx
+  dafm_sheep_county_totals: data/inputs/baseline/03_0_DAFM_Sheep_County_Totals_2015_2020_2022_2025.csv
+  sheep_breed_anchors:
+    - data/inputs/baseline/05A_DAFM_Sheep_Breed_Anchors_2016_2020_2022_2025.csv
+    - data/raw/sheep/DAFM_Sheep_Breed_Anchors_2016_2020_2022_2025.zip
 
-  # LAND
-  cso_land: data/raw/land/AQA06_Unpivoted_2013_2025.csv
-
-  # GOBLIN + SE CONTROLS
-  goblin_cohorts: data/controls/cohort2012-2020.csv
-  styles_split_gas_pathway_controls: configs/styles_split_gas_pathway_controls.csv
-  se_controls: data/controls/06_SE_Data_Controls.csv
+  # LAND + FARM STRUCTURE: stage 06
+  cso_land:
+    - data/inputs/baseline/06_CSO_AQA06_Agricultural_Land_Use.xlsx
+    - data/raw/land/AQA06_Unpivoted_2013_2025.csv
+  se_controls:
+    - data/inputs/baseline/06_Farm_Structure_Demographic_Controls.csv
+    - data/controls/06_SE_Data_Controls.csv
   county_region_map: data/controls/county_region_map.csv
 
-  # FROZEN GOBLIN PASTURE FEED CONTROL
+  # SHARED GOBLIN BIOLOGICAL RELATIONSHIPS
+  goblin_cohorts:
+    - data/inputs/baseline/05C_Cattle_Cohort_Relationships_2012_2020.csv
+    - data/controls/cohort2012-2020.csv
+
+  # STANDARD OUTPUT: stage 08
+  standard_output_mapping:
+    - data/inputs/baseline/08_IFS2020_Standard_Output_Mapping.xlsx
+    - data/controls/standard_output/GOBLIN_SO_mapping.csv
+  # Optional source-audit extract retained during migration. Runtime valuation
+  # is controlled by standard_output_mapping above.
+  standard_output_coefficients: data/controls/standard_output/IFS_SOC2020_IE_model_controls.csv
+
+  # COMPACT SCENARIO CONTROLS
+  scenario_endpoints:
+    - data/inputs/scenario/SC1_Cattle_Scenario_Endpoints_2050.csv
+    - configs/styles_split_gas_pathway_controls.csv
+  styles_split_gas_pathway_controls: configs/styles_split_gas_pathway_controls.csv
+  rurality:
+    - data/inputs/scenario/SC1_ED_Rural_Mixed_Urban_2022.xlsx
+
+  # FROZEN GOBLIN PASTURE FEED CONTROL, retained as a diagnostic/sensitivity
+  # control while the principal SC1 land-release authority is migrated.
   pasture_dm_controls: data/controls/pasture/GOBLIN_pasture_dm_2020_fixed.csv
 
-  # ED AGRICULTURAL SOIL PROFILE
-  # Source UAA weights the soil shares; ALL_GRASSLAND remains authoritative.
+  # SCENARIO-READY SOIL ENRICHMENT: stages 08B and 08C
+  agricultural_soil_source:
+    - data/inputs/spatial/08B_NFS_Agricultural_Soil_Capability.csv
+    - data/external/soil/cathal.csv
   agricultural_soil_profile: data/controls/soil/ED_GOBLIN_soil_profile.csv.xz
-  agricultural_soil_source: data/external/soil/cathal.csv
+  physical_soil_package:
+    - data/inputs/spatial/08C_IFS_Mapped_Physical_Soil_Package.zip
 
-  # LPIS / SPATIAL OPPORTUNITY CONTEXT
-  # Large parcel GeoParquets remain external. The one-off overlay produces the
-  # compact two-snapshot ED control used by normal opportunity runs.
-  # IMPORTANT VERSION PIN (2026-08-13):
-  #   2020 = corrected Zenodo v2 record 21922002
-  #          LPIS_2020_GOBLIN_reduced_v2.parquet
-  #   2025 = unchanged validated Zenodo v1 record 21918924
-  #          LPIS_2025_GOBLIN_reduced.parquet
-  # Zenodo v2 currently contains the corrected 2020 derivative/support files
-  # but not the unchanged 2025 parquet, so this split-version pin is deliberate.
-  saps_ed_geography: data/external/spatial/ed/Electoral_Divisions_generalised_SAPS_Shp_with_proper_names.shp
-  lpis_2020_parcels: data/external/spatial/lpis/LPIS_2020_GOBLIN_reduced_v2.parquet
-  lpis_2025_parcels: data/external/spatial/lpis/LPIS_2025_GOBLIN_reduced.parquet
+  # SC2 SPATIAL OPPORTUNITY INPUTS
+  ed_boundaries:
+    - data/inputs/spatial/SC2_ED_Boundaries_Frozen.gpkg
+    - data/external/spatial/ed/Electoral_Divisions_generalised_SAPS_Shp_with_proper_names.shp
+  saps_ed_geography:
+    - data/inputs/spatial/SC2_ED_Boundaries_Frozen.gpkg
+    - data/external/spatial/ed/Electoral_Divisions_generalised_SAPS_Shp_with_proper_names.shp
+  lpis_2020_parcels:
+    - data/inputs/spatial/SC2_LPIS_2020_Frozen.parquet
+    - data/external/spatial/lpis/LPIS_2020_GOBLIN_reduced_v2.parquet
+  lpis_2025_parcels:
+    - data/inputs/spatial/SC2_LPIS_2025_Frozen.parquet
+    - data/external/spatial/lpis/LPIS_2025_GOBLIN_reduced.parquet
   lpis_ed_profile: data/controls/lpis/ED_LPIS_opportunity_2020_2025.csv.xz
-
-  # STANDARD OUTPUT
-  standard_output_mapping: data/controls/standard_output/GOBLIN_SO_mapping.csv
-  standard_output_coefficients: data/controls/standard_output/IFS_SOC2020_IE_model_controls.csv
 
 outputs:
   cattle_panel: data/interim/cattle_ed_2015_2025.csv
@@ -67,3 +104,4 @@ outputs:
   cohort_master: data/interim/goblin_31_cohort_master_2015_2025.csv
   enriched_master: data/processed/goblin_spatial_master_2015_2025.csv
   clean_workbook: data/processed/GOBLIN_Spatial_Final_Clean_Data_2015_2025.xlsx
+  standard_output_master: data/processed/08_GOBLIN_Spatial_Standard_Output_2015_2025.csv
