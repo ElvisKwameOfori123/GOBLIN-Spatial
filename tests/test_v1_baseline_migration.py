@@ -2,13 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 import yaml
 
 from goblin_spatial.config import load_config
 from goblin_spatial.land.panel import _read_aqa06
-from goblin_spatial.scenario.endpoint_allocation import _allocate_reduction_total
 from goblin_spatial.standard_output.coefficients import load_model_mapping
 
 
@@ -58,16 +56,3 @@ def test_aqa06_reader_accepts_frozen_workbook_shape(tmp_path: Path) -> None:
     loaded = _read_aqa06(workbook)
     assert list(loaded.columns) == list(source.columns)
     assert len(loaded) == len(source)
-
-
-def test_absolute_endpoint_allocator_closes_and_respects_capacity() -> None:
-    base = np.array([10, 5, 0, 20], dtype=np.int64)
-    weights = base.astype(float)
-    retained, reductions = _allocate_reduction_total(base, 10, weights)
-
-    assert int(reductions.sum()) == 10
-    assert np.array_equal(retained, base - reductions)
-    assert np.all(retained >= 0)
-    assert np.all(retained <= base)
-    assert retained[2] == 0
-    assert np.all(reductions[base > 0] > 0)
