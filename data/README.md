@@ -26,6 +26,8 @@ The current verified run passes all three layers: **9/9 SHA256 checks, 8/8 input
 
 The DAFM county-sheep hold-out has no equivalent legacy Git-tracked source and is therefore verified by its pinned SHA256 rather than by an old-versus-new table comparison.
 
+The historical baseline package is therefore technically ready for review. It remains on the draft refactor branch and is not merged into `main` until explicitly approved.
+
 ## Intended v1 layout
 
 ```text
