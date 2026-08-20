@@ -39,7 +39,8 @@ jobs:
             tests/test_data_fetch.py \
             tests/test_export_schema.py \
             tests/test_input_data.py \
-            tests/test_standard_output.py
+            tests/test_standard_output.py \
+            tests/test_v1_baseline_migration.py
 
       # Scenario, 08B/08C, LPIS and released-land tests are deliberately not
       # collected in this workflow while the v1 historical baseline is being
