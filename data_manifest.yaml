@@ -1,204 +1,194 @@
-manifest_version: "0.8.0"
+manifest_version: "0.9.0"
 release: "ireland-2015-2025-dev"
 status: "development"
 
-# Data architecture:
-# - compact validated controls remain versioned directly in Git;
-# - holding-linked source microdata are external and are collapsed to ED controls;
-# - large/raw GIS inputs are stored externally and fetched on demand;
-# - the published GOBLIN-Spatial spatial bundle is pinned to an immutable,
-#   version-specific Zenodo record for exact reproducibility;
-# - the Zenodo concept DOI is also recorded for citation/discovery of future
-#   versions, but model execution uses the version-specific record below.
+# GOBLIN-Spatial v1 data strategy
+# -------------------------------
+# Compact baseline and scenario-control inputs are intended to live directly
+# in GitHub under data/inputs/. Large spatial inputs are fetched from the
+# immutable Zenodo version DOI below and verified with SHA256 checksums.
+#
+# IMPORTANT MIGRATION RULE:
+# The canonical v1 paths below are the target contract. During migration,
+# scientific modules are switched to these paths only when the corresponding
+# file has been physically placed and regression-tested. Generated stage outputs
+# are not mandatory inputs.
 
 external_releases:
-  goblin_spatial_spatial_inputs_v0_1_0:
+  goblin_spatial_frozen_inputs_v1:
     repository: "Zenodo"
-    record_id: 21906755
-    version_doi: "10.5281/zenodo.21906755"
-    concept_doi: "10.5281/zenodo.21906754"
-    title: "GOBLIN-Spatial Frozen Spatial Input Bundle for Irish Electoral Division and Soil Analysis, Version 0.1.0"
-    publication_date: "2026-08-12"
+    record_id: 22035538
+    version_doi: "10.5281/zenodo.22035538"
+    concept_doi: "10.5281/zenodo.22035537"
+    title: "GOBLIN-Spatial Frozen Model Inputs for Irish Electoral Division Agricultural and Land-Transition Modelling, Version 1.0.0"
+    publication_date: "2026-08-20"
     license: "CC-BY-4.0"
 
+# Canonical v1 input contract.
+# git_pending means the file is intended to be committed directly to GitHub
+# but the package path migration is not complete yet.
+
 datasets:
-  cso_ed_2020:
-    module: [cattle, land, se]
-    description: "Fixed 2020 CSO Electoral Division agricultural baseline."
-    source: "git"
-    path: "data/raw/cattle/CSO_ED_2020.csv"
-    git_tracked: true
+  cso_ed_agricultural_baseline_2020:
+    stage: "01"
+    module: [baseline, cattle, sheep, land_farm_structure]
+    description: "2020 CSO Electoral Division agricultural baseline and fine-scale spatial anchor."
+    source: "git_pending"
+    path: "data/inputs/baseline/01_CSO_ED_Agricultural_Baseline_2020.csv"
     sha256: "bc93d1f9747809aed79ea7e7160f5853265d73e5056cceaae0353ee2fc63a657"
     required: true
+    legacy_path: "data/raw/cattle/CSO_ED_2020.csv"
 
-  cso_cattle_county_2015_2025:
-    module: [cattle]
-    description: "Annual CSO county cattle controls for 2015-2025."
-    source: "git"
-    path: "data/raw/cattle/CSO_county_WIDE_2015_2025.csv.xz"
-    git_tracked: true
+  cso_aaa10_cattle_county_2015_2025:
+    stage: "01"
+    module: [baseline, cattle]
+    description: "CSO AAA10 annual county cattle controls for 2015-2025."
+    source: "git_pending"
+    path: "data/inputs/baseline/01_CSO_AAA10_Cattle_County_2015_2025.csv"
+    sha256: "4df4e3c7dcf7f3183cec422b55da627249c62fc061851132d30ad95c902bcbf7"
     required: true
+    legacy_path: "data/raw/cattle/CSO_county_WIDE_2015_2025.csv.xz"
 
-  cso_sheep_county_2015_2025:
-    module: [sheep]
-    description: "County sheep controls used by the validated hierarchy."
-    source: "git"
-    path: "data/raw/sheep/CSO_Sheep_County_WIDE_2015_2025.csv.xz"
-    git_tracked: true
+  cso_aaa09_sheep_county_region_2015_2025:
+    stage: "03"
+    module: [baseline, sheep]
+    description: "CSO AAA09 county and regional sheep controls used by the validated sheep hierarchy."
+    source: "git_pending"
+    path: "data/inputs/baseline/03_CSO_AAA09_Sheep_County_Region_2015_2025.xlsx"
+    sha256: "64d4f36639090a62b95b4cae69fdade6a171f63a7008fb2c8dff02c3ec12dd11"
     required: true
+    legacy_path: "data/raw/sheep/CSO_Sheep_County_and_Region_WIDE_2015_2025.xlsx"
 
-  cso_sheep_region_2015_2025:
-    module: [sheep]
-    description: "Regional sheep controls used by the validated hierarchy."
-    source: "git"
-    path: "data/raw/sheep/CSO_Sheep_Region_WIDE_2015_2025.csv.xz"
-    git_tracked: true
+  dafm_sheep_county_totals_2015_2020_2022_2025:
+    stage: "03_0"
+    module: [baseline, sheep]
+    description: "DAFM county sheep totals used to generate the validated county drift/control factors."
+    source: "git_pending"
+    path: "data/inputs/baseline/03_0_DAFM_Sheep_County_Totals_2015_2020_2022_2025.csv"
+    sha256: "6d3ce31092328f18587530561ab440d91fa65e94c629ac5ca25e15bb4b042de2"
     required: true
-
-  cso_sheep_source_workbook:
-    module: [sheep]
-    description: "Combined county and region sheep source/audit workbook."
-    source: "git"
-    path: "data/raw/sheep/CSO_Sheep_County_and_Region_WIDE_2015_2025.xlsx"
-    git_tracked: true
-    required: false
 
   dafm_sheep_breed_anchors:
-    module: [sheep]
+    stage: "05A"
+    module: [baseline, sheep]
     description: "DAFM county sheep breed-composition anchors for 2016, 2020, 2022 and 2025."
-    source: "git"
-    path: "data/raw/sheep/DAFM_Sheep_Breed_Anchors_2016_2020_2022_2025.zip"
-    git_tracked: true
+    source: "git_pending"
+    path: "data/inputs/baseline/05A_DAFM_Sheep_Breed_Anchors_2016_2020_2022_2025.csv"
+    sha256: "c245df824279728e2b8c016cfc79c4232a0afbbb1ba6fd75cec171900aeeb702"
     required: true
-    note: "The annual 2015-2025 composition table is generated by the sheep module from these anchors."
-
-  cso_land_aqa06_2013_2025:
-    module: [land]
-    description: "AQA06 annual regional land-use controls in tidy form."
-    source: "git"
-    path: "data/raw/land/AQA06_Unpivoted_2013_2025.csv"
-    git_tracked: true
-    sha256: "873de22c6215847d4a39654c62ac9aff77e96c195dcfedd6609222a4d7124545"
-    required: true
-    note: "Generated directly from the AQA06 Unpivoted sheet; row ordering does not affect the land algorithm."
+    note: "DAFM controls composition only and does not replace the CSO sheep population."
 
   goblin_cohort_relationships:
-    module: [cattle, sheep]
-    description: "GOBLIN cohort relationships used for biological disaggregation."
-    source: "git"
-    path: "data/controls/cohort2012-2020.csv"
-    git_tracked: true
+    stage: "05C"
+    module: [baseline, cattle, sheep]
+    description: "Shared GOBLIN livestock biological relationship source used for cattle and sheep cohort disaggregation."
+    source: "git_pending"
+    path: "data/inputs/baseline/05C_Cattle_Cohort_Relationships_2012_2020.csv"
+    sha256: "7c9f8c38a4eb53b11631d92fb0e9ccf37fc130a83ebd6d6d17b04e5f8de5232e"
+    required: true
+    legacy_path: "data/controls/cohort2012-2020.csv"
+
+  cso_aqa06_agricultural_land_use:
+    stage: "06"
+    module: [baseline, land_farm_structure]
+    description: "CSO AQA06 agricultural land-use controls used for crop and land reconstruction."
+    source: "git_pending"
+    path: "data/inputs/baseline/06_CSO_AQA06_Agricultural_Land_Use.xlsx"
+    sha256: "819b641f5347740e05468abe1650c48f6e7ae9c884f77b84beeeae436e16d343"
     required: true
 
-  goblin_pasture_dm_2020_fixed:
-    module: [scenario, pressure, land]
-    description: "Frozen 31-cohort GOBLIN pasture dry-matter requirements used by the cattle-only population-reduction study under fixed 2020 feed/management parameters."
-    source: "git"
-    path: "data/controls/pasture/GOBLIN_pasture_dm_2020_fixed.csv"
-    git_tracked: true
-    sha256: "084fc151e40fc7f499f62932da6181802f3b124c30c5427b88346581fa454d8f"
+  farm_structure_demographic_controls:
+    stage: "06"
+    module: [baseline, land_farm_structure]
+    description: "Farm structure and holder-demographic controls used by the historical reconstruction."
+    source: "git_pending"
+    path: "data/inputs/baseline/06_Farm_Structure_Demographic_Controls.csv"
+    sha256: "cdfaec77532ea7630886195b060d63e94cf732d6543a153513e948eeb9766a4c"
     required: true
-    note: "Derived and parity-tested against pinned public packages livestock_generation 0.2.2, cattle_lca 0.3.1 and sheep_lca 0.3.1. This is a fixed-2020 per-head feed parameterisation reused at future milestones in the principal cattle-population-only scenario; year/scenario-specific GOBLIN controls should replace it when feed or productivity management changes."
+    legacy_path: "data/controls/06_SE_Data_Controls.csv"
 
-  se_controls:
-    module: [se]
-    description: "Official structural and holder-age controls used by the SE module."
-    source: "git"
-    path: "data/controls/06_SE_Data_Controls.csv"
-    git_tracked: true
-    required: true
-
-  county_region_map:
-    module: [sheep, land]
-    description: "Irish county-to-region mapping used by hierarchical reconciliation."
-    source: "git"
-    path: "data/controls/county_region_map.csv"
-    git_tracked: true
+  ifs2020_standard_output_mapping:
+    stage: "08"
+    module: [baseline, standard_output]
+    description: "IFS-2020 Standard Output mapping used for fixed-2020 production-value exposure."
+    source: "git_pending"
+    path: "data/inputs/baseline/08_IFS2020_Standard_Output_Mapping.xlsx"
+    sha256: "73196c3e4f26f31efdb527ded76ca5e016b2e6a128f8531be6260cae9429be88"
     required: true
 
-  cathal_agricultural_soils:
-    module: [soil, land]
-    description: "Cathal/NFS holding-linked agricultural soil and forestry-context source used only to derive ED-level shares."
-    source: "external"
-    destination: "data/external/soil/cathal.csv"
+  sc1_cattle_scenario_endpoints_2050:
+    stage: "SC1"
+    module: [scenario, sc1]
+    description: "Compact national 2050 cattle scenario endpoint controls."
+    source: "git_pending"
+    path: "data/inputs/scenario/SC1_Cattle_Scenario_Endpoints_2050.csv"
+    sha256: "316708db50f2d3ab2e2aa38b75672ec85e93e9a59222a36b6ce6c87767028227"
+    required: true
+
+  sc1_ed_rural_mixed_urban_2022:
+    stage: "SC1"
+    module: [scenario, sc1]
+    description: "2022 ED Rural/Mixed/Urban classification used as spatial scenario context."
+    source: "git_pending"
+    path: "data/inputs/scenario/SC1_ED_Rural_Mixed_Urban_2022.xlsx"
+    sha256: "d6178bacb2ddeef830a9f0fba4715e183ea53813448fcf54a0d29199a332552f"
+    required: true
+
+  nfs_agricultural_soil_capability:
+    stage: "08B"
+    module: [baseline, agricultural_soil, scenario, sc2]
+    description: "Cathal/NFS agricultural soil-capability source."
+    source: "zenodo"
+    release: "goblin_spatial_frozen_inputs_v1"
+    destination: "data/inputs/spatial/08B_NFS_Agricultural_Soil_Capability.csv"
+    url: "https://zenodo.org/records/22035538/files/08B_NFS_Agricultural_Soil_Capability.csv?download=1"
     sha256: "4af6018a8860380aa0f45ba6acc47e9d894e27ec93975ea29eb2dfb4dc21c1dc"
-    required: false
-    note: "Raw holding rows and herd identifiers are never merged into GOBLIN-Spatial outputs. cso_ed locates the source record, fsizuaa supplies the area weight, and soil_code_nfs supplies agricultural use-range class."
+    required: true
 
-  ed_agricultural_soil_profile:
-    module: [soil, land]
-    description: "Compact ED-level GOBLIN production-soil and forestry-context profile generated from the Cathal/NFS source."
-    source: "external"
-    destination: "data/controls/soil/ED_GOBLIN_soil_profile.csv.xz"
-    sha256: "c9fd0c19b642254466a65bb4dc2f8cbaf1d7c9023de1ca39083699453dfe3a1b"
-    required: false
-    note: "Generated locally by scripts/build_ed_agricultural_soil_profile.py rather than downloaded. Agricultural use-range classes 1-2 map to GOBLIN soil Group 1, classes 3-4 to Group 2, and classes 5-6 to Group 3. Source UAA weights shares; validated ALL_GRASSLAND remains the authoritative ED hectare total. Forest Yield Class and Irish Forest Soil fields are retained only as downstream opportunity context. The checksum pins the validated compact profile used for the current opportunity-screen audit."
-
-  ed_opportunity_screen_audit:
-    module: [soil, land, scenario]
-    description: "Versioned audit of the policy-neutral ED land-opportunity screening formulas and source-profile diagnostics."
-    source: "git"
-    path: "data/controls/soil/ED_opportunity_screen_audit.json"
-    git_tracked: true
-    required: false
-    note: "Documents the GOBLIN production-soil score, forestry context score, conservative peat/cutover rewetting screen and the non-additive opportunity-envelope boundary."
-
-  saps_ed_geography:
-    module: [soil, spatial]
-    description: "CSO SAPS Electoral Division geometry carrying the CSOED coding system used to spatially locate the authoritative GOBLIN-Spatial baseline."
+  ifs_mapped_physical_soil_package:
+    stage: "08C"
+    module: [baseline, physical_soil, scenario, sc2]
+    description: "Colm/IFS mapped physical-soil package retained independently from the agricultural-capability soil layer."
     source: "zenodo"
-    release: "goblin_spatial_spatial_inputs_v0_1_0"
-    destination: "data/external/spatial/ed/Electoral_Divisions.zip"
-    url: "https://zenodo.org/records/21906755/files/Electoral_Divisions.zip?download=1"
-    known_hash: "md5:bc4b752a1b518913e7ea18ed09ac3ae0"
-    archive: "zip"
-    extract_to: "data/external/spatial/ed"
-    primary_path: "data/external/spatial/ed/Electoral_Divisions_generalised_SAPS_Shp_with_proper_names.shp"
-    primary_sha256: "0fefea2da017afb25dccafe3c51dbfb7ecdf2dff7ce7e00ae91ce5ee600102df"
-    required_members:
-      - "data/external/spatial/ed/Electoral_Divisions_generalised_SAPS_Shp_with_proper_names.shp"
-      - "data/external/spatial/ed/Electoral_Divisions_generalised_SAPS_Shp_with_proper_names.shx"
-      - "data/external/spatial/ed/Electoral_Divisions_generalised_SAPS_Shp_with_proper_names.dbf"
-      - "data/external/spatial/ed/Electoral_Divisions_generalised_SAPS_Shp_with_proper_names.prj"
-    member_sha256:
-      shp: "0fefea2da017afb25dccafe3c51dbfb7ecdf2dff7ce7e00ae91ce5ee600102df"
-      shx: "b40af1176ea8cc602e30c908211cc93da5c26b3c39be3d1fc3a8dcd0aa2f0bea"
-      dbf: "679b675766419688141644dec2dafee8b3cb4b928f1258c7c0c32343675022dd"
-      prj: "4df6798dbe12d22a1edd15991de2cae2cb4a6a1d79bf2b18319c352736a2f25f"
-    required: false
-    note: "Zenodo version DOI 10.5281/zenodo.21906755. The full SAPS layer has 3,409 geometries; the authoritative livestock baseline selects the 2,857 EDs used by GOBLIN-Spatial."
+    release: "goblin_spatial_frozen_inputs_v1"
+    destination: "data/inputs/spatial/08C_IFS_Mapped_Physical_Soil_Package.zip"
+    url: "https://zenodo.org/records/22035538/files/08C_IFS_Mapped_Physical_Soil_Package.zip?download=1"
+    sha256: "8a73fdaa7f8277eafbb38a12cc9f736caff4c265e8617a9fc54c7a8d1c3ddf97"
+    required: true
 
-  sis_national_soils_zip:
-    module: [soil, spatial]
-    description: "Teagasc/EPA Irish Soil Information System national 1:250,000 soil-association map bundle retained for optional spatial validation and later opportunity refinement."
+  lpis_2020_frozen:
+    stage: "SC2"
+    module: [scenario, sc2]
+    description: "Frozen LPIS 2020 parcel dataset for the principal common-2020 scenario baseline."
     source: "zenodo"
-    release: "goblin_spatial_spatial_inputs_v0_1_0"
-    destination: "data/external/spatial/sis_soils/INSM250k_ING_1b.zip"
-    url: "https://zenodo.org/records/21906755/files/INSM250k_ING_1b.zip?download=1"
-    known_hash: "sha256:7c2eaa206335d6c34a02bfd008567375cd4b5128b83f88635c58a5be3cc6a35b"
-    zenodo_md5: "04a56bcad4b6aa5a38275b5719371194"
-    archive: "zip"
-    extract_to: "data/external/spatial/sis_soils"
-    primary_path: "data/external/spatial/sis_soils/INSM250k_ING.shp"
-    primary_sha256: "e628c26cca1f4ae609b554085b28b83a84aa025ddb60f0dae85b1f4c1063ba99"
-    required_members:
-      - "data/external/spatial/sis_soils/INSM250k_ING.shp"
-      - "data/external/spatial/sis_soils/INSM250k_ING.shx"
-      - "data/external/spatial/sis_soils/INSM250k_ING.dbf"
-      - "data/external/spatial/sis_soils/INSM250k_ING.prj"
-    member_sha256:
-      shp: "e628c26cca1f4ae609b554085b28b83a84aa025ddb60f0dae85b1f4c1063ba99"
-      shx: "31c13fb670729e19d98dca4392c4150ee7b62da78f6418443947cc95189ec2aa"
-      dbf: "00a5b137bc8ed7653ab67fb63a7e94fb6343de204433a3ca70aeaa21737ceb0f"
-      prj: "4df6798dbe12d22a1edd15991de2cae2cb4a6a1d79bf2b18319c352736a2f25f"
-    required: false
-    note: "Zenodo version DOI 10.5281/zenodo.21906755. SIS is not required for the principal GOBLIN production-soil calculation; it remains available for validation and later spatial land-opportunity analysis."
+    release: "goblin_spatial_frozen_inputs_v1"
+    destination: "data/inputs/spatial/SC2_LPIS_2020_Frozen.parquet"
+    url: "https://zenodo.org/records/22035538/files/SC2_LPIS_2020_Frozen.parquet?download=1"
+    sha256: "33ce7988006d53dc7599eabc300dbdc275b13a567e4ea4a48da16437e9f97247"
+    required: true
 
-  lpis_2020_audit:
-    module: [soil, land, spatial]
-    description: "LPIS 2020 audit workbook retained for later parcel/grassland validation and high-resolution opportunity work."
-    source: "external"
-    destination: "data/external/spatial/lpis/LPIS_2020_audit.xlsx"
-    sha256: "a2bc952ddc922982cf0a23e4f91dacc54bbce44a1d6e0af84f675694287ab1a5"
+  lpis_2025_frozen:
+    stage: "SC2"
+    module: [scenario, sc2]
+    description: "Frozen LPIS 2025 parcel dataset retained for optional updated-baseline and sensitivity applications."
+    source: "zenodo"
+    release: "goblin_spatial_frozen_inputs_v1"
+    destination: "data/inputs/spatial/SC2_LPIS_2025_Frozen.parquet"
+    url: "https://zenodo.org/records/22035538/files/SC2_LPIS_2025_Frozen.parquet?download=1"
+    sha256: "493a1858f7b213d982ffb8fa99cfe0c1d9c50133596c73faf27079ec9dabb75e"
     required: false
-    note: "Not redistributed through the Zenodo v0.1.0 spatial bundle. It is not required for the principal ED production-soil profile."
+
+  ed_boundaries_frozen:
+    stage: "SC2"
+    module: [scenario, sc2, spatial]
+    description: "Frozen Electoral Division boundary layer as a single GeoPackage."
+    source: "zenodo"
+    release: "goblin_spatial_frozen_inputs_v1"
+    destination: "data/inputs/spatial/SC2_ED_Boundaries_Frozen.gpkg"
+    url: "https://zenodo.org/records/22035538/files/SC2_ED_Boundaries_Frozen.gpkg?download=1"
+    sha256: "550b2ed967f5c5e7ecb9053586cf431df564d0a990f99f9f82eb8b8be44faca8"
+    required: true
+
+# Generated outputs such as 01/02/03_0/05A/05B/05C/05D/06/07/08/08B/08C/09
+# stage results and all SC1/SC2/SC3 results are intentionally excluded from the
+# mandatory input contract.
