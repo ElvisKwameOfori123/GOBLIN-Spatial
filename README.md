@@ -4,7 +4,32 @@
 
 GOBLIN-Spatial connects the national **GOBLIN AFOLU modelling framework** with fine-scale agricultural geography. The framework first reconstructs a controlled historical agricultural baseline at Electoral Division (ED) level and then uses that baseline to examine where nationally specified livestock adjustment may occur, how much agricultural land may be released, what that land is like, and which alternative land uses are spatially feasible.
 
-The current Irish implementation covers **2,857 Electoral Divisions from 2015 to 2025**, anchored to the 2020 Census of Agriculture and represented in both official agricultural categories and GOBLIN-compatible livestock cohorts.
+The current Irish implementation reconstructs an annual agricultural baseline for **2,857 Electoral Divisions from 2015 to 2025**. The reconstruction is anchored to the **2020 CSO Electoral Division agricultural census** and uses annual **CSO county-level statistics for livestock, crops and agricultural land over 2015-2025** to control temporal change. The resulting system is represented in both official agricultural categories and GOBLIN-compatible livestock cohorts.
+
+```text
+2020 CSO Electoral Division agricultural data
+                │
+                │ fine-scale spatial anchor
+                ▼
+       2,857 agricultural EDs
+                │
+        ┌───────┼────────┐
+        │       │        │
+        ▼       ▼        ▼
+   LIVESTOCK   CROPS    LAND
+        │       │        │
+        └───────┼────────┘
+                │
+                +
+                │
+  CSO county controls, 2015-2025
+                │
+                │ temporal controls
+                ▼
+    ED annual panel, 2015-2025
+```
+
+The historical reconstruction then provides the spatial system on which national GOBLIN transition pathways are evaluated.
 
 ```text
 National GOBLIN pathway
@@ -58,7 +83,52 @@ These are not separate models. The Scenario Engine consumes the system produced 
 
 # Baseline Engine
 
-The Baseline Engine reconstructs the historical ED agricultural system while preserving the controlling livestock, land and biological totals.
+The Baseline Engine reconstructs the historical ED agricultural system while preserving the controlling livestock, crop, land and biological totals.
+
+## Data foundations
+
+The reconstruction is built around two complementary data pillars:
+
+```text
+2020 CSO ED agricultural census
+        │
+        └── fine-scale spatial pattern
+                    +
+CSO county data, 2015-2025
+        │
+        └── annual livestock, crop and land controls
+                    │
+                    ▼
+        reconstructed ED panel, 2015-2025
+```
+
+### 2020 CSO ED spatial anchor
+
+The 2020 CSO ED agricultural data provide the fine-scale reference distribution for the historical system. They supply the ED-level spatial structure for livestock and the agricultural land system used by the reconstruction.
+
+The 2020 anchor is treated as the spatial reference state. Subsequent temporal reconstruction does not create eleven independent ED censuses. Instead, annual higher-level official controls are reconciled back to the fixed ED geography.
+
+### 2015-2025 CSO county controls
+
+Annual CSO county-level statistics provide the temporal controls used to reconstruct change around the 2020 ED anchor. They cover the principal historical agricultural dimensions required by the model:
+
+```text
+LIVESTOCK
+├── cattle
+└── sheep
+
+CROPS
+├── cereals
+└── other crop area
+
+AGRICULTURAL LAND
+├── area farmed
+└── grassland
+```
+
+The model therefore should not be interpreted as a livestock-only reconstruction. Livestock, crops and agricultural land are all part of the historical ED system.
+
+## Scientific sequence
 
 ```text
 Cattle + Sheep
@@ -67,7 +137,7 @@ Cattle + Sheep
 Livestock cohort structure
       │
       ▼
-Land + farm structure
+Land + crops + farm structure
       │
       ▼
 Standard Output
@@ -121,13 +191,17 @@ baseline/
 
 ### Livestock
 
-Fine-scale agricultural data provide the ED spatial pattern, while higher-level official statistics control livestock totals and composition. The controlled livestock population is established first and is then expressed through the GOBLIN biological cohort structure without changing that population.
+The livestock reconstruction combines the 2020 CSO ED spatial anchor with annual official controls for 2015-2025.
+
+For cattle, the 2020 ED cattle distribution provides the within-county spatial structure while the annual CSO AAA10 county series controls cattle totals through time. The controlled cattle population is established first and is then expressed through the GOBLIN biological cohort structure without changing that population.
+
+For sheep, the same 2020 ED anchor and annual-control principle applies, but the validated sheep workflow also preserves the detailed AAA09 region/county reconciliation hierarchy and DAFM county information used for sheep control and composition. DAFM breed anchors provide composition information rather than replacing the CSO-controlled sheep population.
 
 The Irish baseline contains **21 cattle cohorts** and **10 sheep cohorts**. Cattle cohort disaggregation retains an ED-informed distinction between dairy-origin and beef-origin young stock while allowing a restricted set of receiver/rearing EDs where the observed young-stock structure indicates livestock movement.
 
-### Land and farm structure
+### Crops, agricultural land and farm structure
 
-The baseline also reconstructs:
+The historical baseline explicitly contains:
 
 ```text
 AREA_FARMED
@@ -141,9 +215,38 @@ AVERAGE_AGE_OF_HOLDER
 MEDIAN_AGE_OF_HOLDER
 ```
 
-The 2020 ED values provide the fine-scale anchor. Higher-level annual controls describe temporal change around that anchor.
+The 2020 ED agricultural values provide the fine-scale spatial anchor. Annual CSO controls over 2015-2025 govern temporal change in crops and agricultural land around that anchor.
 
-These variables describe land and farm structural context. They should not be interpreted as a complete representation of household socioeconomic conditions.
+The principal land accounting identity is:
+
+```text
+AREA_FARMED =
+ALL_GRASSLAND
++ TOTAL_CEREALS
++ OTHER_CROPS_HA
+```
+
+The farm-structure variables provide structural and demographic context. They should not be interpreted as a complete representation of household socioeconomic conditions.
+
+### Temporal interpretation
+
+The 2015-2025 dataset is a **reconstructed ED panel**, not eleven independent ED censuses.
+
+```text
+2020 ED spatial structure
+        +
+2015-2025 official annual controls
+        ↓
+2015-2025 reconstructed ED system
+```
+
+Accordingly:
+
+- cattle change is controlled using annual official county cattle totals;
+- sheep change is controlled through the validated official sheep hierarchy;
+- crop and agricultural-land change is controlled using annual CSO land-use statistics;
+- the 2020 ED pattern remains the fine-scale spatial reference;
+- non-2020 ED values are reconstructed estimates rather than directly observed annual ED census values.
 
 ### Standard Output
 
@@ -163,6 +266,8 @@ The two soil systems are intentionally retained separately rather than blended.
 # Scenario Engine
 
 The Scenario Engine takes nationally defined GOBLIN pathways and tests their spatial implications through three sequential stages.
+
+The principal scenario configuration uses a **common 2020 baseline**.
 
 ```text
 SC1
@@ -251,13 +356,13 @@ controls spatial representation
 and tests spatial feasibility
 ```
 
-GOBLIN-Spatial does not redefine the national GOBLIN pathway. Its role is to examine what that pathway implies when agricultural geography, livestock structure, soils and land-use constraints are taken seriously.
+GOBLIN-Spatial does not redefine the national GOBLIN pathway. Its role is to examine what that pathway implies when agricultural geography, livestock structure, crops, agricultural land, soils and land-use constraints are taken seriously.
 
 ---
 
 # Data and reproducibility
 
-The final v1 software and scientific data will be distributed separately:
+Code and frozen scientific data are distributed separately:
 
 ```text
 GitHub
@@ -274,11 +379,19 @@ Local installation
 └── data/inputs/
 ```
 
-The package already uses a Pooch-based data-fetching and SHA256 verification system. For v1, this mechanism will be connected to the frozen external data release so that missing inputs can be retrieved automatically while existing files are verified and reused.
+The frozen v1 input bundle is published on Zenodo:
 
-The final frozen input contract contains the following scientific categories.
+**Version DOI:** [10.5281/zenodo.22035538](https://doi.org/10.5281/zenodo.22035538)
 
-### Livestock
+**Concept DOI:** [10.5281/zenodo.22035537](https://doi.org/10.5281/zenodo.22035537)
+
+The version-specific DOI identifies the exact frozen input release used for reproducible execution. The concept DOI resolves to the latest dataset version.
+
+The package uses a Pooch-based data-fetching and checksum-verification system. The v1 migration will connect the package manifest directly to the published frozen input release so that missing inputs can be retrieved automatically while existing files are verified and reused.
+
+## Frozen scientific input contract
+
+### Historical agricultural system
 
 ```text
 01_CSO_ED_Agricultural_Baseline_2020.csv
@@ -287,14 +400,11 @@ The final frozen input contract contains the following scientific categories.
 03_0_DAFM_Sheep_County_Totals_2015_2020_2022_2025.csv
 05A_DAFM_Sheep_Breed_Anchors_2016_2020_2022_2025.csv
 05C_Cattle_Cohort_Relationships_2012_2020.csv
-```
-
-### Land and farm structure
-
-```text
 06_CSO_AQA06_Agricultural_Land_Use.xlsx
 06_Farm_Structure_Demographic_Controls.csv
 ```
+
+The `05C_Cattle_Cohort_Relationships_2012_2020.csv` file contains the GOBLIN biological relationship source used by the livestock cohort disaggregation, including the sheep relationships required downstream.
 
 ### Economic context
 
@@ -324,9 +434,9 @@ SC2_LPIS_2025_Frozen.parquet
 SC2_ED_Boundaries_Frozen.gpkg
 ```
 
-The principal scenario configuration uses the **2020 baseline and LPIS 2020**. LPIS 2025 is retained for optional alternative-baseline or sensitivity applications.
+The principal scenario configuration uses **LPIS 2020** alongside the common 2020 baseline. LPIS 2025 is retained for optional alternative-baseline and sensitivity applications.
 
-**Frozen input DOI:** to be added after the v1 data release is published.
+The Zenodo release also includes the frozen-input manifest, README and SHA256 checksum list used to document and verify the data contract.
 
 ---
 
@@ -351,6 +461,15 @@ goblin-spatial build --config configs/ireland_2015_2025.yaml
 ```
 
 The final v1 CLI will expose separate baseline, scenario and full-pipeline commands once the validated 08-SC3 stages have completed regression migration.
+
+The intended final user workflow is:
+
+```bash
+goblin-spatial fetch-data --profile core-2020
+goblin-spatial run baseline
+goblin-spatial run scenario --scenario SI_SG --policy PRORATA
+goblin-spatial run all
+```
 
 ---
 
@@ -430,6 +549,8 @@ This preserves scientific equivalence while improving software structure, testin
 
 Users should observe the following limits:
 
+- The 2020 CSO ED agricultural census is the fine-scale spatial anchor.
+- Annual 2015-2025 official controls determine temporal change in livestock, crops and agricultural land.
 - Non-2020 ED values are reconstructed rather than independent annual ED census observations.
 - Standard Output represents production-value exposure rather than profit, household income or welfare.
 - Cathal/NFS agricultural capability and Colm/IFS physical soil are separate information layers.
@@ -506,13 +627,15 @@ Scenario Engine
 
 # Citation
 
-When the v1 release is complete, users should cite both the software release and the corresponding frozen data release so that the code version and the exact scientific input version can be identified independently.
+When the v1 software release is complete, users should cite both the software release and the corresponding frozen data release so that the code version and the exact scientific input version can be identified independently.
 
-**Software DOI:** to be added.
+**Frozen model-input dataset:**
 
-**Frozen model-input DOI:** to be added.
+> Ofori, E. (2026). *GOBLIN-Spatial Frozen Model Inputs for Irish Electoral Division Agricultural and Land-Transition Modelling, Version 1.0.0* [Dataset]. Zenodo. https://doi.org/10.5281/zenodo.22035538
 
-Individual datasets remain subject to their respective source licences and attribution requirements.
+**Software DOI:** to be added at the v1 software release.
+
+Individual source datasets remain subject to their respective attribution and licensing requirements.
 
 ---
 
@@ -523,4 +646,4 @@ University of Galway
 
 ---
 
-**GOBLIN-Spatial links nationally controlled agricultural and AFOLU transition pathways with fine-scale agricultural geography while preserving the distinction between livestock adjustment, potential land release, spatial opportunity and realised land-use transition.**
+**GOBLIN-Spatial links nationally controlled agricultural and AFOLU transition pathways with fine-scale agricultural geography while preserving the distinction between historical livestock, crop and land reconstruction, livestock adjustment, potential land release, spatial opportunity and realised land-use transition.**
