@@ -30,6 +30,18 @@ ROOT = Path(__file__).resolve().parents[1]
 CANONICAL = ROOT / "data" / "inputs" / "baseline"
 YEARS = set(range(2015, 2026))
 
+SO_RUNTIME_COLUMNS = [
+    "MODEL_VARIABLE",
+    "DOMAIN",
+    "IFS_PRODUCT_CODE",
+    "SOC_EUR_381",
+    "SOC_EUR_382",
+    "APPLY_IN_SO",
+    "IMPUTED",
+    "SENSITIVITY_SOC_EUR_381",
+    "SENSITIVITY_SOC_EUR_382",
+]
+
 
 def _assert_equal(left: pd.DataFrame, right: pd.DataFrame, *, sort_by: list[str]) -> None:
     left = left.sort_values(sort_by, kind="stable").reset_index(drop=True)
@@ -178,17 +190,18 @@ def test_farm_structure_packaged_control_is_identical_to_validated_control() -> 
     _assert_equal(canonical, legacy, sort_by=["LEVEL", "AREA", "YEAR"])
 
 
-def test_standard_output_packaged_workbook_preserves_legacy_runtime_mapping() -> None:
+def test_standard_output_packaged_workbook_preserves_runtime_mapping() -> None:
     canonical = load_model_mapping(
         CANONICAL / "08_IFS2020_Standard_Output_Mapping.xlsx"
     )
     legacy = load_model_mapping(
         ROOT / "data" / "controls" / "standard_output" / "GOBLIN_SO_mapping.csv"
     )
-    # The frozen workbook includes additional audit columns. The complete legacy
-    # runtime mapping is required to remain unchanged.
+    # MODEL_MEANING/NOTES are documentation and were deliberately improved in
+    # the frozen workbook. These nine fields are the production mapping and
+    # coefficients actually used by Stage 08, and must remain unchanged.
     _assert_equal(
-        canonical[list(legacy.columns)],
-        legacy,
+        canonical[SO_RUNTIME_COLUMNS],
+        legacy[SO_RUNTIME_COLUMNS],
         sort_by=["MODEL_VARIABLE"],
     )
