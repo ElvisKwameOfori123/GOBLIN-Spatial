@@ -134,7 +134,14 @@ def build_signatures(
     """
 
     baseline_year = int(config.base_year if year is None else year)
-    required = {"YEAR", "CSOED", "County", "DAIRY_COW", "OTHER_COW", *FINAL_21_COHORTS}
+    required = {
+        "YEAR",
+        "CSOED",
+        "County",
+        "DAIRY_COW",
+        "OTHER_COW",
+        *FINAL_21_COHORTS,
+    }
     missing = sorted(required - set(baseline.columns))
     if missing:
         raise ValueError(f"Stage 09 signature construction missing columns: {missing}")
@@ -193,10 +200,10 @@ def build_signatures(
         )
 
     signatures = pd.concat(rows, ignore_index=True)
-    expected_followers = 19
+    expected_followers = len(FINAL_21_COHORTS) - 2
     expected_rows = config.expected_eds * expected_followers
     if len(FOLLOWER_COHORTS) != expected_followers:
-        raise AssertionError("Stage 09 expects 19 cattle follower cohorts")
+        raise AssertionError("Stage 09 follower-cohort contract is inconsistent")
     if len(signatures) != expected_rows:
         raise AssertionError(
             f"expected {expected_rows:,} Stage 09 signature rows; found {len(signatures):,}"
