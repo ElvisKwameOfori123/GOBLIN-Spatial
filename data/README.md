@@ -151,4 +151,10 @@ GOBLIN-Spatial
 spatial allocation and feasibility
 ```
 
-`data_manifest.yaml` is the machine-readable authority for exact paths, checksums and source locations. During the v1 migration the manifest and configuration are being updated only after the corresponding canonical input file has been placed and verified, so the working build is not broken by a path-only refactor.
+`data_manifest.yaml` is the machine-readable authority for exact paths, checksums and source locations.
+
+### Current migration status
+
+The canonical v1 layout above is now documented on the refactor branch. The large Zenodo-backed files are already pinned to version DOI `10.5281/zenodo.22035538`. The compact baseline/scenario entries are currently marked `git_pending` in the manifest until their exact canonical copies are committed and regression-checked. The package deliberately skips those pending entries rather than switching the working baseline to missing paths.
+
+This staging rule prevents a directory clean-up from silently changing or breaking validated scientific behaviour.
