@@ -25,7 +25,7 @@ jobs:
           pip install -e ".[geo,goblin]"
           pip install pytest
 
-      - name: Verify Git-tracked inputs
+      - name: Verify Git-tracked and staged inputs
         run: goblin-spatial fetch-data --verify-only --tracked-only
 
       - name: Probe authoritative GOBLIN pasture-DM profile
@@ -34,23 +34,22 @@ jobs:
       - name: Run compact-data tests
         run: pytest -q -m "not full_data"
 
-      - name: Detect complete full-data bundle
+      # The historical baseline regression is intentionally independent of the
+      # heavy 08B/08C/LPIS/geometry inputs. Those files belong to the subsequent
+      # scenario-ready/spatial validation workflows and are checked there.
+      - name: Detect complete historical baseline bundle
         id: full_data
         shell: bash
         run: |
           if [[ -f data/raw/cattle/CSO_ED_2020.csv && -f data/raw/land/AQA06_Unpivoted_2013_2025.csv ]]; then
             echo "available=true" >> "$GITHUB_OUTPUT"
-            echo "Complete full-data inputs detected."
+            echo "Historical baseline inputs detected."
           else
             echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "Full-data inputs not yet present; full regression will be skipped."
+            echo "Historical baseline inputs not present; full regression will be skipped."
           fi
 
-      - name: Verify complete input manifest
-        if: steps.full_data.outputs.available == 'true'
-        run: goblin-spatial fetch-data --verify-only
-
-      - name: Run full 2015-2025 regression
+      - name: Run full 2015-2025 historical regression
         if: steps.full_data.outputs.available == 'true'
         run: pytest -q -s -m full_data
 
