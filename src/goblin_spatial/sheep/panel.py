@@ -1,9 +1,22 @@
-"""CSO sheep hierarchy and annual ED sheep-panel construction.
+"""Validated CSO sheep hierarchy and annual ED sheep-panel construction.
 
-The sheep module is independent of cattle. Annual detailed-region AAA09
-statistics are the controlling official time series. The fixed 2020 ED sheep
-footprint supplies fine-scale spatial weights. County totals are reconstructed
-inside regions and are not treated as independent observations.
+The production sheep baseline follows the validated Script 3A -> 3B evidence
+hierarchy:
+
+1. the 2020 CSO ED TOTAL_SHEEP footprint supplies fine-scale spatial weights;
+2. raw AAA09 detailed-region totals and demographic composition control
+   2015-2025 sheep populations;
+3. the 2020 ED footprint is reconciled to exact 2020 detailed-region totals;
+4. corrected 2020 county totals are obtained by aggregation;
+5. other years distribute each region's AAA09 total across counties using the
+   corrected 2020 county shares;
+6. the corrected county panel is downscaled to EDs using the fixed corrected
+   2020 within-county ED pattern.
+
+The combined frozen AAA09 workbook is sufficient for this stage: County_WIDE is
+used only for the County -> detailed-region/NUTS2 crosswalk, while Region_WIDE
+supplies the authoritative regional controls. The DAFM county-total dataset is
+not a production population control in this module.
 """
 
 from __future__ import annotations
@@ -56,9 +69,32 @@ def _require_columns(frame: pd.DataFrame, columns: list[str], label: str) -> Non
         raise ValueError(f"{label} missing required columns: {missing}")
 
 
-def _load_region_controls(path) -> pd.DataFrame:
-    region = pd.read_csv(path)
-    required = [
+def _load_workbook(path) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Load the validated county crosswalk and raw AAA09 regional controls."""
+
+    county_wide = pd.read_excel(path, sheet_name="County_WIDE")
+    region = pd.read_excel(path, sheet_name="Region_WIDE")
+
+    _require_columns(
+        county_wide,
+        ["County", "Region", "NUTS2"],
+        "AAA09 County_WIDE",
+    )
+    county_wide["County"] = county_wide["County"].map(_normalise_county)
+    crosswalk = (
+        county_wide[["County", "Region", "NUTS2"]]
+        .drop_duplicates()
+        .sort_values("County", kind="stable")
+        .reset_index(drop=True)
+    )
+    if crosswalk["County"].nunique() != 26 or len(crosswalk) != 26:
+        raise AssertionError("AAA09 County_WIDE must map exactly 26 counties")
+    if crosswalk.groupby("County")["Region"].nunique().max() != 1:
+        raise AssertionError("a county maps to more than one detailed AAA09 region")
+    if crosswalk.groupby("County")["NUTS2"].nunique().max() != 1:
+        raise AssertionError("a county maps to more than one NUTS2 region")
+
+    required_region = [
         "Year",
         "Region",
         "Region_Level",
@@ -66,8 +102,7 @@ def _load_region_controls(path) -> pd.DataFrame:
         "Total sheep",
         *REGION_SOURCE_COLS,
     ]
-    _require_columns(region, required, "AAA09 sheep region controls")
-
+    _require_columns(region, required_region, "AAA09 Region_WIDE")
     region["Year"] = pd.to_numeric(region["Year"], errors="raise").astype(int)
     region = region.loc[
         (region["Region_Level"] == "Detailed region")
@@ -77,31 +112,22 @@ def _load_region_controls(path) -> pd.DataFrame:
     if len(region) != 7 * len(YEARS):
         raise AssertionError("AAA09 must contain seven detailed regions for every year")
     if region[["Year", "Region"]].duplicated().any():
-        raise AssertionError("duplicate detailed region-year sheep rows")
+        raise AssertionError("duplicate detailed-region/year rows in AAA09")
+    if not (region["UNIT"] == "000 Head").all():
+        raise ValueError("AAA09 detailed-region controls must use UNIT='000 Head'")
 
     numeric = ["Total sheep", *REGION_SOURCE_COLS]
     for column in numeric:
         values = pd.to_numeric(region[column], errors="coerce")
         if values.isna().any() or (values < 0).any():
-            raise ValueError(f"invalid AAA09 sheep values in {column}")
+            raise ValueError(f"invalid AAA09 values in {column}")
         region[column] = values
         region[f"{column}__HEAD"] = np.rint(values * 1000.0).astype(np.int64)
 
-    return region
+    if set(crosswalk["Region"].unique()) != set(region["Region"].unique()):
+        raise AssertionError("County_WIDE and Region_WIDE detailed-region coverage differs")
 
-
-def _load_county_region_map(path) -> pd.DataFrame:
-    crosswalk = pd.read_csv(path)
-    _require_columns(crosswalk, ["County", "NUTS3_REGION"], "county-region map")
-    crosswalk["County"] = crosswalk["County"].map(_normalise_county)
-    crosswalk = crosswalk[["County", "NUTS3_REGION"]].drop_duplicates().copy()
-
-    if len(crosswalk) != 26 or crosswalk["County"].nunique() != 26:
-        raise AssertionError("county-region map must contain exactly 26 counties")
-    if crosswalk["County"].duplicated().any():
-        raise AssertionError("county-region map contains duplicate counties")
-
-    return crosswalk.rename(columns={"NUTS3_REGION": "Region"})
+    return crosswalk, region
 
 
 def _build_reconciled_2020_anchor(
@@ -110,15 +136,19 @@ def _build_reconciled_2020_anchor(
     region: pd.DataFrame,
     expected_eds: int,
 ) -> pd.DataFrame:
+    """Reconcile the observed 2020 ED sheep footprint to AAA09 regions."""
+
     ed = pd.read_csv(ed_path)
     _require_columns(ed, ["CSOED", "County", "TOTAL_SHEEP"], "2020 ED baseline")
 
     ed["County"] = ed["County"].map(_normalise_county)
-    ed["TOTAL_SHEEP"] = (
-        pd.to_numeric(ed["TOTAL_SHEEP"], errors="raise").round().astype(np.int64)
-    )
-    if (ed["TOTAL_SHEEP"] < 0).any():
+    values = pd.to_numeric(ed["TOTAL_SHEEP"], errors="raise")
+    rounded = np.rint(values.to_numpy(dtype=float)).astype(np.int64)
+    if np.max(np.abs(values.to_numpy(dtype=float) - rounded)) > 1e-8:
+        raise AssertionError("2020 ED TOTAL_SHEEP must contain integer animal counts")
+    if (rounded < 0).any():
         raise AssertionError("2020 ED baseline contains negative TOTAL_SHEEP")
+    ed["TOTAL_SHEEP"] = rounded
 
     if len(ed) != expected_eds or ed["CSOED"].nunique() != expected_eds:
         raise AssertionError(f"expected exactly {expected_eds:,} EDs")
@@ -126,20 +156,16 @@ def _build_reconciled_2020_anchor(
         raise AssertionError("duplicate CSOED in 2020 ED baseline")
 
     ed = ed.merge(crosswalk, on="County", how="left", validate="many_to_one")
-    if ed["Region"].isna().any():
+    if ed[["Region", "NUTS2"]].isna().any().any():
         missing = sorted(ed.loc[ed["Region"].isna(), "County"].unique())
         raise AssertionError(f"missing county-to-region mapping: {missing}")
-
-    detailed_regions = sorted(region["Region"].unique())
-    if set(ed["Region"].unique()) != set(detailed_regions):
-        raise AssertionError("ED and AAA09 detailed-region coverage differs")
 
     ed = ed.sort_values(["County", "CSOED"], kind="stable").reset_index(drop=True)
     ed["TOTAL_SHEEP_2020_ED_INPUT"] = ed["TOTAL_SHEEP"].astype(np.int64)
     ed["ZERO_2020_SPATIAL_WEIGHT"] = ed["TOTAL_SHEEP_2020_ED_INPUT"] == 0
     ed["TOTAL_SHEEP_2020_RECONCILED"] = 0
 
-    for region_name in detailed_regions:
+    for region_name in sorted(region["Region"].unique()):
         idx = ed.index[ed["Region"] == region_name]
         weights = ed.loc[idx, "TOTAL_SHEEP_2020_ED_INPUT"].to_numpy(dtype=np.int64)
         source = region.loc[
@@ -148,17 +174,13 @@ def _build_reconciled_2020_anchor(
         if len(source) != 1:
             raise AssertionError(f"{region_name}: invalid 2020 AAA09 row")
         target = int(source.iloc[0]["Total sheep__HEAD"])
-        ed.loc[idx, "TOTAL_SHEEP_2020_RECONCILED"] = hamilton_allocate(
-            weights, target
-        )
+        ed.loc[idx, "TOTAL_SHEEP_2020_RECONCILED"] = hamilton_allocate(weights, target)
 
     validation = (
         ed.groupby("Region", as_index=False)["TOTAL_SHEEP_2020_RECONCILED"]
         .sum()
         .merge(
-            region.loc[
-                region["Year"] == 2020, ["Region", "Total sheep__HEAD"]
-            ],
+            region.loc[region["Year"] == 2020, ["Region", "Total sheep__HEAD"]],
             on="Region",
             how="left",
             validate="one_to_one",
@@ -176,20 +198,19 @@ def _build_reconciled_2020_anchor(
 
 
 def _build_county_controls(anchor: pd.DataFrame, region: pd.DataFrame) -> pd.DataFrame:
-    """Reconstruct annual county totals/classes inside detailed AAA09 regions."""
+    """Build the validated annual county sheep intermediate from AAA09 regions."""
 
     county_anchor = (
-        anchor.groupby(["County", "Region"], as_index=False)
+        anchor.groupby(["County", "Region", "NUTS2"], as_index=False)
         .agg(
             TOTAL_SHEEP_2020_ED_INPUT=("TOTAL_SHEEP_2020_ED_INPUT", "sum"),
             TOTAL_SHEEP_2020_RECONCILED=("TOTAL_SHEEP_2020_RECONCILED", "sum"),
         )
     )
     if len(county_anchor) != 26:
-        raise AssertionError("expected 26 reconstructed county sheep anchors")
+        raise AssertionError("expected 26 corrected county sheep anchors")
 
     rows: list[dict[str, object]] = []
-
     for year in YEARS:
         for region_name in sorted(region["Region"].unique()):
             counties = (
@@ -223,9 +244,7 @@ def _build_county_controls(anchor: pd.DataFrame, region: pd.DataFrame) -> pd.Dat
             )
             if float(raw_components.sum()) <= 0:
                 raise AssertionError(f"{region_name} {year}: zero sheep class total")
-            regional_class_targets = hamilton_allocate(
-                raw_components / raw_components.sum(), total_target
-            )
+            regional_class_targets = hamilton_allocate(raw_components, total_target)
             county_matrix = integer_transport(county_totals, regional_class_targets)
 
             for i, county_row in counties.iterrows():
@@ -239,6 +258,7 @@ def _build_county_controls(anchor: pd.DataFrame, region: pd.DataFrame) -> pd.Dat
                         "YEAR": year,
                         "County": county_row["County"],
                         "Region": region_name,
+                        "NUTS2": county_row["NUTS2"],
                         "TOTAL_SHEEP": int(county_totals[i]),
                         "EWES_2_PLUS": ewe_2_plus,
                         "EWES_UNDER_2": ewe_under_2,
@@ -266,32 +286,15 @@ def _build_county_controls(anchor: pd.DataFrame, region: pd.DataFrame) -> pd.Dat
 
 
 def build_sheep_panel(config: SpatialConfig) -> pd.DataFrame:
-    """Build the CSO-controlled annual sheep ED panel.
-
-    The method reproduces the validated hierarchy:
-
-    1. reconcile the observed 2020 ED sheep footprint to exact 2020 AAA09
-       detailed-region totals;
-    2. aggregate that corrected footprint to county anchors;
-    3. reconstruct each year's county totals within each region;
-    4. allocate the same year's AAA09 demographic classes jointly to counties;
-    5. allocate county totals/classes to EDs using the fixed corrected 2020 ED
-       footprint.
-
-    Non-2020 ED values are reconstructed spatial estimates, not directly
-    observed ED statistics.
-    """
+    """Build the validated 2015-2025 CSO-controlled ED sheep panel."""
 
     ed_path = config.files["cso_ed_2020"]
-    region_path = config.files["cso_sheep_region"]
-    map_path = config.files["county_region_map"]
-
-    for path in (ed_path, region_path, map_path):
+    workbook_path = config.files["cso_sheep_workbook"]
+    for path in (ed_path, workbook_path):
         if not path.exists():
             raise FileNotFoundError(path)
 
-    region = _load_region_controls(region_path)
-    crosswalk = _load_county_region_map(map_path)
+    crosswalk, region = _load_workbook(workbook_path)
     anchor = _build_reconciled_2020_anchor(
         ed_path, crosswalk, region, config.expected_eds
     )
@@ -304,7 +307,6 @@ def build_sheep_panel(config: SpatialConfig) -> pd.DataFrame:
         raise AssertionError("sheep panel requires CSOED and County identifiers")
 
     outputs: list[pd.DataFrame] = []
-
     for year in YEARS:
         for county_name in sorted(anchor["County"].unique()):
             ed_rows = (
@@ -332,9 +334,7 @@ def build_sheep_panel(config: SpatialConfig) -> pd.DataFrame:
                     )
             else:
                 ed_totals = hamilton_allocate(weights, total_target)
-                status = (
-                    "RECONSTRUCTED_FROM_2020_ED_WEIGHTS_AND_AAA09_HIERARCHY"
-                )
+                status = "RECONSTRUCTED_FROM_2020_ED_WEIGHTS_AND_AAA09_HIERARCHY"
 
             class_targets = np.array(
                 [int(target_row[column]) for column in ED_CLASS_COLS],
@@ -344,7 +344,7 @@ def build_sheep_panel(config: SpatialConfig) -> pd.DataFrame:
                 raise AssertionError(f"{county_name} {year}: sheep classes do not close")
 
             allocation = integer_transport(ed_totals, class_targets)
-            result = ed_rows[identifier_cols + ["Region"]].copy()
+            result = ed_rows[identifier_cols + ["Region", "NUTS2"]].copy()
             result.insert(0, "YEAR", year)
             result["TOTAL_SHEEP"] = ed_totals
             result["EWES_2_PLUS"] = allocation[:, 0]
@@ -361,7 +361,10 @@ def build_sheep_panel(config: SpatialConfig) -> pd.DataFrame:
                 raise AssertionError(f"{county_name} {year}: county sheep closure failed")
 
             zero_mask = ed_rows["ZERO_2020_SPATIAL_WEIGHT"].to_numpy(dtype=bool)
-            if (result.loc[zero_mask, ["TOTAL_SHEEP", *ED_CLASS_COLS]].to_numpy() != 0).any():
+            if (
+                result.loc[zero_mask, ["TOTAL_SHEEP", *ED_CLASS_COLS]].to_numpy()
+                != 0
+            ).any():
                 raise AssertionError(
                     f"{county_name} {year}: 2020 sheep structural-zero support failed"
                 )
@@ -378,7 +381,10 @@ def build_sheep_panel(config: SpatialConfig) -> pd.DataFrame:
         raise AssertionError("sheep ED coverage changed")
     if set(sheep["YEAR"].unique()) != set(YEARS):
         raise AssertionError("sheep years are not exactly 2015-2025")
-    if (sheep[["TOTAL_SHEEP", *ED_CLASS_COLS, "EWES", "BREEDING_SHEEP"]] < 0).any().any():
+    if (
+        sheep[["TOTAL_SHEEP", *ED_CLASS_COLS, "EWES", "BREEDING_SHEEP"]]
+        < 0
+    ).any().any():
         raise AssertionError("negative sheep values generated")
 
     if not np.array_equal(
@@ -387,8 +393,9 @@ def build_sheep_panel(config: SpatialConfig) -> pd.DataFrame:
     ):
         raise AssertionError("ED sheep classes do not reproduce TOTAL_SHEEP")
 
-    # Exact 2020 lock against the corrected spatial anchor.
-    check2020 = sheep.loc[sheep["YEAR"] == config.base_year, ["CSOED", "TOTAL_SHEEP"]].merge(
+    check2020 = sheep.loc[
+        sheep["YEAR"] == config.base_year, ["CSOED", "TOTAL_SHEEP"]
+    ].merge(
         anchor[["CSOED", "TOTAL_SHEEP_2020_RECONCILED"]],
         on="CSOED",
         validate="one_to_one",
@@ -401,4 +408,4 @@ def build_sheep_panel(config: SpatialConfig) -> pd.DataFrame:
     ) != 0:
         raise AssertionError("2020 corrected ED sheep anchor was not reproduced exactly")
 
-    return sheep
+    return sheep.sort_values(["YEAR", "CSOED"], kind="stable").reset_index(drop=True)
