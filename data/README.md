@@ -10,6 +10,12 @@ The rule is deliberately simple:
 
 The historical baseline is anchored to the **2020 CSO Electoral Division agricultural census** and reconstructed through time using **2015-2025 official controls for livestock, crops and agricultural land**.
 
+## Packaged baseline status
+
+The compact historical input package under `data/inputs/baseline/` is generated from the pinned Zenodo v1 record by `scripts/package_baseline_inputs.py`. The packaging helper verifies every file against the SHA256 recorded in `data_manifest.yaml` before the file is accepted in GitHub. Once all packaged files pass, only those historical-baseline manifest entries are activated from `git_pending` to `git`.
+
+The package includes the eight production inputs used by Stages 01-08 plus the separate DAFM county-sheep hold-out validation file. Soil, LPIS, ED geometry and SC1-SC3 controls are deliberately excluded from this packaging step.
+
 ## Intended v1 layout
 
 ```text
