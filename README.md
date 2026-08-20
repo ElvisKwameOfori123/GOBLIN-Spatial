@@ -53,6 +53,8 @@ The migration rule is strict:
 
 A migrated module is accepted only after it reproduces the corresponding frozen validated reference output.
 
+The v1 migration now follows a hybrid data strategy: compact baseline and scenario-control inputs are being moved to canonical GitHub paths under `data/inputs/`, while large spatial inputs are pinned to the frozen Zenodo release `10.5281/zenodo.22035538`. Canonical compact files are activated only after the exact file has been placed and regression-checked, so the working baseline is not broken by directory reorganisation.
+
 ---
 
 ## Model architecture
