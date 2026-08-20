@@ -19,7 +19,7 @@ import pooch
 import yaml
 
 
-LOCAL_SOURCES = {"git", "local"}
+LOCAL_SOURCES = {"git", "local", "git_pending"}
 
 
 def file_hash(path: Path, algorithm: str = "sha256", chunk_size: int = 1024 * 1024) -> str:
@@ -255,6 +255,11 @@ def fetch_data(
     External datasets are fetched to their manifest ``destination``. Versioned
     repository URLs (for example Zenodo record-specific file URLs) should be
     used when scientific reproducibility requires an immutable research input.
+
+    During the v1 path migration, entries declared as ``git_pending`` are
+    documented canonical targets but are intentionally skipped until the exact
+    file has been committed and regression-tested. This prevents a path-only
+    refactor from breaking the still-working baseline.
     """
 
     project_root, manifest = load_manifest(manifest_path)
@@ -264,6 +269,10 @@ def fetch_data(
 
     for name, info in datasets.items():
         source = str(info.get("source", "local")).lower()
+
+        if source == "git_pending":
+            print(f"PENDING  {name}: canonical Git path not activated yet")
+            continue
 
         if tracked_only and source not in LOCAL_SOURCES:
             print(f"SKIP     {name}: external input")
