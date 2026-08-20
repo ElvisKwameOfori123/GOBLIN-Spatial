@@ -67,8 +67,7 @@ files:
     - data/inputs/scenario/SC1_Cattle_Scenario_Endpoints_2050.csv
     - configs/styles_split_gas_pathway_controls.csv
   styles_split_gas_pathway_controls: configs/styles_split_gas_pathway_controls.csv
-  rurality:
-    - data/inputs/scenario/SC1_ED_Rural_Mixed_Urban_2022.xlsx
+  rurality: data/inputs/scenario/SC1_ED_Rural_Mixed_Urban_2022.xlsx
 
   # FROZEN GOBLIN PASTURE FEED CONTROL, retained as a diagnostic/sensitivity
   # control while the principal SC1 land-release authority is migrated.
@@ -79,23 +78,19 @@ files:
     - data/inputs/spatial/08B_NFS_Agricultural_Soil_Capability.csv
     - data/external/soil/cathal.csv
   agricultural_soil_profile: data/controls/soil/ED_GOBLIN_soil_profile.csv.xz
-  physical_soil_package:
-    - data/inputs/spatial/08C_IFS_Mapped_Physical_Soil_Package.zip
+  physical_soil_package: data/inputs/spatial/08C_IFS_Mapped_Physical_Soil_Package.zip
 
   # SC2 SPATIAL OPPORTUNITY INPUTS
-  ed_boundaries:
-    - data/inputs/spatial/SC2_ED_Boundaries_Frozen.gpkg
-    - data/external/spatial/ed/Electoral_Divisions_generalised_SAPS_Shp_with_proper_names.shp
-  saps_ed_geography:
-    - data/inputs/spatial/SC2_ED_Boundaries_Frozen.gpkg
-    - data/external/spatial/ed/Electoral_Divisions_generalised_SAPS_Shp_with_proper_names.shp
-  lpis_2020_parcels:
-    - data/inputs/spatial/SC2_LPIS_2020_Frozen.parquet
-    - data/external/spatial/lpis/LPIS_2020_GOBLIN_reduced_v2.parquet
-  lpis_2025_parcels:
-    - data/inputs/spatial/SC2_LPIS_2025_Frozen.parquet
-    - data/external/spatial/lpis/LPIS_2025_GOBLIN_reduced.parquet
+  # Keep the legacy runtime pins intact until SC2 itself is regression-migrated.
+  # Canonical frozen v1 paths are exposed separately below.
+  saps_ed_geography: data/external/spatial/ed/Electoral_Divisions_generalised_SAPS_Shp_with_proper_names.shp
+  lpis_2020_parcels: data/external/spatial/lpis/LPIS_2020_GOBLIN_reduced_v2.parquet
+  lpis_2025_parcels: data/external/spatial/lpis/LPIS_2025_GOBLIN_reduced.parquet
   lpis_ed_profile: data/controls/lpis/ED_LPIS_opportunity_2020_2025.csv.xz
+
+  ed_boundaries_frozen: data/inputs/spatial/SC2_ED_Boundaries_Frozen.gpkg
+  lpis_2020_frozen: data/inputs/spatial/SC2_LPIS_2020_Frozen.parquet
+  lpis_2025_frozen: data/inputs/spatial/SC2_LPIS_2025_Frozen.parquet
 
 outputs:
   cattle_panel: data/interim/cattle_ed_2015_2025.csv
