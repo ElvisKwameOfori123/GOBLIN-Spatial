@@ -26,6 +26,32 @@ class SpatialConfig:
     raw: dict[str, Any]
 
 
+def _resolve_path(project_root: Path, value: str | Path) -> Path:
+    path = Path(value)
+    return path if path.is_absolute() else project_root / path
+
+
+def _resolve_file_value(project_root: Path, value: Any) -> Path:
+    """Resolve one configured file, allowing canonical-first fallback paths.
+
+    A scalar path behaves exactly as before. A list/tuple is interpreted in
+    preference order: the first existing candidate is selected; if no candidate
+    exists yet, the first path is returned so error messages point at the
+    intended canonical v1 location.
+    """
+
+    if isinstance(value, (list, tuple)):
+        if not value:
+            raise ValueError("configured file candidate list cannot be empty")
+        candidates = [_resolve_path(project_root, item) for item in value]
+        for candidate in candidates:
+            if candidate.exists():
+                return candidate
+        return candidates[0]
+
+    return _resolve_path(project_root, value)
+
+
 def load_config(path: str | Path) -> SpatialConfig:
     """Load YAML and resolve all data paths relative to the repository root."""
 
@@ -43,10 +69,10 @@ def load_config(path: str | Path) -> SpatialConfig:
     processed_dir = project_root / paths.get("processed", "data/processed")
 
     file_config = raw.get("files", {})
-    files: dict[str, Path] = {}
-    for key, value in file_config.items():
-        value_path = Path(value)
-        files[key] = value_path if value_path.is_absolute() else project_root / value_path
+    files = {
+        key: _resolve_file_value(project_root, value)
+        for key, value in file_config.items()
+    }
 
     return SpatialConfig(
         project_root=project_root,
