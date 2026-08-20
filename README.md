@@ -1,225 +1,246 @@
 # GOBLIN-Spatial
 
-**A constraint-preserving spatial modelling framework for reconstructing agricultural systems at fine spatial resolution and spatialising nationally defined livestock and land-use transition pathways.**
+**A constraint-preserving spatial framework for reconstructing agricultural systems at fine spatial resolution and preparing them for spatial transition analysis.**
 
-GOBLIN-Spatial connects the national **GOBLIN AFOLU modelling framework** with fine-scale agricultural geography. The framework first reconstructs a controlled historical agricultural baseline at Electoral Division (ED) level and then uses that baseline to examine where nationally specified livestock adjustment may occur, how much agricultural land may be released, what that land is like, and which alternative land uses are spatially feasible.
+GOBLIN-Spatial connects nationally controlled agricultural and AFOLU information with fine-scale agricultural geography. The current Irish implementation reconstructs a historical agricultural system for **2,857 Electoral Divisions (EDs) from 2015 to 2025**, anchored to the **2020 CSO Census of Agriculture**.
 
-The current Irish implementation reconstructs an annual agricultural baseline for **2,857 Electoral Divisions from 2015 to 2025**. The reconstruction is anchored to the **2020 CSO Electoral Division agricultural census** and uses annual **CSO county-level statistics for livestock, crops and agricultural land over 2015-2025** to control temporal change. The resulting system is represented in both official agricultural categories and GOBLIN-compatible livestock cohorts.
-
-```text
-2020 CSO Electoral Division agricultural data
-                │
-                │ fine-scale spatial anchor
-                ▼
-       2,857 agricultural EDs
-                │
-        ┌───────┼────────┐
-        │       │        │
-        ▼       ▼        ▼
-   LIVESTOCK   CROPS    LAND
-        │       │        │
-        └───────┼────────┘
-                │
-                +
-                │
-  CSO county controls, 2015-2025
-                │
-                │ temporal controls
-                ▼
-    ED annual panel, 2015-2025
-```
-
-The historical reconstruction then provides the spatial system on which national GOBLIN transition pathways are evaluated.
-
-```text
-National GOBLIN pathway
-          │
-          ▼
-  GOBLIN-Spatial
-          │
-          ├── Where does livestock adjustment occur?
-          ├── How much agricultural land may be released?
-          ├── What are the characteristics of that land?
-          └── Which alternative land uses are spatially feasible?
-```
-
-## Development status
-
-The historical ED reconstruction and the downstream Standard Output, dual-soil and SC1-SC3 scientific workflows have been developed and validated in the reference modelling pipeline. The GitHub package is being migrated stage by stage into a single unified **GOBLIN-Spatial v1** implementation.
-
-The migration rule is strict:
-
-> **Modularisation changes software structure, not model mathematics.**
-
-A migrated module is accepted only after it reproduces the corresponding frozen validated reference output.
-
-The v1 migration now follows a hybrid data strategy: compact baseline and scenario-control inputs are being moved to canonical GitHub paths under `data/inputs/`, while large spatial inputs are pinned to the frozen Zenodo release `10.5281/zenodo.22035538`. Canonical compact files are activated only after the exact file has been placed and regression-checked, so the working baseline is not broken by directory reorganisation.
-
----
-
-## Model architecture
-
-GOBLIN-Spatial contains two connected engines within one codebase:
-
-```text
-                    GOBLIN-SPATIAL
-
-            ┌──────────────────────┐
-            │   BASELINE ENGINE    │
-            │      2015-2025       │
-            └──────────┬───────────┘
-                       │
-                       ▼
-            Enriched spatial baseline
-                       │
-                       ▼
-            ┌──────────────────────┐
-            │   SCENARIO ENGINE    │
-            │      SC1-SC3         │
-            └──────────────────────┘
-```
-
-These are not separate models. The Scenario Engine consumes the system produced by the Baseline Engine.
-
----
-
-# Baseline Engine
-
-The Baseline Engine reconstructs the historical ED agricultural system while preserving the controlling livestock, crop, land and biological totals.
-
-## Data foundations
-
-The reconstruction is built around two complementary data pillars:
+The historical model is deliberately hierarchical. Fine-scale 2020 ED data provide the spatial anchor. Annual official statistics provide the higher-level temporal controls. GOBLIN livestock relationships provide biological disaggregation without replacing the official livestock population.
 
 ```text
 2020 CSO ED agricultural census
+            │
+            ├── fine-scale livestock geography
+            ├── land and crop geography
+            └── farm-structure anchor
+            │
+            +
+            │
+2015-2025 official controls
+            │
+            ├── AAA10 county cattle
+            ├── AAA09 regional sheep
+            ├── AQA06 regional land-use change
+            └── farm-structure / demographic controls
+            │
+            ▼
+Reconstructed ED agricultural system, 2015-2025
+```
+
+Non-2020 ED values are reconstructed estimates. They are not presented as independently observed annual ED censuses.
+
+## Development status
+
+GOBLIN-Spatial is being migrated into a clean v1 Python package on a development branch before changes are merged to `main`.
+
+The migration rule is strict:
+
+> **Refactor the software, not the validated scientific mathematics.**
+
+Each stage must reproduce its validated reference behaviour before it is accepted. The current development priority is the **historical baseline through Stage 09**. Scenario refactoring is deliberately deferred until the baseline is complete and regression-tested.
+
+---
+
+# Historical baseline
+
+## Final baseline boundary
+
+The historical baseline finishes at **Stage 09 ED signatures**.
+
+```text
+CATTLE
+01  2020 ED cattle reconciliation
+02  2015-2025 ED cattle panel
+05C 21 GOBLIN cattle cohorts
         │
-        └── fine-scale spatial pattern
-                    +
-CSO county data, 2015-2025
         │
-        └── annual livestock, crop and land controls
-                    │
-                    ▼
-        reconstructed ED panel, 2015-2025
+        ├───────────────┐
+        │               │
+        ▼               ▼
+                     04 MERGE
+        ▲               ▲
+        │               │
+        ├───────────────┘
+        │
+SHEEP
+03A AAA09 region -> corrected county controls
+03B corrected county -> ED sheep panel
+05A annual DAFM breed composition
+05B ED breed/type enrichment
+05D 10 GOBLIN sheep cohorts
+        │
+        ▼
+31-COHORT LIVESTOCK MASTER
+        │
+        ▼
+06 LAND + CROPS + FARM STRUCTURE / SE
+        │
+        ▼
+07 CLEAN VALIDATED EXPORT
+        │
+        ▼
+08 FIXED-2020 STANDARD OUTPUT
+        │
+        ▼
+09 FROZEN ED COHORT SIGNATURES
+        │
+        ▼
+HISTORICAL BASELINE COMPLETE
 ```
 
-### 2020 CSO ED spatial anchor
+**Stages 08B and 08C are not part of the historical baseline.** They are downstream soil-context layers used when the completed baseline is prepared for future scenario analysis.
 
-The 2020 CSO ED agricultural data provide the fine-scale reference distribution for the historical system. They supply the ED-level spatial structure for livestock and the agricultural land system used by the reconstruction.
+## Package boundary
 
-The 2020 anchor is treated as the spatial reference state. Subsequent temporal reconstruction does not create eleven independent ED censuses. Instead, annual higher-level official controls are reconciled back to the fixed ED geography.
-
-### 2015-2025 CSO county controls
-
-Annual CSO county-level statistics provide the temporal controls used to reconstruct change around the 2020 ED anchor. They cover the principal historical agricultural dimensions required by the model:
+The v1 historical interface is organised as:
 
 ```text
-LIVESTOCK
-├── cattle
-└── sheep
-
-CROPS
-├── cereals
-└── other crop area
-
-AGRICULTURAL LAND
-├── area farmed
-└── grassland
-```
-
-The model therefore should not be interpreted as a livestock-only reconstruction. Livestock, crops and agricultural land are all part of the historical ED system.
-
-## Scientific sequence
-
-```text
-Cattle + Sheep
-      │
-      ▼
-Livestock cohort structure
-      │
-      ▼
-Land + crops + farm structure
-      │
-      ▼
-Standard Output
-      │
-      ▼
-Agricultural capability soil
-      │
-      ▼
-Mapped physical soil
-      │
-      ├──────────────► Final enriched baseline
-      │
-      ▼
-Frozen livestock signatures
-```
-
-The validated stage sequence is:
-
-```text
-01 → 02 → 03_0 → 03A → 03B → 04
-                     ↓
-              05A → 05B → 05C → 05D
-                     ↓
-                    06
-                     ↓
-                    07
-                     ↓
-                    08
-                     ↓
-                   08B
-                     ↓
-                   08C
-                     ↓
-                    09
-```
-
-The planned v1 package groups these stages into logical scientific modules while retaining stage identity inside the functions:
-
-```text
-baseline/
+src/goblin_spatial/baseline/
 ├── cattle.py                 # 01, 02, 05C
-├── sheep.py                  # 03_0, 03A, 03B, 05A, 05B, 05D
+├── sheep.py                  # 03A, 03B, 05A, 05B, 05D
 ├── merge.py                  # 04
 ├── land_farm_structure.py    # 06
 ├── clean_export.py           # 07
 ├── standard_output.py        # 08
-├── agricultural_soil.py      # 08B
-├── physical_soil.py          # 08C
 └── signatures.py             # 09
 ```
 
-### Livestock
+Cattle and sheep are built independently. The merge stage joins the two validated systems on `YEAR + CSOED`; it does not recalculate livestock populations.
 
-The livestock reconstruction combines the 2020 CSO ED spatial anchor with annual official controls for 2015-2025.
+---
 
-For cattle, the 2020 ED cattle distribution provides the within-county spatial structure while the annual CSO AAA10 county series controls cattle totals through time. The controlled cattle population is established first and is then expressed through the GOBLIN biological cohort structure without changing that population.
+# Cattle module
 
-For sheep, the same 2020 ED anchor and annual-control principle applies, but the validated sheep workflow also preserves the detailed AAA09 region/county reconciliation hierarchy and DAFM county information used for sheep control and composition. DAFM breed anchors provide composition information rather than replacing the CSO-controlled sheep population.
+The cattle module follows the validated CSO-first hierarchy.
 
-The Irish baseline contains **21 cattle cohorts** and **10 sheep cohorts**. Cattle cohort disaggregation retains an ED-informed distinction between dairy-origin and beef-origin young stock while allowing a restricted set of receiver/rearing EDs where the observed young-stock structure indicates livestock movement.
+### Stage 01: 2020 ED cattle anchor
 
-### Crops, agricultural land and farm structure
+The 2020 CSO ED data provide the within-county spatial pattern. CSO AAA10 provides the exact county controls for:
 
-The historical baseline explicitly contains:
+```text
+DAIRY_COW
+OTHER_COW
+TOTAL_CATTLE
+```
+
+After reconciliation:
+
+```text
+OTHER_CATTLE = TOTAL_CATTLE - DAIRY_COW - OTHER_COW
+```
+
+AAA10 then supplies the county age-sex composition used to partition `OTHER_CATTLE` into bulls and six young/other cattle age-sex containers.
+
+No GOBLIN genetic information is used in Stage 01.
+
+### Stage 02: annual cattle panel
+
+The reconciled 2020 within-county ED pattern is held as the spatial support. Annual AAA10 county totals control 2015-2025 cattle populations. The 2020 ED state is copied exactly.
+
+### Stage 05C: 21 GOBLIN cattle cohorts
+
+The existing CSO cattle population remains authoritative. GOBLIN supplies biological relationships only.
+
+For 2015-2020, year-specific GOBLIN relationships are used. For 2021-2025, the 2020 biological relationships are held constant and applied to each year's current CSO dairy/suckler structure.
+
+Genetic support is ED-informed:
+
+```text
+dairy cows   -> DxD / DxB support
+suckler cows -> BxB support
+```
+
+Sparse receiver/rearing exceptions are retained where young cattle occur without the corresponding local parent population and where support is required for exact national closure.
+
+Every ED-year must satisfy:
+
+```text
+sum(21 GOBLIN cattle cohorts) = TOTAL_CATTLE
+```
+
+---
+
+# Sheep module
+
+The production sheep baseline follows the validated **03A -> 03B** hierarchy.
+
+### Stage 03A: regional controls to corrected county controls
+
+The 2020 ED `TOTAL_SHEEP` distribution supplies the fine-scale spatial footprint. The frozen AAA09 workbook contains two relevant sheets:
+
+- `County_WIDE`: used for the deterministic County -> detailed-region / NUTS2 crosswalk;
+- `Region_WIDE`: supplies the raw AAA09 detailed-region totals and demographic composition for 2015-2025.
+
+The observed 2020 ED sheep footprint is first reconciled to exact 2020 detailed-region totals. Those corrected ED values are aggregated to corrected 2020 county anchors. For non-2020 years, each region's raw AAA09 total is distributed to counties using the corrected 2020 county shares.
+
+The four non-overlapping sheep classes are reconciled jointly:
+
+```text
+EWES_2_PLUS
+EWES_UNDER_2
+RAMS
+OTHER_SHEEP
+```
+
+### Stage 03B: county to ED
+
+Corrected annual county sheep totals are allocated to EDs using the corrected 2020 within-county ED pattern. The 2020 state is reproduced exactly and structural zero support is preserved.
+
+### DAFM county sheep totals
+
+`03_0_DAFM_Sheep_County_Totals_2015_2020_2022_2025.csv` is retained for independent/hold-out validation. It is **not** used to replace the production CSO/AAA09 sheep population in the current validated baseline.
+
+### Stages 05A and 05B: breed composition
+
+DAFM breed anchors provide **composition only** for 2016, 2020, 2022 and 2025. Annual shares are reconstructed using the validated interpolation rules and applied to the CSO-controlled sheep population without changing sheep totals.
+
+Mountain + Mountain Cross is retained as an upland-type proxy for GOBLIN-compatible mapping. It is not presented as an observed ED hill-farm classification.
+
+### Stage 05D: 10 GOBLIN sheep cohorts
+
+The enriched sheep population is expressed in the 10 GOBLIN sheep cohorts. Every ED-year must satisfy:
+
+```text
+sum(10 GOBLIN sheep cohorts) = TOTAL_SHEEP
+```
+
+---
+
+# Stage 04: livestock merge
+
+Cattle and sheep are merged only after their independent accounting checks pass.
+
+The resulting system contains:
+
+```text
+21 cattle cohorts
++ 10 sheep cohorts
+= 31 GOBLIN livestock cohorts
+```
+
+The merge does not alter cattle or sheep numbers.
+
+---
+
+# Stage 06: land, crops and farm structure / SE
+
+Stage 06 adds the eight structural fields used by the historical model:
 
 ```text
 AREA_FARMED
 ALL_GRASSLAND
 TOTAL_CEREALS
 OTHER_CROPS_HA
-
 AGRICULTURAL_HOLDINGS
 AVERAGE_SIZE_OF_HOLDINGS
 AVERAGE_AGE_OF_HOLDER
 MEDIAN_AGE_OF_HOLDER
 ```
 
-The 2020 ED agricultural values provide the fine-scale spatial anchor. Annual CSO controls over 2015-2025 govern temporal change in crops and agricultural land around that anchor.
+The exact 2020 ED values are locked.
 
-The principal land accounting identity is:
+AQA06 supplies annual **regional change** around the 2020 ED land structure. The validated seven-region mapping is deterministic and stored in the code, so a separate county-region input file is not required.
+
+Every ED-year must satisfy:
 
 ```text
 AREA_FARMED =
@@ -228,178 +249,111 @@ ALL_GRASSLAND
 + OTHER_CROPS_HA
 ```
 
-The farm-structure variables provide structural and demographic context. They should not be interpreted as a complete representation of household socioeconomic conditions.
+Farm holdings and holder-age indicators use the validated State/county trajectories around the fixed 2020 ED anchor. Average holding size preserves the reported 2020 ED anchor and is reconstructed from relative changes in land and holdings outside 2020.
 
-### Temporal interpretation
-
-The 2015-2025 dataset is a **reconstructed ED panel**, not eleven independent ED censuses.
-
-```text
-2020 ED spatial structure
-        +
-2015-2025 official annual controls
-        ↓
-2015-2025 reconstructed ED system
-```
-
-Accordingly:
-
-- cattle change is controlled using annual official county cattle totals;
-- sheep change is controlled through the validated official sheep hierarchy;
-- crop and agricultural-land change is controlled using annual CSO land-use statistics;
-- the 2020 ED pattern remains the fine-scale spatial reference;
-- non-2020 ED values are reconstructed estimates rather than directly observed annual ED census values.
-
-### Standard Output
-
-Standard Output is added using fixed IFS-2020 coefficients and is interpreted as **agricultural production-value exposure**. It is not farm profit, household income or welfare.
-
-### Dual-soil representation
-
-GOBLIN-Spatial retains two separate soil representations:
-
-- **Cathal/NFS agricultural capability** provides the agricultural capacity frame.
-- **Colm/IFS mapped physical soil** provides independent mapped soil characteristics such as drainage, peat association and parent material.
-
-The two soil systems are intentionally retained separately rather than blended.
+Stage 06 must not change any of the 31 livestock cohorts.
 
 ---
 
-# Scenario Engine
+# Stage 07: clean baseline export
 
-The Scenario Engine takes nationally defined GOBLIN pathways and tests their spatial implications through three sequential stages.
+Stage 07 is an output/validation boundary. It standardises the historical deliverable without changing scientific values.
 
-The principal scenario configuration uses a **common 2020 baseline**.
-
-```text
-SC1
-National livestock pathway
-        │
-        ▼
-ED livestock adjustment
-        │
-        ▼
-Potential released land
-        │
-        ▼
-SC2
-LPIS + agricultural capability
-+ mapped physical soil + land context
-        │
-        ▼
-Released-land opportunity
-        │
-        ▼
-SC3
-National land-use targets
-+ spatial eligibility/capacity
-        │
-        ▼
-Realised allocation
-+ unmet target
-+ uncommitted land
-```
-
-The v1 scenario modules are:
+The complete historical panel has:
 
 ```text
-scenario/
-├── sc1_transition.py
-├── sc2_opportunity.py
-└── sc3_allocation.py
+2,857 EDs
+11 years: 2015-2025
+31,427 ED-year rows
 ```
-
-## SC1: Spatial livestock transition
-
-SC1 spatialises nationally specified livestock endpoints across EDs. Alternative allocation policies can change **where adjustment occurs**, but they cannot change the national pathway endpoint.
-
-SC1 also spatialises the authoritative national released-land quantity. It does not decide the future land use of that released land.
-
-## SC2: Released-land opportunity
-
-SC2 characterises the land released in SC1 using LPIS, agricultural capability, mapped physical soil, organic-soil evidence and other spatial eligibility information.
-
-SC2 does not rerun the livestock transition and does not change the amount of land released by SC1.
-
-## SC3: Land-transition feasibility
-
-SC3 combines released-land opportunity with explicit national land-use targets. Allocation is constrained by the amount and characteristics of land actually available.
-
-A national target is therefore not forced into EDs where sufficient eligible capacity does not exist. SC3 reports realised allocation, unmet target and remaining uncommitted land.
-
-### Central distinction
-
-A core rule of GOBLIN-Spatial is:
-
-```text
-Potential Release ≠ Opportunity ≠ Realised Conversion
-```
-
-Livestock contraction may release agricultural land. That does not mean every released hectare is suitable for every alternative use, and spatial suitability does not mean that all suitable land is necessarily converted.
 
 ---
 
-# National and spatial authority
+# Stage 08: Standard Output
 
-GOBLIN-Spatial separates national and spatial modelling responsibilities:
+Stage 08 applies fixed IFS-2020 Standard Output coefficients to the reconstructed activities.
+
+It measures **agricultural production-value exposure**. It is not farm profit, household income or welfare.
+
+The runtime mapping is frozen in:
 
 ```text
-Official agricultural statistics
-        ↓
-control the historical agricultural system
-
-GOBLIN
-        ↓
-controls national transition pathways
-
-GOBLIN-Spatial
-        ↓
-controls spatial representation
-and tests spatial feasibility
+08_IFS2020_Standard_Output_Mapping.xlsx
 ```
 
-GOBLIN-Spatial does not redefine the national GOBLIN pathway. Its role is to examine what that pathway implies when agricultural geography, livestock structure, crops, agricultural land, soils and land-use constraints are taken seriously.
+The mapping values livestock cohorts directly and also covers the selected crop-area variables while preventing double counting of aggregate livestock controls and physical grassland.
+
+Stage 08 must not change pre-existing livestock, land, crop or farm-structure values.
 
 ---
 
-# Data and reproducibility
+# Stage 09: frozen ED signatures
 
-GOBLIN-Spatial v1 uses a **hybrid data strategy**.
+Stage 09 is the **final baseline stage**.
+
+It freezes the pre-scenario relationship between the 2020 ED adult-cow structure and each cattle follower cohort. The signature table distinguishes:
+
+```text
+LOCAL_ED
+COUNTY_RECEIVER
+NATIONAL_ORPHAN
+NONE
+```
+
+These are accounting relationships inferred from the reconstructed livestock geography. They are not direct observations of animal movement.
+
+Stage 09 belongs to the baseline package and does not import or run scenario code. Future scenario modules consume these frozen relationships downstream.
+
+---
+
+# Soil and future scenario preparation
+
+After the historical baseline is complete, spatial context can be attached for scenario work.
+
+```text
+HISTORICAL BASELINE THROUGH 09
+        │
+        ▼
+08B Cathal/NFS agricultural capability
+        │
+        ▼
+08C Colm/IFS mapped physical soil
+        │
+        ▼
+future scenario workflow
+```
+
+The two soil systems remain separate. They are not blended into one soil index, and neither changes historical cattle, sheep, crop or land reconstruction.
+
+LPIS and frozen ED geometry also enter only on the downstream spatial/scenario side.
+
+Scenario code is intentionally not being refactored in the current baseline pass.
+
+---
+
+# Data architecture
+
+GOBLIN-Spatial uses a hybrid data strategy.
 
 ```text
 GitHub
-├── Python source code
+├── code
 ├── tests
 ├── configuration
-├── manifests
-├── compact baseline inputs
-└── compact scenario controls
+├── manifest
+└── compact baseline inputs
 
 Zenodo
 └── large frozen spatial inputs
-
-Local installation
-└── data/inputs/
 ```
 
-The compact baseline files are kept directly with the repository so that the historical 2015-2025 reconstruction remains easy to inspect, test and rebuild. Large spatial files are fetched from the published frozen input release and checksum-verified.
-
-The frozen v1 input bundle is published on Zenodo:
-
-**Version DOI:** [10.5281/zenodo.22035538](https://doi.org/10.5281/zenodo.22035538)
-
-**Concept DOI:** [10.5281/zenodo.22035537](https://doi.org/10.5281/zenodo.22035537)
-
-The version-specific DOI identifies the exact frozen input release used for reproducible execution. The concept DOI resolves to the latest dataset version.
-
-## Compact Git-tracked baseline contract
+## Compact historical inputs
 
 ```text
 data/inputs/baseline/
 ├── 01_CSO_ED_Agricultural_Baseline_2020.csv
 ├── 01_CSO_AAA10_Cattle_County_2015_2025.csv
 ├── 03_CSO_AAA09_Sheep_County_Region_2015_2025.xlsx
-├── 03_0_DAFM_Sheep_County_Totals_2015_2020_2022_2025.csv
 ├── 05A_DAFM_Sheep_Breed_Anchors_2016_2020_2022_2025.csv
 ├── 05C_Cattle_Cohort_Relationships_2012_2020.csv
 ├── 06_CSO_AQA06_Agricultural_Land_Use.xlsx
@@ -407,15 +361,9 @@ data/inputs/baseline/
 └── 08_IFS2020_Standard_Output_Mapping.xlsx
 ```
 
-The `05C_Cattle_Cohort_Relationships_2012_2020.csv` file is the shared GOBLIN biological relationship source used by the livestock cohort disaggregation, including the sheep relationships required downstream.
+The frozen bundle also contains the DAFM county sheep hold-out file for validation.
 
-## Compact Git-tracked scenario controls
-
-```text
-data/inputs/scenario/
-├── SC1_Cattle_Scenario_Endpoints_2050.csv
-└── SC1_ED_Rural_Mixed_Urban_2022.xlsx
-```
+The published `05C_Cattle_Cohort_Relationships_2012_2020.csv` filename is retained for reproducibility even though the source contains the GOBLIN sheep series used by Stage 05D as well as the cattle series used by Stage 05C.
 
 ## Large Zenodo-backed spatial inputs
 
@@ -428,212 +376,126 @@ data/inputs/spatial/
 └── SC2_ED_Boundaries_Frozen.gpkg
 ```
 
-The principal scenario configuration uses **LPIS 2020** alongside the common 2020 baseline. LPIS 2025 is retained for optional alternative-baseline and sensitivity applications.
+**Frozen data version DOI:** `10.5281/zenodo.22035538`
 
-The Zenodo release also includes the frozen-input manifest, README and SHA256 checksum list used to document and verify the data contract.
+**Concept DOI:** `10.5281/zenodo.22035537`
 
-Generated intermediate and scenario-result files are recreated by the software and are not mandatory downloads.
+`data_manifest.yaml` is the machine-readable authority for canonical paths, checksums and source roles.
 
----
-
-# Current developer usage
-
-Install the package in editable mode:
-
-```bash
-pip install -e .
-```
-
-Verify the currently declared development data contract:
-
-```bash
-goblin-spatial fetch-data --verify-only
-```
-
-Build the currently modularised historical package:
-
-```bash
-goblin-spatial build --config configs/ireland_2015_2025.yaml
-```
-
-The final v1 CLI will expose separate baseline, scenario and full-pipeline commands once the validated 08-SC3 stages have completed regression migration.
-
-The intended final user workflow is:
-
-```bash
-goblin-spatial fetch-data --profile core-2020
-goblin-spatial run baseline
-goblin-spatial run scenario --scenario SI_SG --policy PRORATA
-goblin-spatial run all
-```
+During migration, canonical compact paths are activated only after the exact frozen file has been physically placed and regression-tested. Legacy paths remain temporary fallbacks so directory reorganisation cannot silently change the model.
 
 ---
 
-# Accounting and validation
+# Baseline outputs
 
-The baseline obeys the core identities:
+The refactored baseline writes the historical master and clean workbook, then the final Stage 08 and Stage 09 outputs.
 
 ```text
-sum(21 GOBLIN cattle cohorts) = TOTAL_CATTLE
-sum(10 GOBLIN sheep cohorts) = TOTAL_SHEEP
+data/processed/
+├── goblin_spatial_master_2015_2025.csv
+├── GOBLIN_Spatial_Final_Clean_Data_2015_2025.xlsx
+├── 08_GOBLIN_Spatial_Standard_Output_2015_2025.csv
+├── 09_GOBLIN_Spatial_ED_Cohort_Signatures_2020.csv
+└── validation_summary.csv
+```
+
+---
+
+# Validation gates before merge to `main`
+
+A refactored stage is not accepted because it looks cleaner. It must reproduce the validated scientific contract.
+
+Required baseline gates include:
+
+```text
+31,427 ED-year rows
+2,857 unique EDs
+years exactly 2015-2025
+no duplicate YEAR-CSOED keys
+no negative livestock or land values
+
+sum(21 cattle cohorts) = TOTAL_CATTLE
+sum(10 sheep cohorts) = TOTAL_SHEEP
 
 AREA_FARMED =
 ALL_GRASSLAND
 + TOTAL_CEREALS
 + OTHER_CROPS_HA
+
+2020 cattle anchor locked
+2020 sheep anchor locked
+2020 land/farm-structure fields locked
+Stage 08 changes no pre-existing activity
+Stage 09 contains one unique row per ED × follower cohort
 ```
 
-The Irish reference baseline contains:
+The migration workflow is:
 
 ```text
-2,857 EDs
-2015-2025
-31,427 ED-year observations
-21 cattle cohorts
-10 sheep cohorts
+validated reference script
+        ↓
+refactored module
+        ↓
+same frozen input
+        ↓
+output comparison
+        ↓
+PASS
+        ↓
+module accepted
 ```
 
-Scenario accounting additionally requires:
-
-```text
-SC1 national livestock totals
-= national GOBLIN pathway totals
-
-SC1 spatial released land
-= authoritative national released-land total
-
-SC2 released land
-= SC1 released land
-
-SC3 realised allocation
-<= eligible spatial capacity
-```
-
-For each targeted land use:
-
-```text
-Realised allocation + Unmet target = Target
-```
-
-Exact accounting closure demonstrates consistency with the model constraints. It should not be interpreted as independent empirical validation of every reconstructed ED-level value.
+Only after the complete baseline passes its regression gates should the draft refactor be merged into `main`.
 
 ---
 
-# Regression migration rule
+# Developer usage
 
-The original scientific pipeline was developed and validated stage by stage. During conversion to the Python package, every module must reproduce its corresponding frozen reference output before it is accepted.
+Install in editable mode:
 
-```text
-Validated reference script
-          ↓
-Modular function
-          ↓
-Same frozen input
-          ↓
-Output comparison
-          ↓
-PASS
-          ↓
-Module accepted
+```bash
+pip install -e .
 ```
 
-This preserves scientific equivalence while improving software structure, testing and reproducibility.
+Run the current historical reconstruction:
+
+```bash
+goblin-spatial build --config configs/ireland_2015_2025.yaml
+```
+
+The Python-level complete baseline entry point is:
+
+```python
+from goblin_spatial.pipeline import run_baseline
+
+baseline = run_baseline("configs/ireland_2015_2025.yaml")
+```
+
+The user-facing CLI will be simplified after the baseline regression migration is complete.
 
 ---
 
 # Interpretation boundaries
 
-Users should observe the following limits:
-
-- The 2020 CSO ED agricultural census is the fine-scale spatial anchor.
-- Annual 2015-2025 official controls determine temporal change in livestock, crops and agricultural land.
-- Non-2020 ED values are reconstructed rather than independent annual ED census observations.
-- Standard Output represents production-value exposure rather than profit, household income or welfare.
-- Cathal/NFS agricultural capability and Colm/IFS physical soil are separate information layers.
-- G3 soil capability should not automatically be interpreted as peat or organic soil.
-- LPIS contributes information about land-use characteristics and potential opportunity. It does not prescribe future land use.
-- Scenario allocation policies change the spatial distribution of livestock adjustment, not the national scenario endpoint.
-- Potential released land should not be interpreted as land that is automatically converted to another use.
-
----
-
-# Intended v1 repository structure
-
-```text
-GOBLIN-Spatial/
-├── README.md
-├── pyproject.toml
-├── data_manifest.yaml
-├── configs/
-│
-├── src/
-│   └── goblin_spatial/
-│       ├── __init__.py
-│       ├── cli.py
-│       ├── config.py
-│       ├── pipeline.py
-│       │
-│       ├── data/
-│       │   ├── fetch.py
-│       │   ├── data_manager.py
-│       │   └── validate_inputs.py
-│       │
-│       ├── baseline/
-│       │   ├── cattle.py
-│       │   ├── sheep.py
-│       │   ├── merge.py
-│       │   ├── land_farm_structure.py
-│       │   ├── clean_export.py
-│       │   ├── standard_output.py
-│       │   ├── agricultural_soil.py
-│       │   ├── physical_soil.py
-│       │   └── signatures.py
-│       │
-│       ├── scenario/
-│       │   ├── sc1_transition.py
-│       │   ├── sc2_opportunity.py
-│       │   └── sc3_allocation.py
-│       │
-│       └── utils/
-│           ├── paths.py
-│           ├── io.py
-│           ├── allocation.py
-│           └── validation.py
-│
-├── tests/
-│
-└── data/
-    ├── inputs/
-    │   ├── baseline/
-    │   ├── scenario/
-    │   └── spatial/
-    ├── interim/
-    └── outputs/
-```
-
-Paper-specific analysis, figures and exploratory workflows are deliberately outside the core v1 package.
-
-The core software is therefore:
-
-```text
-Data management
-      +
-Baseline Engine
-      +
-Scenario Engine
-```
+- The 2020 CSO ED census is the fine-scale spatial anchor.
+- Non-2020 ED values are reconstructed estimates rather than independent annual ED observations.
+- AAA10 controls annual cattle totals at county level.
+- Raw AAA09 detailed-region statistics control the production sheep hierarchy.
+- DAFM breed information changes composition, not sheep population totals.
+- AQA06 supplies regional land-use change around the exact 2020 ED anchor.
+- Standard Output is production-value exposure, not income or profit.
+- Stage 09 signatures are inferred accounting relationships, not observed animal movements.
+- 08B and 08C are downstream soil context for scenario preparation, not historical baseline reconstruction.
 
 ---
 
 # Citation
 
-When the v1 software release is complete, users should cite both the software release and the corresponding frozen data release so that the code version and the exact scientific input version can be identified independently.
-
 **Frozen model-input dataset:**
 
 > Ofori, E. (2026). *GOBLIN-Spatial Frozen Model Inputs for Irish Electoral Division Agricultural and Land-Transition Modelling, Version 1.0.0* [Dataset]. Zenodo. https://doi.org/10.5281/zenodo.22035538
 
-**Software DOI:** to be added at the v1 software release.
+A software DOI will be added when the v1 software release is frozen.
 
 Individual source datasets remain subject to their respective attribution and licensing requirements.
 
@@ -643,7 +505,3 @@ Individual source datasets remain subject to their respective attribution and li
 
 **Elvis Kwame Ofori**  
 University of Galway
-
----
-
-**GOBLIN-Spatial links nationally controlled agricultural and AFOLU transition pathways with fine-scale agricultural geography while preserving the distinction between historical livestock, crop and land reconstruction, livestock adjustment, potential land release, spatial opportunity and realised land-use transition.**
