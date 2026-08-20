@@ -11,11 +11,40 @@ from goblin_spatial.sheep.drift import (
 )
 
 
+IRISH_COUNTIES = [
+    "Carlow",
+    "Cavan",
+    "Clare",
+    "Cork",
+    "Donegal",
+    "Dublin",
+    "Galway",
+    "Kerry",
+    "Kildare",
+    "Kilkenny",
+    "Laois",
+    "Leitrim",
+    "Limerick",
+    "Longford",
+    "Louth",
+    "Mayo",
+    "Meath",
+    "Monaghan",
+    "Offaly",
+    "Roscommon",
+    "Sligo",
+    "Tipperary",
+    "Waterford",
+    "Westmeath",
+    "Wexford",
+    "Wicklow",
+]
+
+
 def _synthetic_anchors() -> pd.DataFrame:
-    counties = [f"County {i:02d}" for i in range(26)]
     rows = []
     for year in ANCHOR_YEARS:
-        for i, county in enumerate(counties):
+        for i, county in enumerate(IRISH_COUNTIES):
             # Positive counts with deliberately changing county distribution.
             rows.append(
                 {
@@ -53,7 +82,7 @@ def test_dafm_drift_preserves_observed_anchor_shares_and_2020_identity() -> None
             .sort_index()
         )
         expected = observed[year].sort_index()
-        assert np.allclose(model.to_numpy(), expected.to_numpy(), atol=1e-15, rtol=0.0)
+        assert np.array_equal(model.to_numpy(), expected.to_numpy())
 
 
 def test_intermediate_dafm_shares_are_linear_and_renormalised() -> None:
@@ -78,7 +107,7 @@ def test_drifted_county_weights_leave_2020_anchor_untouched() -> None:
     drift = build_annual_dafm_county_drift(anchors)
     county_anchor = pd.DataFrame(
         {
-            "County": [f"County {i:02d}" for i in range(6)],
+            "County": IRISH_COUNTIES[:6],
             "Region": ["R1", "R1", "R1", "R2", "R2", "R2"],
             "TOTAL_SHEEP_2020_RECONCILED": [100, 200, 300, 400, 500, 600],
         }
