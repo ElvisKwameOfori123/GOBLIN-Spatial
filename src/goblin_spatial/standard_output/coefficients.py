@@ -18,16 +18,11 @@ SOUTH_EAST_COUNTIES = {
 }
 ALL_IRISH_COUNTIES = BMW_COUNTIES | SOUTH_EAST_COUNTIES
 
-# Historic two-region coding used by the Irish SOC2020 table.
 FADN_REGION_LABELS = {
     "381": "Border, Midland and Western",
     "382": "Southern and Eastern",
 }
 
-# Product-code crosswalk retained as an explicit scientific contract and for
-# validation against the source IFS SOC table. Runtime valuation uses the
-# Git-tracked GOBLIN_SO_mapping.csv so model variables, coefficients and
-# imputation flags live in one auditable control file.
 COHORT_PRODUCT_CODE = {
     "dairy_cows": "A2300F",
     "suckler_cows": "A2300G",
@@ -68,9 +63,6 @@ CEREAL_PRODUCT_CODES = {
     "oats": "C1400T",
 }
 
-# 2020 Census of Agriculture cereal areas aligned to the historic Irish SO
-# regions. These are used only to reproduce/validate the aggregate cereal
-# composite in the model mapping CSV.
 CEREAL_AREAS_2020_HA = {
     "381": {"wheat": 8061.0, "barley": 39399.0, "oats": 5167.0},
     "382": {"wheat": 38909.0, "barley": 153787.0, "oats": 20241.0},
@@ -173,16 +165,19 @@ def load_soc2020_controls(path: str | Path | None = None) -> pd.DataFrame:
 def load_model_mapping(path: str | Path | None = None) -> pd.DataFrame:
     """Load the direct GOBLIN variable -> fixed-2020 SO mapping control.
 
-    This is the runtime control used by baseline/pathway valuation. The original
-    IFS extract remains separately available through ``load_soc2020_controls``
-    for source auditing.
+    The canonical v1 input is the frozen workbook sheet ``SO_Mapping``. CSV
+    controls remain supported during staged migration and for compact tests.
     """
 
     source = Path(path) if path is not None else DEFAULT_MAPPING_PATH
     if not source.exists():
         raise FileNotFoundError(source)
-    mapping = pd.read_csv(source)
+    if source.suffix.lower() in {".xlsx", ".xls"}:
+        mapping = pd.read_excel(source, sheet_name="SO_Mapping")
+    else:
+        mapping = pd.read_csv(source)
 
+    mapping.columns = [str(column).strip() for column in mapping.columns]
     required = {
         "MODEL_VARIABLE",
         "DOMAIN",
