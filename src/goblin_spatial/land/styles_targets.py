@@ -1,8 +1,8 @@
 """Allocate sourced Styles SI_SG / BE_SG released-land targets across EDs.
 
 This module is deliberately downstream of livestock, authoritative national land
-release, soil and LPIS context.  It does not decide how much land Ireland
-releases.  It places only the incremental land uses supplied by the same Styles
+release, soil and LPIS context. It does not decide how much land Ireland
+releases. It places only the incremental land uses supplied by the same Styles
 pathway package and leaves the remainder as Available land.
 
 The Table S3 released-land accounting used here is:
@@ -91,7 +91,7 @@ def _styles_scores(frame: pd.DataFrame) -> dict[str, np.ndarray]:
 
     Biorefinery grass uses the same productive grass-clover screen as AD grass.
     Additional tillage uses the production-soil score, reduced where matched LPIS
-    identifies sensitive grass context.  These are opportunity-screen weights,
+    identifies sensitive grass context. These are opportunity-screen weights,
     not parcel-level crop suitability claims.
     """
 
@@ -140,7 +140,7 @@ def allocate_styles_released_land_targets(
     """Place one Styles pathway's explicit 2050 released-land targets across EDs.
 
     National released hectares and land-use targets remain hard pathway controls.
-    Opportunity evidence affects geography only.  If an opportunity screen cannot
+    Opportunity evidence affects geography only. If an opportunity screen cannot
     accommodate a target, the unmet amount is reported and remains in the ED
     Available-land residual rather than being forced into unsuitable locations.
     """
@@ -254,12 +254,23 @@ def allocate_styles_released_land_targets(
     return out
 
 
+def _report_hectares(value: float) -> float:
+    """Normalise sub-microhectare floating noise at the reporting boundary."""
+
+    return float(np.round(float(value), 6))
+
+
 def summarise_styles_released_land_targets(
     frame: pd.DataFrame,
     *,
     released_column: str = "GOBLIN_RELEASED_GRASSLAND_HA",
 ) -> pd.DataFrame:
-    """Return one-row national reconciliation for a Styles land allocation."""
+    """Return one-row national reconciliation for a Styles land allocation.
+
+    Continuous ED allocation retains full floating precision. National hectare
+    reporting is rounded to 1e-6 ha so binary floating representation cannot
+    turn an exact sourced control such as 803000 ha into 802999.9999999999 ha.
+    """
 
     required = {
         "MILESTONE_YEAR",
@@ -288,30 +299,30 @@ def summarise_styles_released_land_targets(
 
     row: dict[str, float | int] = {
         "MILESTONE_YEAR": int(years[0]),
-        "GOBLIN_RELEASED_GRASSLAND_HA": float(
+        "GOBLIN_RELEASED_GRASSLAND_HA": _report_hectares(
             pd.to_numeric(frame[released_column], errors="raise").sum()
         ),
-        "STYLES_AVAILABLE_RESIDUAL_HA": float(
+        "STYLES_AVAILABLE_RESIDUAL_HA": _report_hectares(
             pd.to_numeric(frame["STYLES_AVAILABLE_RESIDUAL_HA"], errors="raise").sum()
         ),
-        "STYLES_EXPECTED_AVAILABLE_RESIDUAL_HA": float(
+        "STYLES_EXPECTED_AVAILABLE_RESIDUAL_HA": _report_hectares(
             pd.to_numeric(frame["STYLES_EXPECTED_AVAILABLE_RESIDUAL_HA"], errors="raise").iloc[0]
         ),
-        "STYLES_ACTUAL_AVAILABLE_RESIDUAL_HA": float(
+        "STYLES_ACTUAL_AVAILABLE_RESIDUAL_HA": _report_hectares(
             pd.to_numeric(frame["STYLES_ACTUAL_AVAILABLE_RESIDUAL_HA"], errors="raise").iloc[0]
         ),
-        "STYLES_TOTAL_UNMET_LAND_TARGET_HA": float(
+        "STYLES_TOTAL_UNMET_LAND_TARGET_HA": _report_hectares(
             pd.to_numeric(frame["STYLES_TOTAL_UNMET_LAND_TARGET_HA"], errors="raise").iloc[0]
         ),
     }
     for land_use in STYLES_RELEASED_LAND_USES:
-        row[f"TARGET_{land_use}_HA"] = float(
+        row[f"TARGET_{land_use}_HA"] = _report_hectares(
             pd.to_numeric(frame[f"STYLES_NATIONAL_TARGET_{land_use}_HA"], errors="raise").iloc[0]
         )
-        row[f"ALLOCATED_{land_use}_HA"] = float(
+        row[f"ALLOCATED_{land_use}_HA"] = _report_hectares(
             pd.to_numeric(frame[f"STYLES_ALLOCATED_{land_use}_HA"], errors="raise").sum()
         )
-        row[f"UNMET_{land_use}_HA"] = float(
+        row[f"UNMET_{land_use}_HA"] = _report_hectares(
             pd.to_numeric(frame[f"STYLES_NATIONAL_UNMET_{land_use}_HA"], errors="raise").iloc[0]
         )
     return pd.DataFrame([row])
