@@ -34,10 +34,22 @@ def _load_crosswalk(path) -> pd.DataFrame:
     return mapping.rename(columns={"NUTS3_REGION": "AQA06_REGION"})
 
 
+def _read_aqa06(path) -> pd.DataFrame:
+    """Read the frozen AQA06 workbook or the legacy tidy CSV."""
+
+    suffix = str(path).lower()
+    if suffix.endswith((".xlsx", ".xls")):
+        controls = pd.read_excel(path, sheet_name="Unpivoted")
+    else:
+        controls = pd.read_csv(path)
+    controls.columns = [str(column).strip() for column in controls.columns]
+    return controls
+
+
 def _load_land_controls(
     path, regions: set[str]
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    controls = pd.read_csv(path)
+    controls = _read_aqa06(path)
     required = {"Year", "Type of Land Use", "Region", "UNIT", "VALUE"}
     if not required.issubset(controls.columns):
         raise ValueError(
