@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 
 from goblin_spatial.dynamics.baseline import select_baseline_year
-from goblin_spatial.scenario.allocation import _allocate_reduction_total, _rule_cut_weights
+from goblin_spatial.scenario.allocation import _bounded_integer_allocate, _rule_cut_weights
 from goblin_spatial.scenario.definition import AllocationRule, ScenarioDefinition
 from goblin_spatial.scenario.endpoint_composition import reconcile_endpoint_composition
 from goblin_spatial.scenario.goblin_controls import GoblinPathwayControls
@@ -18,6 +18,60 @@ def _integer(frame: pd.DataFrame, column: str) -> np.ndarray:
     if np.max(np.abs(values - rounded)) > 1e-8 or (rounded < 0).any():
         raise AssertionError(f"{column} must contain non-negative integer counts")
     return rounded
+
+
+def _allocate_reduction_total(
+    base: np.ndarray,
+    reduction_total: int,
+    cut_weights: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Allocate an absolute national reduction with the standard ED safeguards.
+
+    This is the absolute-endpoint counterpart of the fractional allocator used
+    by the legacy scenario API. A non-zero principal contraction retains the
+    same universal-participation rule: every ED with positive baseline adult
+    cattle receives at least one animal of reduction when integer-feasible.
+    """
+
+    base = np.asarray(base, dtype=np.int64)
+    reduction_total = int(reduction_total)
+    if (base < 0).any():
+        raise ValueError("baseline livestock counts must be non-negative")
+    if reduction_total < 0 or reduction_total > int(base.sum()):
+        raise ValueError("absolute reduction is outside baseline capacity")
+    if reduction_total == 0:
+        return base.copy(), np.zeros(len(base), dtype=np.int64)
+    if reduction_total == int(base.sum()):
+        return np.zeros(len(base), dtype=np.int64), base.copy()
+
+    eligible = base > 0
+    eligible_count = int(eligible.sum())
+    if reduction_total < eligible_count:
+        raise ValueError(
+            "universal-participation reduction is not integer-feasible: "
+            f"national reduction={reduction_total}, eligible EDs={eligible_count}"
+        )
+
+    floor = eligible.astype(np.int64)
+    remaining_capacity = base - floor
+    additional = _bounded_integer_allocate(
+        np.asarray(cut_weights, dtype=float),
+        remaining_capacity,
+        reduction_total - eligible_count,
+    )
+    reductions = floor + additional
+    retained = base - reductions
+
+    if int(reductions.sum()) != reduction_total:
+        raise AssertionError("absolute national reduction failed exact closure")
+    if (retained < 0).any() or (retained > base).any():
+        raise AssertionError("absolute endpoint allocation violated ED capacity")
+    if ((base == 0) & (retained > 0)).any():
+        raise AssertionError("absolute endpoint allocation seeded a zero-footprint ED")
+    if ((base > 0) & (reductions <= 0)).any():
+        raise AssertionError("eligible ED was exempted from a principal contraction")
+
+    return retained.astype(np.int64), reductions.astype(np.int64)
 
 
 def allocate_adult_endpoint(
