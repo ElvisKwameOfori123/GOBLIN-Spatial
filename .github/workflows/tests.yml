@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  test:
+  baseline-test:
     runs-on: ubuntu-latest
 
     steps:
@@ -25,18 +25,22 @@ jobs:
           pip install -e ".[geo,goblin]"
           pip install pytest
 
+      - name: Compile Python sources
+        run: python -m compileall -q src tests
+
       - name: Verify Git-tracked and staged inputs
         run: goblin-spatial fetch-data --verify-only --tracked-only
 
-      - name: Probe authoritative GOBLIN pasture-DM profile
-        run: pytest -q -s tests/test_goblin_adapter.py::test_real_upstream_goblin_2020_pasture_profile_contract
+      - name: Run historical baseline contract tests
+        run: pytest -q tests/test_baseline_contract.py
 
       - name: Run compact-data tests
         run: pytest -q -m "not full_data"
 
-      # The historical baseline regression is intentionally independent of the
-      # heavy 08B/08C/LPIS/geometry inputs. Those files belong to the subsequent
-      # scenario-ready/spatial validation workflows and are checked there.
+      # The historical baseline regression is intentionally independent of
+      # 08B/08C soil, LPIS, ED geometry and SC1-SC3. Those belong downstream
+      # of the Stage-09 baseline and will be tested when scenario refactoring
+      # resumes.
       - name: Detect complete historical baseline bundle
         id: full_data
         shell: bash
@@ -52,41 +56,3 @@ jobs:
       - name: Run full 2015-2025 historical regression
         if: steps.full_data.outputs.available == 'true'
         run: pytest -q -s -m full_data
-
-      - name: Clone-style CLI acceptance for 2020 and 2025
-        if: steps.full_data.outputs.available == 'true'
-        run: |
-          rm -rf data/processed/ci_scenario_2020 data/processed/ci_scenario_2025
-          goblin-spatial run-all \
-            --baseline-year 2020 \
-            --target-year 2050 \
-            --dairy-reduction 0.30 \
-            --suckler-reduction 0.30 \
-            --output-dir data/processed/ci_scenario_2020
-          goblin-spatial scenario \
-            --baseline-year 2025 \
-            --target-year 2050 \
-            --dairy-reduction 0.30 \
-            --suckler-reduction 0.30 \
-            --output-dir data/processed/ci_scenario_2025
-          python - <<'PY'
-          from pathlib import Path
-          import pandas as pd
-
-          expected = {
-              "scenario_schedule.csv",
-              "scenario_national_summary.csv",
-              "scenario_ed_results.csv",
-              "baseline_ed_18_cohort_relationships.csv",
-              "scenario_ed_18_cohort_audit.csv",
-          }
-          for year in (2020, 2025):
-              folder = Path(f"data/processed/ci_scenario_{year}")
-              missing = sorted(name for name in expected if not (folder / name).exists())
-              assert not missing, (year, missing)
-              national = pd.read_csv(folder / "scenario_national_summary.csv").set_index("MILESTONE_YEAR")
-              assert 2050 in national.index
-              spared = float(national.loc[2050, "POTENTIAL_SPARED_GRASSLAND_HA"])
-              assert spared > 0
-              print(f"CLI_BOTH_30_FROM_{year}_2050_POTENTIAL_SPARED_GRASSLAND_HA={spared:.6f}")
-          PY
