@@ -22,6 +22,8 @@ The migration is guarded by three CI layers:
 2. **legacy-input equivalence tests** for the eight production inputs, comparing byte identity where possible and production-semantic tables where file formats or provenance fields changed;
 3. a **complete Stage 01-09 baseline rebuild** checking the ED-year universe, cattle and sheep cohort closure, land accounting, Standard Output fields and Stage 09 signature structure.
 
+The current verified run passes all three layers: **9/9 SHA256 checks, 8/8 input-equivalence tests, 27/27 baseline contract/unit tests, and the complete Stage 01-09 regression**.
+
 The DAFM county-sheep hold-out has no equivalent legacy Git-tracked source and is therefore verified by its pinned SHA256 rather than by an old-versus-new table comparison.
 
 ## Intended v1 layout
