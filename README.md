@@ -362,22 +362,25 @@ GOBLIN-Spatial does not redefine the national GOBLIN pathway. Its role is to exa
 
 # Data and reproducibility
 
-Code and frozen scientific data are distributed separately:
+GOBLIN-Spatial v1 uses a **hybrid data strategy**.
 
 ```text
 GitHub
 ├── Python source code
 ├── tests
 ├── configuration
-├── data manifest
-└── documentation
+├── manifests
+├── compact baseline inputs
+└── compact scenario controls
 
 Zenodo
-└── versioned frozen model inputs
+└── large frozen spatial inputs
 
 Local installation
 └── data/inputs/
 ```
+
+The compact baseline files are kept directly with the repository so that the historical 2015-2025 reconstruction remains easy to inspect, test and rebuild. Large spatial files are fetched from the published frozen input release and checksum-verified.
 
 The frozen v1 input bundle is published on Zenodo:
 
@@ -387,56 +390,47 @@ The frozen v1 input bundle is published on Zenodo:
 
 The version-specific DOI identifies the exact frozen input release used for reproducible execution. The concept DOI resolves to the latest dataset version.
 
-The package uses a Pooch-based data-fetching and checksum-verification system. The v1 migration will connect the package manifest directly to the published frozen input release so that missing inputs can be retrieved automatically while existing files are verified and reused.
-
-## Frozen scientific input contract
-
-### Historical agricultural system
+## Compact Git-tracked baseline contract
 
 ```text
-01_CSO_ED_Agricultural_Baseline_2020.csv
-01_CSO_AAA10_Cattle_County_2015_2025.csv
-03_CSO_AAA09_Sheep_County_Region_2015_2025.xlsx
-03_0_DAFM_Sheep_County_Totals_2015_2020_2022_2025.csv
-05A_DAFM_Sheep_Breed_Anchors_2016_2020_2022_2025.csv
-05C_Cattle_Cohort_Relationships_2012_2020.csv
-06_CSO_AQA06_Agricultural_Land_Use.xlsx
-06_Farm_Structure_Demographic_Controls.csv
+data/inputs/baseline/
+├── 01_CSO_ED_Agricultural_Baseline_2020.csv
+├── 01_CSO_AAA10_Cattle_County_2015_2025.csv
+├── 03_CSO_AAA09_Sheep_County_Region_2015_2025.xlsx
+├── 03_0_DAFM_Sheep_County_Totals_2015_2020_2022_2025.csv
+├── 05A_DAFM_Sheep_Breed_Anchors_2016_2020_2022_2025.csv
+├── 05C_Cattle_Cohort_Relationships_2012_2020.csv
+├── 06_CSO_AQA06_Agricultural_Land_Use.xlsx
+├── 06_Farm_Structure_Demographic_Controls.csv
+└── 08_IFS2020_Standard_Output_Mapping.xlsx
 ```
 
-The `05C_Cattle_Cohort_Relationships_2012_2020.csv` file contains the GOBLIN biological relationship source used by the livestock cohort disaggregation, including the sheep relationships required downstream.
+The `05C_Cattle_Cohort_Relationships_2012_2020.csv` file is the shared GOBLIN biological relationship source used by the livestock cohort disaggregation, including the sheep relationships required downstream.
 
-### Economic context
+## Compact Git-tracked scenario controls
 
 ```text
-08_IFS2020_Standard_Output_Mapping.xlsx
+data/inputs/scenario/
+├── SC1_Cattle_Scenario_Endpoints_2050.csv
+└── SC1_ED_Rural_Mixed_Urban_2022.xlsx
 ```
 
-### Soil
+## Large Zenodo-backed spatial inputs
 
 ```text
-08B_NFS_Agricultural_Soil_Capability.csv
-08C_IFS_Mapped_Physical_Soil_Package.zip
-```
-
-### Scenario controls
-
-```text
-SC1_Cattle_Scenario_Endpoints_2050.csv
-SC1_ED_Rural_Mixed_Urban_2022.xlsx
-```
-
-### Spatial opportunity
-
-```text
-SC2_LPIS_2020_Frozen.parquet
-SC2_LPIS_2025_Frozen.parquet
-SC2_ED_Boundaries_Frozen.gpkg
+data/inputs/spatial/
+├── 08B_NFS_Agricultural_Soil_Capability.csv
+├── 08C_IFS_Mapped_Physical_Soil_Package.zip
+├── SC2_LPIS_2020_Frozen.parquet
+├── SC2_LPIS_2025_Frozen.parquet
+└── SC2_ED_Boundaries_Frozen.gpkg
 ```
 
 The principal scenario configuration uses **LPIS 2020** alongside the common 2020 baseline. LPIS 2025 is retained for optional alternative-baseline and sensitivity applications.
 
 The Zenodo release also includes the frozen-input manifest, README and SHA256 checksum list used to document and verify the data contract.
+
+Generated intermediate and scenario-result files are recreated by the software and are not mandatory downloads.
 
 ---
 
@@ -608,6 +602,10 @@ GOBLIN-Spatial/
 │
 └── data/
     ├── inputs/
+    │   ├── baseline/
+    │   ├── scenario/
+    │   └── spatial/
+    ├── interim/
     └── outputs/
 ```
 
