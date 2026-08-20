@@ -1,16 +1,18 @@
-"""Unified historical-baseline interface for GOBLIN-Spatial v1.
+"""Historical baseline interface for GOBLIN-Spatial v1.
 
-The core historical baseline ends at fixed-2020 Standard Output. Agricultural
-soil, mapped physical soil and frozen livestock signatures are subsequent
-scenario-ready enrichments and must not alter the reconstructed activities.
+The historical baseline is complete after cattle, sheep, livestock merge,
+land and farm-structure/SE enrichment, clean validation/export, and fixed-2020
+Standard Output (Stage 08).
+
+Agricultural soil capability (08B) and mapped physical soil (08C) are not part
+of the historical reconstruction. They are downstream spatial context layers
+used when preparing the completed baseline for scenario analysis.
 """
 
-from .agricultural_soil import add_agricultural_soil, build_agricultural_soil_profile
 from .cattle import build_cattle_baseline
 from .land_farm_structure import add_land_farm_structure
 from .merge import merge_livestock
 from .sheep import build_sheep_baseline
-from .signatures import build_signatures
 from .standard_output import add_standard_output
 
 __all__ = [
@@ -19,7 +21,4 @@ __all__ = [
     "merge_livestock",
     "add_land_farm_structure",
     "add_standard_output",
-    "build_agricultural_soil_profile",
-    "add_agricultural_soil",
-    "build_signatures",
 ]
