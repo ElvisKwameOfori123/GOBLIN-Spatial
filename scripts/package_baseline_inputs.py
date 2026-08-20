@@ -14,7 +14,6 @@ import argparse
 import hashlib
 import os
 from pathlib import Path
-import shutil
 import tempfile
 from urllib.parse import quote
 from urllib.request import Request, urlopen
@@ -85,7 +84,37 @@ def _download_verified(url: str, destination: Path, expected_sha256: str) -> Non
     os.replace(tmp_path, destination)
 
 
-def package_baseline_inputs(root: Path, *, verify_only: bool = False) -> None:
+def _activate_manifest_sources(manifest_path: Path, entry_keys: set[str]) -> bool:
+    """Change verified baseline entries from git_pending to git in-place.
+
+    This intentionally edits only the ``source`` line inside the already parsed
+    baseline dataset blocks so hand-maintained YAML comments and formatting are
+    preserved.
+    """
+
+    lines = manifest_path.read_text(encoding="utf-8").splitlines(keepends=True)
+    current_key: str | None = None
+    changed = False
+
+    for index, line in enumerate(lines):
+        if line.startswith("  ") and not line.startswith("    ") and line.strip().endswith(":"):
+            current_key = line.strip()[:-1]
+            continue
+        if current_key in entry_keys and line.strip() == 'source: "git_pending"':
+            lines[index] = line.replace('"git_pending"', '"git"')
+            changed = True
+
+    if changed:
+        manifest_path.write_text("".join(lines), encoding="utf-8")
+    return changed
+
+
+def package_baseline_inputs(
+    root: Path,
+    *,
+    verify_only: bool = False,
+    activate_manifest: bool = False,
+) -> None:
     manifest_path = root / "data_manifest.yaml"
     manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
     record_id = _record_id(manifest)
@@ -122,6 +151,13 @@ def package_baseline_inputs(root: Path, *, verify_only: bool = False) -> None:
         verified += 1
         print(f"VERIFIED {key}: sha256={expected}")
 
+    if activate_manifest:
+        changed = _activate_manifest_sources(
+            manifest_path,
+            {key for key, _ in entries},
+        )
+        print("Manifest baseline sources activated: git" if changed else "Manifest baseline sources already active.")
+
     print(
         f"Baseline packaging complete: {verified} verified file(s), "
         f"{downloaded} downloaded from Zenodo record {record_id}."
@@ -141,8 +177,19 @@ def main() -> None:
         action="store_true",
         help="Verify canonical files without downloading anything.",
     )
+    parser.add_argument(
+        "--activate-manifest",
+        action="store_true",
+        help="After every canonical baseline file passes SHA256, change only those manifest sources from git_pending to git.",
+    )
     args = parser.parse_args()
-    package_baseline_inputs(args.root.resolve(), verify_only=args.verify_only)
+    if args.verify_only and args.activate_manifest:
+        parser.error("--verify-only and --activate-manifest cannot be combined")
+    package_baseline_inputs(
+        args.root.resolve(),
+        verify_only=args.verify_only,
+        activate_manifest=args.activate_manifest,
+    )
 
 
 if __name__ == "__main__":
