@@ -6,7 +6,7 @@ population authority. For county c and year t, the model uses
     delta[c,t] = s[c,t] / s[c,2020]
 
 where s is the county share of the DAFM national flock. Observed DAFM anchors
-are retained, intermediate county shares are linearly interpolated and
+are retained exactly, intermediate county shares are linearly interpolated and
 renormalised, and the resulting drift factors reweight the reconciled 2020 CSO
 county anchors inside each AAA09 detailed region.
 
@@ -105,10 +105,9 @@ def build_annual_dafm_county_drift(anchors: pd.DataFrame) -> pd.DataFrame:
     """Return annual county shares and 2020-relative DAFM drift factors.
 
     Linear interpolation is performed on county shares, not animal counts.
-    Interpolated shares are renormalised to one each year. Consequently the
-    operator captures movement in the county distribution while remaining
-    independent of differences in national population level between DAFM and
-    CSO AAA09.
+    Interpolated shares are renormalised to one each year. Observed anchor-year
+    shares are copied exactly and are not passed through a second normalisation
+    step. This guarantees an exact identity operator in 2020.
     """
 
     required = {"YEAR", "County", "TOTAL"}
@@ -137,26 +136,25 @@ def build_annual_dafm_county_drift(anchors: pd.DataFrame) -> pd.DataFrame:
     rows: list[dict[str, object]] = []
     for year in MODEL_YEARS:
         start, end, alpha, status = _interpolation_bounds(year)
-        if start == end:
+        observed_anchor = start == end
+        if observed_anchor:
             shares = anchor_shares[start].astype(float).copy()
         else:
             shares = (
                 anchor_shares[start].astype(float)
                 + alpha * (anchor_shares[end].astype(float) - anchor_shares[start].astype(float))
             )
+            if (shares < -1e-12).any():
+                raise AssertionError(f"negative interpolated DAFM county share in {year}")
+            shares = shares.clip(lower=0.0)
             total = float(shares.sum())
             if total <= 0:
                 raise AssertionError(f"interpolated DAFM shares sum to zero in {year}")
             shares = shares / total
 
-        if (shares < -1e-12).any():
-            raise AssertionError(f"negative interpolated DAFM county share in {year}")
-        shares = shares.clip(lower=0.0)
-        shares = shares / float(shares.sum())
-
         for county, share in shares.items():
             share_2020 = float(anchor_shares.loc[county, 2020])
-            drift = float(share) / share_2020
+            drift = 1.0 if int(year) == 2020 else float(share) / share_2020
             rows.append(
                 {
                     "YEAR": int(year),
@@ -178,14 +176,14 @@ def build_annual_dafm_county_drift(anchors: pd.DataFrame) -> pd.DataFrame:
         raise AssertionError("annual DAFM county shares do not close to one")
 
     drift_2020 = annual.loc[annual["YEAR"] == 2020, "DAFM_DRIFT_FACTOR"].to_numpy(dtype=float)
-    if not np.allclose(drift_2020, 1.0, atol=0.0, rtol=0.0):
+    if not np.array_equal(drift_2020, np.ones_like(drift_2020)):
         raise AssertionError("2020 DAFM drift factors must equal one exactly")
 
     for year in ANCHOR_YEARS:
         observed = annual.loc[annual["YEAR"] == year].set_index("County")["DAFM_COUNTY_SHARE"]
         target = anchor_shares[year].sort_index()
         observed = observed.reindex(target.index)
-        if not np.allclose(observed.to_numpy(), target.to_numpy(), atol=1e-15, rtol=0.0):
+        if not np.array_equal(observed.to_numpy(), target.to_numpy()):
             raise AssertionError(f"observed DAFM share anchor changed in {year}")
 
     return annual
