@@ -37,11 +37,11 @@ def _config(config: str | Path | SpatialConfig) -> SpatialConfig:
 
 
 def build(config: str | Path | SpatialConfig) -> pd.DataFrame:
-    """Build the Stage-07 compatible historical baseline.
+    """Build the historical reconstruction through land and farm structure/SE.
 
-    This function remains the compatibility entry point while v1 regression
-    migration is in progress. It now orchestrates the new baseline module
-    boundaries but preserves the legacy pre-Standard-Output return contract.
+    Cattle and sheep are constructed independently and merged without altering
+    either population. Land, crops and farm-structure/SE fields are then added.
+    This is the pre-valuation baseline used by Stage 08 Standard Output.
     """
 
     cfg = _config(config)
@@ -73,7 +73,7 @@ def build(config: str | Path | SpatialConfig) -> pd.DataFrame:
     validation_path = cfg.processed_dir / "validation_summary.csv"
     pd.DataFrame([validation]).to_csv(validation_path, index=False)
 
-    print(f"Validated historical core baseline: {master_path}")
+    print(f"Validated historical reconstruction: {master_path}")
     print(f"Clean baseline workbook: {workbook_path}")
     print(f"Validation summary: {validation_path}")
 
@@ -81,12 +81,16 @@ def build(config: str | Path | SpatialConfig) -> pd.DataFrame:
 
 
 def run_baseline(config: str | Path | SpatialConfig) -> pd.DataFrame:
-    """Build the complete v1 core baseline through fixed-2020 Standard Output.
+    """Build the complete historical baseline through Stage 08 Standard Output.
 
-    The sequence is cattle -> sheep -> merge -> land/farm structure -> clean
-    validation/export -> Standard Output. Soil is deliberately excluded here;
-    08B/08C and frozen signatures form the subsequent scenario-ready enrichment
-    layer.
+    Final baseline order:
+
+        cattle -> sheep -> merge -> land/farm structure/SE -> clean baseline
+        -> fixed-2020 Standard Output
+
+    Stage 08 is the final historical-baseline stage. Stages 08B and 08C are
+    downstream soil-context preparation for scenario analysis and are therefore
+    deliberately excluded from this function.
     """
 
     cfg = _config(config)
@@ -102,5 +106,5 @@ def run_baseline(config: str | Path | SpatialConfig) -> pd.DataFrame:
     output.parent.mkdir(parents=True, exist_ok=True)
     valued.to_csv(output, index=False)
 
-    print(f"Baseline through Standard Output: {output}")
+    print(f"Complete baseline through Standard Output: {output}")
     return valued
