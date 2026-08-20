@@ -31,6 +31,9 @@ jobs:
       - name: Verify Git-tracked and staged inputs
         run: goblin-spatial fetch-data --verify-only --tracked-only
 
+      - name: Audit packaged baseline inputs against validated legacy inputs
+        run: pytest -q tests/test_packaged_baseline_equivalence.py
+
       - name: Run historical baseline tests
         run: |
           pytest -q \
