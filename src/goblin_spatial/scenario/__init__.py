@@ -23,6 +23,12 @@ from goblin_spatial.scenario.metrics import (
     build_sc1_national_metrics,
     gini,
 )
+from goblin_spatial.scenario.comparison import (
+    add_sc1_comparison_intensity,
+    build_sc1_robust_exposure,
+    compare_sc1_to_prorata,
+    summarise_sc1_redistribution,
+)
 from goblin_spatial.scenario.styles_pathway_controls import (
     load_styles_split_gas_pathway_controls,
 )
@@ -89,6 +95,10 @@ __all__ = [
     "add_sc1_ed_metrics",
     "build_sc1_national_metrics",
     "build_sc1_county_summary",
+    "add_sc1_comparison_intensity",
+    "compare_sc1_to_prorata",
+    "build_sc1_robust_exposure",
+    "summarise_sc1_redistribution",
     "load_styles_split_gas_pathway_controls",
     "derive_national_cohort_targets",
     "load_goblin_cohort_reference",
