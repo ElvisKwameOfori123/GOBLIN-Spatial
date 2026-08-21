@@ -17,10 +17,16 @@ SC2
     frozen SC1 release
     -> matching 2020/2025 compact LPIS context
     -> independent compact 08C mapped physical-soil context
+    -> mature Opportunity-v2 scores
+    -> Class1-6 released-land partition and SC3 physical eligibility
 
-SC3 is deliberately not auto-entered here until the six land-use eligibility and
-ranking contracts are frozen. The generic constrained SC3 allocator exists, but
-this runner will not silently substitute the older provisional opportunity score.
+SC3
+    editable national land-use targets
+    -> mature v2.7 joint Stage-A LP with shared physical pools
+    -> sequential rewetting within post-Stage-A Available organic capacity
+    -> realised conversion, unmet target and residual land
+
+The editable scenario CSV remains the authority for current national targets.
 """
 
 from __future__ import annotations
@@ -33,6 +39,10 @@ import pandas as pd
 from goblin_spatial.config import load_config
 from goblin_spatial.dynamics.baseline import select_baseline_year
 from goblin_spatial.land.sc2_context import prepare_sc2_context
+from goblin_spatial.land.sc3_allocation import (
+    allocate_sc3_targets,
+    summarise_sc3_allocation,
+)
 from goblin_spatial.pressure import load_pasture_dm_control
 from goblin_spatial.scenario.control_table import (
     active_scenario_ids,
@@ -79,9 +89,12 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-dir", default=None)
     parser.add_argument(
         "--stage",
-        choices=("SC1", "SC2"),
+        choices=("SC1", "SC2", "SC3"),
         default="SC1",
-        help="SC2 adds compact LPIS + 08C context after a completed SC1 run.",
+        help=(
+            "SC2 adds mature compact soil/LPIS opportunity science; SC3 then "
+            "allocates the same scenario row's explicit national land-use targets."
+        ),
     )
     parser.add_argument("--lpis-profile", default=None)
     parser.add_argument("--physical-soil-profile", default=None)
@@ -126,8 +139,17 @@ def _output_dir(args, cfg) -> Path:
     return cfg.processed_dir / "principal" / name
 
 
-def _validate_stage08_baseline(panel: pd.DataFrame, *, baseline_year: int, expected_eds: int) -> pd.DataFrame:
-    baseline = select_baseline_year(panel, baseline_year, expected_eds=expected_eds)
+def _validate_stage08_baseline(
+    panel: pd.DataFrame,
+    *,
+    baseline_year: int,
+    expected_eds: int,
+) -> pd.DataFrame:
+    baseline = select_baseline_year(
+        panel,
+        baseline_year,
+        expected_eds=expected_eds,
+    )
     required = {
         "CSOED",
         "County",
@@ -152,31 +174,54 @@ def _national_livestock_summary(ed: pd.DataFrame) -> pd.DataFrame:
         "PATHWAY_BASELINE_YEAR": int(ed["PATHWAY_BASELINE_YEAR"].iloc[0]),
         "MILESTONE_YEAR": int(ed["MILESTONE_YEAR"].iloc[0]),
         "PATHWAY_ALLOCATION_RULE": str(ed["PATHWAY_ALLOCATION_RULE"].iloc[0]),
-        "PROTECTION_STRENGTH_LAMBDA": float(ed["PROTECTION_STRENGTH_LAMBDA"].iloc[0]),
-        "NATIONAL_COHORT_TARGET_SOURCE": str(ed["NATIONAL_COHORT_TARGET_SOURCE"].iloc[0]),
-        "SCENARIO_DAIRY_COW": int(pd.to_numeric(ed["SCENARIO_DAIRY_COW"], errors="raise").sum()),
-        "SCENARIO_SUCKLER_COW": int(pd.to_numeric(ed["SCENARIO_OTHER_COW"], errors="raise").sum()),
-        "SCENARIO_TOTAL_CATTLE": int(pd.to_numeric(ed["SCENARIO_TOTAL_CATTLE"], errors="raise").sum()),
-        "BASE_TOTAL_CATTLE": int(pd.to_numeric(ed["BASE_TOTAL_CATTLE"], errors="raise").sum()),
+        "PROTECTION_STRENGTH_LAMBDA": float(
+            ed["PROTECTION_STRENGTH_LAMBDA"].iloc[0]
+        ),
+        "NATIONAL_COHORT_TARGET_SOURCE": str(
+            ed["NATIONAL_COHORT_TARGET_SOURCE"].iloc[0]
+        ),
+        "SCENARIO_DAIRY_COW": int(
+            pd.to_numeric(ed["SCENARIO_DAIRY_COW"], errors="raise").sum()
+        ),
+        "SCENARIO_SUCKLER_COW": int(
+            pd.to_numeric(ed["SCENARIO_OTHER_COW"], errors="raise").sum()
+        ),
+        "SCENARIO_TOTAL_CATTLE": int(
+            pd.to_numeric(ed["SCENARIO_TOTAL_CATTLE"], errors="raise").sum()
+        ),
+        "BASE_TOTAL_CATTLE": int(
+            pd.to_numeric(ed["BASE_TOTAL_CATTLE"], errors="raise").sum()
+        ),
     }
-    row["TOTAL_CATTLE_CHANGE"] = row["SCENARIO_TOTAL_CATTLE"] - row["BASE_TOTAL_CATTLE"]
+    row["TOTAL_CATTLE_CHANGE"] = (
+        row["SCENARIO_TOTAL_CATTLE"] - row["BASE_TOTAL_CATTLE"]
+    )
     row["TOTAL_CATTLE_CHANGE_PCT"] = (
         0.0
         if row["BASE_TOTAL_CATTLE"] == 0
-        else 100.0 * row["TOTAL_CATTLE_CHANGE"] / row["BASE_TOTAL_CATTLE"]
+        else 100.0
+        * row["TOTAL_CATTLE_CHANGE"]
+        / row["BASE_TOTAL_CATTLE"]
     )
     if "GOBLIN_RELEASED_GRASSLAND_HA" in ed.columns:
         row["GOBLIN_RELEASED_GRASSLAND_HA"] = float(
-            pd.to_numeric(ed["GOBLIN_RELEASED_GRASSLAND_HA"], errors="raise").sum()
+            pd.to_numeric(
+                ed["GOBLIN_RELEASED_GRASSLAND_HA"],
+                errors="raise",
+            ).sum()
         )
         for group in (1, 2, 3):
             column = f"GOBLIN_RELEASED_G{group}_HA"
             if column in ed.columns:
-                row[column] = float(pd.to_numeric(ed[column], errors="raise").sum())
+                row[column] = float(
+                    pd.to_numeric(ed[column], errors="raise").sum()
+                )
         for system in ("DAIRY", "BEEF", "SHEEP"):
             column = f"GOBLIN_RELEASED_{system}_LAND_HA"
             if column in ed.columns:
-                row[column] = float(pd.to_numeric(ed[column], errors="raise").sum())
+                row[column] = float(
+                    pd.to_numeric(ed[column], errors="raise").sum()
+                )
     return pd.DataFrame([row])
 
 
@@ -216,14 +261,18 @@ def main() -> None:
         expected_eds=int(cfg.expected_eds),
     )
     baseline_grassland_ha = float(
-        pd.to_numeric(baseline["ALL_GRASSLAND"], errors="raise").sum()
+        pd.to_numeric(
+            baseline["ALL_GRASSLAND"],
+            errors="raise",
+        ).sum()
     )
 
     controls_path = _scenario_control_path(args, cfg)
     active_ids = active_scenario_ids(controls_path)
     if args.scenario not in active_ids:
         raise ValueError(
-            f"scenario {args.scenario!r} is not ACTIVE; available scenarios={active_ids}"
+            f"scenario {args.scenario!r} is not ACTIVE; "
+            f"available scenarios={active_ids}"
         )
     selection = load_scenario_controls(
         controls_path,
@@ -280,23 +329,35 @@ def main() -> None:
                 "RUN_START_YEAR": selection.baseline_year,
                 "TARGET_YEAR": selection.target_year,
                 "ALLOCATION_POLICY": args.allocation_rule,
-                "PROTECTION_STRENGTH_LAMBDA": float(args.protection_strength),
+                "PROTECTION_STRENGTH_LAMBDA": float(
+                    args.protection_strength
+                ),
                 "BASELINE_GRASSLAND_HA": selection.baseline_grassland_ha,
-                "TARGET_LIVESTOCK_LAND_HA": selection.target_livestock_land_ha,
+                "TARGET_LIVESTOCK_LAND_HA": (
+                    selection.target_livestock_land_ha
+                ),
                 "RUN_GROSS_RELEASE_HA": selection.gross_release_ha,
                 "STAGE_A_TARGET_HA": selection.stage_a_target_ha,
-                "STAGE_A_AVAILABLE_BEFORE_REWETTING_HA": selection.stage_a_available_before_rewetting_ha,
+                "STAGE_A_AVAILABLE_BEFORE_REWETTING_HA": (
+                    selection.stage_a_available_before_rewetting_ha
+                ),
                 "REWETTING_TARGET_HA": selection.rewetting_target_ha,
             }
         ]
     )
 
     ed.to_csv(ed_path, index=False)
-    _national_livestock_summary(ed).to_csv(livestock_summary_path, index=False)
+    _national_livestock_summary(ed).to_csv(
+        livestock_summary_path,
+        index=False,
+    )
     build_sc1_national_metrics(ed).to_csv(metrics_path, index=False)
     build_sc1_county_summary(ed).to_csv(county_path, index=False)
     control_summary.to_csv(controls_summary_path, index=False)
-    build_goblin_reconciliation(ed, controls).to_csv(reconciliation_path, index=False)
+    build_goblin_reconciliation(ed, controls).to_csv(
+        reconciliation_path,
+        index=False,
+    )
 
     print(f"SC1 ED results: {ed_path}")
     print(f"SC1 national livestock summary: {livestock_summary_path}")
@@ -306,12 +367,19 @@ def main() -> None:
     print(f"SC1 GOBLIN reconciliation: {reconciliation_path}")
 
     if args.stage == "SC1":
-        print("SC1 completed and frozen. Heavy spatial source rebuilds were not invoked.")
+        print(
+            "SC1 completed and frozen. Heavy spatial source rebuilds "
+            "were not invoked."
+        )
         return
 
     # SC2 consumes compact controls only. Missing compact files are a deliberate
     # hard stop so scenario execution can never trigger expensive geospatial work.
-    lpis_profile = _required_file(cfg, "lpis_ed_profile", args.lpis_profile)
+    lpis_profile = _required_file(
+        cfg,
+        "lpis_ed_profile",
+        args.lpis_profile,
+    )
     physical_profile = _required_file(
         cfg,
         "physical_soil_profile",
@@ -325,10 +393,33 @@ def main() -> None:
     )
     sc2_path = outdir / "sc2_ed_context.csv"
     sc2.to_csv(sc2_path, index=False)
-    print(f"SC2 ED context: {sc2_path}")
+    print(f"SC2 ED opportunity/context: {sc2_path}")
+
+    if args.stage == "SC2":
+        print(
+            "SC2 mature v3.1 opportunity and eligibility completed. "
+            "No heavy spatial source rebuild was invoked."
+        )
+        return
+
+    # SC3 takes targets from the same selected editable scenario row. The
+    # allocation mathematics are mature v2.7; no target values are hard-coded
+    # in the allocator.
+    milestone = controls.milestone(target_year)
+    land_targets = dict(milestone.land_use_targets_ha)
+    sc3 = allocate_sc3_targets(sc2, land_targets)
+    sc3_path = outdir / "sc3_ed_results.csv"
+    sc3_summary_path = outdir / "sc3_national_summary.csv"
+    sc3.to_csv(sc3_path, index=False)
+    summarise_sc3_allocation(sc3).to_csv(
+        sc3_summary_path,
+        index=False,
+    )
+    print(f"SC3 ED results: {sc3_path}")
+    print(f"SC3 national summary: {sc3_summary_path}")
     print(
-        "SC2 evidence handoff completed. SC3 remains gated until explicit "
-        "land-use capacity/ranking contracts are frozen; no provisional score was used."
+        "SC3 mature v2.7 joint Stage-A allocation and sequential rewetting "
+        "completed using the selected editable scenario targets."
     )
 
 
