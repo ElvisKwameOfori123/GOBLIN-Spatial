@@ -1,96 +1,197 @@
-manifest_version: "0.3.2"
+manifest_version: "0.9.1"
 release: "ireland-2015-2025-dev"
 status: "development"
 
-# Development rule:
-# - the complete Ireland 2015-2025 baseline input bundle is currently
-#   versioned directly in GitHub for simple, reproducible development;
-# - SHA256 checksums pin the two principal full-data CSV inputs;
-# - before a public v1.0 release, large/raw source files can be moved to
-#   Zenodo or official download endpoints without changing the scientific
-#   cattle, sheep, land or SE module logic.
+# GOBLIN-Spatial v1 data strategy
+# -------------------------------
+# Compact historical-baseline inputs are intended to live directly in GitHub
+# under data/inputs/baseline/. Large soil/LPIS/geography inputs are fetched from
+# the immutable Zenodo version DOI below and verified with SHA256 checksums.
+#
+# Historical baseline boundary:
+# cattle -> sheep -> merge -> land/farm structure/SE -> 08 Standard Output
+# -> 09 frozen ED cohort signatures.
+#
+# 08B and 08C are downstream scenario-preparation soil context, not historical
+# reconstruction stages.
+
+external_releases:
+  goblin_spatial_frozen_inputs_v1:
+    repository: "Zenodo"
+    record_id: 22035538
+    version_doi: "10.5281/zenodo.22035538"
+    concept_doi: "10.5281/zenodo.22035537"
+    title: "GOBLIN-Spatial Frozen Model Inputs for Irish Electoral Division Agricultural and Land-Transition Modelling, Version 1.0.0"
+    publication_date: "2026-08-20"
+    license: "CC-BY-4.0"
+
+# Canonical v1 input contract.
+# git_pending means the file is intended to be committed directly to GitHub
+# but the package path migration is not complete yet.
 
 datasets:
-  cso_ed_2020:
-    module: [cattle, land, se]
-    description: "Fixed 2020 CSO Electoral Division agricultural baseline."
+  cso_ed_agricultural_baseline_2020:
+    stage: "01"
+    module: [baseline, cattle, sheep, land_farm_structure]
+    description: "2020 CSO Electoral Division agricultural baseline and fine-scale spatial anchor."
     source: "git"
-    path: "data/raw/cattle/CSO_ED_2020.csv"
-    git_tracked: true
+    path: "data/inputs/baseline/01_CSO_ED_Agricultural_Baseline_2020.csv"
     sha256: "bc93d1f9747809aed79ea7e7160f5853265d73e5056cceaae0353ee2fc63a657"
     required: true
+    legacy_path: "data/raw/cattle/CSO_ED_2020.csv"
 
-  cso_cattle_county_2015_2025:
-    module: [cattle]
-    description: "Annual CSO county cattle controls for 2015-2025."
+  cso_aaa10_cattle_county_2015_2025:
+    stage: "01"
+    module: [baseline, cattle]
+    description: "CSO AAA10 annual county cattle controls for 2015-2025."
     source: "git"
-    path: "data/raw/cattle/CSO_county_WIDE_2015_2025.csv.xz"
-    git_tracked: true
+    path: "data/inputs/baseline/01_CSO_AAA10_Cattle_County_2015_2025.csv"
+    sha256: "4df4e3c7dcf7f3183cec422b55da627249c62fc061851132d30ad95c902bcbf7"
     required: true
+    legacy_path: "data/raw/cattle/CSO_county_WIDE_2015_2025.csv.xz"
 
-  cso_sheep_county_2015_2025:
-    module: [sheep]
-    description: "County sheep controls used by the validated hierarchy."
+  cso_aaa09_sheep_county_region_2015_2025:
+    stage: "03A"
+    module: [baseline, sheep]
+    description: "Combined sheep workbook: County_WIDE provides county-region crosswalk; Region_WIDE provides raw AAA09 detailed-region controls."
     source: "git"
-    path: "data/raw/sheep/CSO_Sheep_County_WIDE_2015_2025.csv.xz"
-    git_tracked: true
+    path: "data/inputs/baseline/03_CSO_AAA09_Sheep_County_Region_2015_2025.xlsx"
+    sha256: "64d4f36639090a62b95b4cae69fdade6a171f63a7008fb2c8dff02c3ec12dd11"
     required: true
+    legacy_path: "data/raw/sheep/CSO_Sheep_County_and_Region_WIDE_2015_2025.xlsx"
 
-  cso_sheep_region_2015_2025:
-    module: [sheep]
-    description: "Regional sheep controls used by the validated hierarchy."
+  dafm_sheep_county_totals_2015_2020_2022_2025:
+    stage: "VALIDATION"
+    module: [validation, sheep]
+    description: "DAFM county sheep totals retained for independent/hold-out validation; not a production sheep population control."
     source: "git"
-    path: "data/raw/sheep/CSO_Sheep_Region_WIDE_2015_2025.csv.xz"
-    git_tracked: true
-    required: true
-
-  cso_sheep_source_workbook:
-    module: [sheep]
-    description: "Combined county and region sheep source/audit workbook."
-    source: "git"
-    path: "data/raw/sheep/CSO_Sheep_County_and_Region_WIDE_2015_2025.xlsx"
-    git_tracked: true
+    path: "data/inputs/baseline/03_0_DAFM_Sheep_County_Totals_2015_2020_2022_2025.csv"
+    sha256: "6d3ce31092328f18587530561ab440d91fa65e94c629ac5ca25e15bb4b042de2"
     required: false
+    note: "Production sheep totals remain controlled by the CSO 2020 ED anchor and raw AAA09 regional hierarchy."
 
   dafm_sheep_breed_anchors:
-    module: [sheep]
+    stage: "05A"
+    module: [baseline, sheep]
     description: "DAFM county sheep breed-composition anchors for 2016, 2020, 2022 and 2025."
     source: "git"
-    path: "data/raw/sheep/DAFM_Sheep_Breed_Anchors_2016_2020_2022_2025.zip"
-    git_tracked: true
+    path: "data/inputs/baseline/05A_DAFM_Sheep_Breed_Anchors_2016_2020_2022_2025.csv"
+    sha256: "c245df824279728e2b8c016cfc79c4232a0afbbb1ba6fd75cec171900aeeb702"
     required: true
-    note: "The annual 2015-2025 composition table is generated by the sheep module from these anchors."
-
-  cso_land_aqa06_2013_2025:
-    module: [land]
-    description: "AQA06 annual regional land-use controls in tidy form."
-    source: "git"
-    path: "data/raw/land/AQA06_Unpivoted_2013_2025.csv"
-    git_tracked: true
-    sha256: "873de22c6215847d4a39654c62ac9aff77e96c195dcfedd6609222a4d7124545"
-    required: true
-    note: "Generated directly from the AQA06 Unpivoted sheet; row ordering does not affect the land algorithm."
+    note: "DAFM controls composition only and does not replace the CSO/AAA09 sheep population."
 
   goblin_cohort_relationships:
-    module: [cattle, sheep]
-    description: "GOBLIN cohort relationships used for biological disaggregation."
+    stage: "05C/05D"
+    module: [baseline, cattle, sheep, signatures]
+    description: "Shared GOBLIN livestock biological relationship source used for cattle and sheep cohort disaggregation."
     source: "git"
-    path: "data/controls/cohort2012-2020.csv"
-    git_tracked: true
+    path: "data/inputs/baseline/05C_Cattle_Cohort_Relationships_2012_2020.csv"
+    sha256: "7c9f8c38a4eb53b11631d92fb0e9ccf37fc130a83ebd6d6d17b04e5f8de5232e"
+    required: true
+    legacy_path: "data/controls/cohort2012-2020.csv"
+    note: "Published filename is retained although the source contains both cattle and sheep cohort series."
+
+  cso_aqa06_agricultural_land_use:
+    stage: "06"
+    module: [baseline, land_farm_structure]
+    description: "CSO AQA06 agricultural land-use controls used for crop and land reconstruction."
+    source: "git"
+    path: "data/inputs/baseline/06_CSO_AQA06_Agricultural_Land_Use.xlsx"
+    sha256: "819b641f5347740e05468abe1650c48f6e7ae9c884f77b84beeeae436e16d343"
     required: true
 
-  se_controls:
-    module: [se]
-    description: "Official structural and holder-age controls used by the SE module."
+  farm_structure_demographic_controls:
+    stage: "06"
+    module: [baseline, land_farm_structure]
+    description: "Farm structure and holder-demographic controls used by the historical reconstruction."
     source: "git"
-    path: "data/controls/06_SE_Data_Controls.csv"
-    git_tracked: true
+    path: "data/inputs/baseline/06_Farm_Structure_Demographic_Controls.csv"
+    sha256: "cdfaec77532ea7630886195b060d63e94cf732d6543a153513e948eeb9766a4c"
+    required: true
+    legacy_path: "data/controls/06_SE_Data_Controls.csv"
+
+  ifs2020_standard_output_mapping:
+    stage: "08"
+    module: [baseline, standard_output]
+    description: "IFS-2020 Standard Output mapping used for fixed-2020 production-value exposure."
+    source: "git"
+    path: "data/inputs/baseline/08_IFS2020_Standard_Output_Mapping.xlsx"
+    sha256: "73196c3e4f26f31efdb527ded76ca5e016b2e6a128f8531be6260cae9429be88"
     required: true
 
-  county_region_map:
-    module: [sheep, land]
-    description: "Irish county-to-region mapping used by hierarchical reconciliation."
-    source: "git"
-    path: "data/controls/county_region_map.csv"
-    git_tracked: true
+  sc1_cattle_scenario_endpoints_2050:
+    stage: "SC1"
+    module: [scenario, sc1]
+    description: "Compact national 2050 cattle scenario endpoint controls."
+    source: "git_pending"
+    path: "data/inputs/scenario/SC1_Cattle_Scenario_Endpoints_2050.csv"
+    sha256: "316708db50f2d3ab2e2aa38b75672ec85e93e9a59222a36b6ce6c87767028227"
     required: true
+
+  sc1_ed_rural_mixed_urban_2022:
+    stage: "SC1"
+    module: [scenario, sc1]
+    description: "2022 ED Rural/Mixed/Urban classification used as spatial scenario context."
+    source: "git_pending"
+    path: "data/inputs/scenario/SC1_ED_Rural_Mixed_Urban_2022.xlsx"
+    sha256: "d6178bacb2ddeef830a9f0fba4715e183ea53813448fcf54a0d29199a332552f"
+    required: true
+
+  nfs_agricultural_soil_capability:
+    stage: "08B"
+    module: [scenario_preparation, agricultural_soil]
+    description: "Cathal/NFS agricultural soil-capability source used after the historical baseline is complete."
+    source: "zenodo"
+    release: "goblin_spatial_frozen_inputs_v1"
+    destination: "data/inputs/spatial/08B_NFS_Agricultural_Soil_Capability.csv"
+    url: "https://zenodo.org/records/22035538/files/08B_NFS_Agricultural_Soil_Capability.csv?download=1"
+    sha256: "4af6018a8860380aa0f45ba6acc47e9d894e27ec93975ea29eb2dfb4dc21c1dc"
+    required: true
+
+  ifs_mapped_physical_soil_package:
+    stage: "08C"
+    module: [scenario_preparation, physical_soil]
+    description: "Colm/IFS mapped physical-soil package used after the historical baseline is complete and kept independent from 08B."
+    source: "zenodo"
+    release: "goblin_spatial_frozen_inputs_v1"
+    destination: "data/inputs/spatial/08C_IFS_Mapped_Physical_Soil_Package.zip"
+    url: "https://zenodo.org/records/22035538/files/08C_IFS_Mapped_Physical_Soil_Package.zip?download=1"
+    sha256: "8a73fdaa7f8277eafbb38a12cc9f736caff4c265e8617a9fc54c7a8d1c3ddf97"
+    required: true
+
+  lpis_2020_frozen:
+    stage: "SC2"
+    module: [scenario, sc2]
+    description: "Frozen LPIS 2020 parcel dataset for the principal common-2020 scenario baseline."
+    source: "zenodo"
+    release: "goblin_spatial_frozen_inputs_v1"
+    destination: "data/inputs/spatial/SC2_LPIS_2020_Frozen.parquet"
+    url: "https://zenodo.org/records/22035538/files/SC2_LPIS_2020_Frozen.parquet?download=1"
+    sha256: "33ce7988006d53dc7599eabc300dbdc275b13a567e4ea4a48da16437e9f97247"
+    required: true
+
+  lpis_2025_frozen:
+    stage: "SC2"
+    module: [scenario, sc2]
+    description: "Frozen LPIS 2025 parcel dataset retained for optional updated-baseline and sensitivity applications."
+    source: "zenodo"
+    release: "goblin_spatial_frozen_inputs_v1"
+    destination: "data/inputs/spatial/SC2_LPIS_2025_Frozen.parquet"
+    url: "https://zenodo.org/records/22035538/files/SC2_LPIS_2025_Frozen.parquet?download=1"
+    sha256: "493a1858f7b213d982ffb8fa99cfe0c1d9c50133596c73faf27079ec9dabb75e"
+    required: false
+
+  ed_boundaries_frozen:
+    stage: "SC2"
+    module: [scenario, sc2, spatial]
+    description: "Frozen Electoral Division boundary layer as a single GeoPackage."
+    source: "zenodo"
+    release: "goblin_spatial_frozen_inputs_v1"
+    destination: "data/inputs/spatial/SC2_ED_Boundaries_Frozen.gpkg"
+    url: "https://zenodo.org/records/22035538/files/SC2_ED_Boundaries_Frozen.gpkg?download=1"
+    sha256: "550b2ed967f5c5e7ecb9053586cf431df564d0a990f99f9f82eb8b8be44faca8"
+    required: true
+
+# Generated outputs, including all Stage 01-09 results and all future
+# SC1/SC2/SC3 results, are intentionally excluded from the mandatory input
+# contract. Stage 09 is a generated historical-baseline output, not an input.

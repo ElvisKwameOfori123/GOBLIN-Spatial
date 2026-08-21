@@ -1,4 +1,8 @@
-"""Top-level one-command GOBLIN-Spatial build pipeline."""
+"""Top-level orchestration for the GOBLIN-Spatial historical baseline.
+
+Scientific calculations live in the baseline modules. This file controls only
+stage order, validation and output persistence.
+"""
 
 from __future__ import annotations
 
@@ -6,139 +10,49 @@ from pathlib import Path
 
 import pandas as pd
 
-from goblin_spatial.cattle import add_cattle_cohorts, build_cattle_panel
+from goblin_spatial.baseline import (
+    add_land_farm_structure,
+    add_standard_output,
+    build_cattle_baseline,
+    build_sheep_baseline,
+    build_signatures,
+    merge_livestock,
+)
 from goblin_spatial.config import SpatialConfig, load_config
 from goblin_spatial.export import export_clean_workbook
-from goblin_spatial.land import add_land
-from goblin_spatial.se import add_se
-from goblin_spatial.sheep import add_sheep_cohorts, build_sheep_panel
 from goblin_spatial.validation import validate_master
 
 
-MERGE_KEYS = ["YEAR", "CSOED"]
-SHARED_IDENTIFIERS = {
-    "ELECTORAL_DIVISIONS",
-    "ED",
-    "County",
-    "EDID",
-    "CSOED_RAW",
-    "EDNAME",
-    "COUNTYNAME",
-}
-
-
 def _canonical_order(frame: pd.DataFrame) -> pd.DataFrame:
-    """Return the stable YEAR-CSOED order used by the frozen reference pipeline."""
-
-    return frame.sort_values(
-        ["YEAR", "CSOED"], kind="stable"
-    ).reset_index(drop=True)
+    return frame.sort_values(["YEAR", "CSOED"], kind="stable").reset_index(drop=True)
 
 
-def merge_livestock(
-    cattle: pd.DataFrame, sheep: pd.DataFrame
-) -> pd.DataFrame:
-    """Merge independently constructed cattle and sheep ED panels.
-
-    Cattle supplies the shared ED/static baseline context. If a sheep field also
-    exists on the cattle-side copy of the 2020 baseline, the sheep module is
-    authoritative and replaces that stale/static field.
-
-    ``LSU`` is intentionally removed here. In the historical ED source it is a
-    static 2020 context field copied into annual cattle rows, whereas the frozen
-    validated final 2015-2025 master does not treat it as an annual reconstructed
-    indicator. A future pressure/LSU module can calculate scenario-consistent LSU
-    explicitly rather than carrying the 2020 value through time.
-    """
-
-    cattle = _canonical_order(cattle)
-    sheep = _canonical_order(sheep)
-
-    for label, frame in (("cattle", cattle), ("sheep", sheep)):
-        missing = [key for key in MERGE_KEYS if key not in frame.columns]
-        if missing:
-            raise ValueError(f"{label} panel missing merge keys: {missing}")
-        if frame[MERGE_KEYS].duplicated().any():
-            raise ValueError(
-                f"{label} panel contains duplicate YEAR-CSOED rows"
-            )
-
-    overlap = (
-        set(cattle.columns).intersection(sheep.columns) - set(MERGE_KEYS)
-    )
-    replace_from_sheep = sorted(overlap - SHARED_IDENTIFIERS)
-    cattle_base = cattle.drop(
-        columns=[*replace_from_sheep, "LSU"], errors="ignore"
-    )
-    sheep_keep = [
-        column
-        for column in sheep.columns
-        if column in MERGE_KEYS or column not in SHARED_IDENTIFIERS
-    ]
-    sheep_keep = list(dict.fromkeys(sheep_keep))
-
-    merged = cattle_base.merge(
-        sheep[sheep_keep],
-        on=MERGE_KEYS,
-        how="inner",
-        sort=False,
-        validate="one_to_one",
-    )
-    if len(merged) != len(cattle) or len(merged) != len(sheep):
-        raise AssertionError(
-            "cattle/sheep merge did not preserve the complete panel"
-        )
-    if "LSU" in merged.columns:
-        raise AssertionError("stale baseline LSU survived livestock merge")
-
-    merged = _canonical_order(merged)
-    return merged
-
-
-def _output_path(
-    config: SpatialConfig, key: str, default: str
-) -> Path:
+def _output_path(config: SpatialConfig, key: str, default: str) -> Path:
     value = config.raw.get("outputs", {}).get(key, default)
     path = Path(value)
     return path if path.is_absolute() else config.project_root / path
 
 
+def _config(config: str | Path | SpatialConfig) -> SpatialConfig:
+    return load_config(config) if not isinstance(config, SpatialConfig) else config
+
+
 def build(config: str | Path | SpatialConfig) -> pd.DataFrame:
-    """Run the complete GOBLIN-Spatial data-generation workflow.
+    """Build the historical reconstruction through land and farm structure/SE.
 
-    One call executes cattle, sheep, livestock merge, land, SE, validation and
-    final export. The scientific modules remain callable independently for
-    development, while normal users need only ``goblin-spatial build``.
-
-    Row ordering is aligned deliberately with the frozen reference stages.
-    This matters only for deterministic largest-remainder tie-breaking, but it
-    ensures exact ED-level regression rather than merely exact aggregate totals.
+    Cattle and sheep are constructed independently and merged without altering
+    either population. Land, crops and farm-structure/SE fields are then added.
+    This is the pre-valuation baseline used by Stage 08 Standard Output.
     """
 
-    cfg = (
-        load_config(config)
-        if not isinstance(config, SpatialConfig)
-        else config
-    )
-
+    cfg = _config(config)
     cfg.interim_dir.mkdir(parents=True, exist_ok=True)
     cfg.processed_dir.mkdir(parents=True, exist_ok=True)
 
-    # Script 2 order is retained while cattle cohort allocation is performed;
-    # frozen Script 5C then canonicalised the completed cattle output.
-    cattle_panel = build_cattle_panel(cfg)
-    cattle = add_cattle_cohorts(cattle_panel, cfg)
-    cattle = _canonical_order(cattle)
-
-    # Frozen Script 3B sorted YEAR-CSOED before 5A/5B/5D enrichment. Apply the
-    # same canonical order before sheep breed and GOBLIN cohort allocation.
-    sheep_panel = _canonical_order(build_sheep_panel(cfg))
-    sheep = add_sheep_cohorts(sheep_panel, cfg)
-    sheep = _canonical_order(sheep)
-
-    master = merge_livestock(cattle, sheep)
-    master = add_land(master, cfg)
-    master = add_se(master, cfg)
+    cattle = build_cattle_baseline(cfg)
+    sheep = build_sheep_baseline(cfg)
+    livestock = merge_livestock(cattle, sheep)
+    master = add_land_farm_structure(livestock, cfg)
     master = _canonical_order(master)
 
     validation = validate_master(master, cfg)
@@ -160,8 +74,48 @@ def build(config: str | Path | SpatialConfig) -> pd.DataFrame:
     validation_path = cfg.processed_dir / "validation_summary.csv"
     pd.DataFrame([validation]).to_csv(validation_path, index=False)
 
-    print(f"Validated master: {master_path}")
-    print(f"Clean workbook: {workbook_path}")
+    print(f"Validated historical reconstruction: {master_path}")
+    print(f"Clean baseline workbook: {workbook_path}")
     print(f"Validation summary: {validation_path}")
 
     return master
+
+
+def run_baseline(config: str | Path | SpatialConfig) -> pd.DataFrame:
+    """Build the complete historical baseline through Stage 09 ED signatures.
+
+    Final baseline order:
+
+        cattle -> sheep -> merge -> land/farm structure/SE -> clean baseline
+        -> 08 fixed-2020 Standard Output -> 09 frozen ED cohort signatures
+
+    Stage 09 is a baseline output describing pre-scenario cohort geography. It
+    does not run a scenario. Stages 08B and 08C are downstream soil-context
+    preparation and are deliberately excluded from this historical baseline.
+    """
+
+    cfg = _config(config)
+    core = build(cfg)
+    valued = add_standard_output(core, cfg)
+    valued = _canonical_order(valued)
+
+    output = _output_path(
+        cfg,
+        "standard_output_master",
+        "data/processed/08_GOBLIN_Spatial_Standard_Output_2015_2025.csv",
+    )
+    output.parent.mkdir(parents=True, exist_ok=True)
+    valued.to_csv(output, index=False)
+
+    signatures = build_signatures(valued, cfg)
+    signature_output = _output_path(
+        cfg,
+        "ed_signatures",
+        "data/processed/09_GOBLIN_Spatial_ED_Cohort_Signatures_2020.csv",
+    )
+    signature_output.parent.mkdir(parents=True, exist_ok=True)
+    signatures.to_csv(signature_output, index=False)
+
+    print(f"Baseline through Standard Output: {output}")
+    print(f"Final Stage 09 ED signatures: {signature_output}")
+    return valued

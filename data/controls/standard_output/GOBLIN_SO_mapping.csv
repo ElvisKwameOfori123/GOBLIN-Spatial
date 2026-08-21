@@ -1,0 +1,39 @@
+MODEL_VARIABLE,DOMAIN,MODEL_MEANING,IFS_PRODUCT_CODE,IFS_LABEL,COEFFICIENT_UNIT,SOC_EUR_381,SOC_EUR_382,APPLY_IN_SO,COEFFICIENT_METHOD,IMPUTED,SENSITIVITY_SOC_EUR_381,SENSITIVITY_SOC_EUR_382,NOTES
+dairy_cows,CATTLE,Dairy cows,A2300F,Dairy cows,EUR/head,2468.88,2449.47,YES,Direct IFS-2020 SOC,NO,,,
+suckler_cows,CATTLE,Non-dairy / suckler cows,A2300G,Non-dairy cows,EUR/head,876.03,807.62,YES,Direct IFS-2020 SOC,NO,,,
+bulls,CATTLE,"Adult male bovines, 2 years and over",A2130,"Male bovine animals, 2 years old and over",EUR/head,355.05,317.04,YES,Direct IFS-2020 SOC,NO,,,
+DxD_calves_m,CATTLE,Dairy x Dairy male calves under 1 year,A2010,Bovine animals less than 1 year old,EUR/head,643.41,522.0,YES,Direct IFS-2020 SOC,NO,,,
+DxD_calves_f,CATTLE,Dairy x Dairy female calves under 1 year,A2010,Bovine animals less than 1 year old,EUR/head,643.41,522.0,YES,Direct IFS-2020 SOC,NO,,,
+DxB_calves_m,CATTLE,Dairy x Beef male calves under 1 year,A2010,Bovine animals less than 1 year old,EUR/head,643.41,522.0,YES,Direct IFS-2020 SOC,NO,,,
+DxB_calves_f,CATTLE,Dairy x Beef female calves under 1 year,A2010,Bovine animals less than 1 year old,EUR/head,643.41,522.0,YES,Direct IFS-2020 SOC,NO,,,
+BxB_calves_m,CATTLE,Beef x Beef male calves under 1 year,A2010,Bovine animals less than 1 year old,EUR/head,643.41,522.0,YES,Direct IFS-2020 SOC,NO,,,
+BxB_calves_f,CATTLE,Beef x Beef female calves under 1 year,A2010,Bovine animals less than 1 year old,EUR/head,643.41,522.0,YES,Direct IFS-2020 SOC,NO,,,
+DxD_heifers_less_2_yr,CATTLE,"Dairy-origin heifers, 1 to less than 2 years",A2220,"Heifers, 1 to less than 2 years old",EUR/head,326.8,363.2,YES,Direct IFS-2020 SOC,NO,,,
+DxB_heifers_less_2_yr,CATTLE,"Dairy x Beef heifers, 1 to less than 2 years",A2220,"Heifers, 1 to less than 2 years old",EUR/head,326.8,363.2,YES,Direct IFS-2020 SOC,NO,,,
+BxB_heifers_less_2_yr,CATTLE,"Beef-origin heifers, 1 to less than 2 years",A2220,"Heifers, 1 to less than 2 years old",EUR/head,326.8,363.2,YES,Direct IFS-2020 SOC,NO,,,
+DxD_steers_less_2_yr,CATTLE,"Dairy-origin male/steer, 1 to less than 2 years",A2120,"Male bovine animals, 1 to less than 2 years old",EUR/head,512.39,401.98,YES,Direct IFS-2020 SOC,NO,,,
+DxB_steers_less_2_yr,CATTLE,"Dairy x Beef male/steer, 1 to less than 2 years",A2120,"Male bovine animals, 1 to less than 2 years old",EUR/head,512.39,401.98,YES,Direct IFS-2020 SOC,NO,,,
+BxB_steers_less_2_yr,CATTLE,"Beef-origin male/steer, 1 to less than 2 years",A2120,"Male bovine animals, 1 to less than 2 years old",EUR/head,512.39,401.98,YES,Direct IFS-2020 SOC,NO,,,
+DxD_heifers_more_2_yr,CATTLE,"Dairy-origin heifers, 2 years and over, not calved",A2230,Heifers 2 years old and over,EUR/head,386.39,233.62,YES,Direct IFS-2020 SOC,NO,,,
+DxB_heifers_more_2_yr,CATTLE,"Dairy x Beef heifers, 2 years and over, not calved",A2230,Heifers 2 years old and over,EUR/head,386.39,233.62,YES,Direct IFS-2020 SOC,NO,,,
+BxB_heifers_more_2_yr,CATTLE,"Beef-origin heifers, 2 years and over, not calved",A2230,Heifers 2 years old and over,EUR/head,386.39,233.62,YES,Direct IFS-2020 SOC,NO,,,
+DxD_steers_more_2_yr,CATTLE,"Dairy-origin male/steer, 2 years and over",A2130,"Male bovine animals, 2 years old and over",EUR/head,355.05,317.04,YES,Direct IFS-2020 SOC,NO,,,
+DxB_steers_more_2_yr,CATTLE,"Dairy x Beef male/steer, 2 years and over",A2130,"Male bovine animals, 2 years old and over",EUR/head,355.05,317.04,YES,Direct IFS-2020 SOC,NO,,,
+BxB_steers_more_2_yr,CATTLE,"Beef-origin male/steer, 2 years and over",A2130,"Male bovine animals, 2 years old and over",EUR/head,355.05,317.04,YES,Direct IFS-2020 SOC,NO,,,
+Lowland ewes,SHEEP,Lowland breeding female sheep,A4110K,Breeding female sheep,EUR/head,129.82,122.55,YES,Direct IFS-2020 SOC,NO,,,A4100 is the all-sheep parent category and is not used for detailed GOBLIN cohorts.
+Upland ewes,SHEEP,Upland breeding female sheep,A4110K,Breeding female sheep,EUR/head,129.82,122.55,YES,Direct IFS-2020 SOC,NO,,,A4100 is the all-sheep parent category and is not used for detailed GOBLIN cohorts.
+Lowland lamb_less_1_yr,SHEEP,Lowland other sheep: lamb under 1 year,A4120,Other sheep,EUR/head,51.61,49.09,YES,Direct IFS-2020 SOC,NO,,,
+Lowland male_less_1_yr,SHEEP,Lowland other sheep: male under 1 year,A4120,Other sheep,EUR/head,51.61,49.09,YES,Direct IFS-2020 SOC,NO,,,
+Lowland lamb_more_1_yr,SHEEP,Lowland other sheep: residual sheep over 1 year,A4120,Other sheep,EUR/head,51.61,49.09,YES,Direct IFS-2020 SOC,NO,,,
+Lowland ram,SHEEP,Lowland ram,A4120,Other sheep,EUR/head,51.61,49.09,YES,Direct IFS-2020 SOC,NO,,,
+Upland lamb_less_1_yr,SHEEP,Upland other sheep: lamb under 1 year,A4120,Other sheep,EUR/head,51.61,49.09,YES,Direct IFS-2020 SOC,NO,,,
+Upland male_less_1_yr,SHEEP,Upland other sheep: male under 1 year,A4120,Other sheep,EUR/head,51.61,49.09,YES,Direct IFS-2020 SOC,NO,,,
+Upland lamb_more_1_yr,SHEEP,Upland other sheep: residual sheep over 1 year,A4120,Other sheep,EUR/head,51.61,49.09,YES,Direct IFS-2020 SOC,NO,,,
+Upland ram,SHEEP,Upland ram,A4120,Other sheep,EUR/head,51.61,49.09,YES,Direct IFS-2020 SOC,NO,,,
+TOTAL_CATTLE,CONTROL_TOTAL,Raw/control total cattle,,Control total - no direct SOC multiplication,,,,NO,Control only,NO,,,Do not value directly; detailed mapped cohorts already represent the animals.
+OTHER_CATTLE,CONTROL_TOTAL,Raw/control other cattle aggregate,,Control total - no direct SOC multiplication,,,,NO,Control only,NO,,,Do not value directly; detailed mapped cohorts already represent the animals.
+TOTAL_SHEEP,CONTROL_TOTAL,Raw/control total sheep,,Control total - no direct SOC multiplication,,,,NO,Control only,NO,,,Do not value directly; detailed mapped cohorts already represent the animals.
+TOTAL_CEREALS,LAND,Total cereal area,CEREALS_COMPOSITE,Fixed 2020 regional cereal composite,EUR/ha,1582.156794611131,1786.1348808802604,YES,2020 area-weighted C1110T + C1300T + C1400T,YES,1582.156794611131,1786.1348808802604,Use because ED data contain TOTAL_CEREALS rather than crop-specific cereal hectares.
+OTHER_CROPS_HA,LAND,"Residual non-grass, non-cereal agricultural land",OTHER_CROPS_COMPOSITE,Fixed 2020 residual crop/fruit/horticulture composite,EUR/ha,1915.1395145631068,3160.0518068965516,YES,2020 area-weighted residual crop basket,YES,1190.5161650485436,2902.2530344827587,Main values use an I6000T_I9000T proxy for the ambiguous CSO Other crops component; sensitivity assigns that component zero.
+ALL_GRASSLAND,LAND,Pasture + hay + grass silage + rough grazing in use,,Physical grassland account,,,,NO,Physical feed/land account,NO,,,Do not add to livestock production-value total; retain for feed pressure and land-release calculations.
+AREA_FARMED,LAND,Total area farmed / land accounting row target,,Denominator/control,,,,NO,Land accounting control,NO,,,No direct coefficient.

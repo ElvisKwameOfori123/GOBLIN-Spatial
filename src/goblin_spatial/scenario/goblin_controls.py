@@ -1,0 +1,382 @@
+"""External national GOBLIN controls for spatial transition studies.
+
+This module is an input contract, not a scenario generator. National GOBLIN
+supplies the quantities. GOBLIN-Spatial locates those quantities across the
+validated ED baseline without changing national totals.
+
+The contract supports three levels of cattle control:
+
+1. adult dairy/suckler targets only;
+2. adult targets plus an authoritative national total-cattle target;
+3. exact national targets for all 21 cattle cohorts.
+
+No missing national quantities are invented here. National livestock-land
+release, optional category-resolved livestock-land release, future land-use
+targets and residual available land are carried as separate fields because they
+have different accounting meanings.
+
+For the principal study, adult GOBLIN values are absolute endpoints. Category
+changes may have different signs, as in SI_SG where dairy can rise while
+sucklers fall sharply. The principal reduction condition applies to total adult
+cows, not independently to each adult category.
+"""
+
+from __future__ import annotations
+
+import csv
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from pathlib import Path
+from types import MappingProxyType
+
+from goblin_spatial.cattle.cohorts import FINAL_21_COHORTS
+from goblin_spatial.dynamics.baseline import SUPPORTED_SCENARIO_BASE_YEARS
+
+
+def _as_non_negative_int(label: str, value: int) -> int:
+    if isinstance(value, bool):
+        raise ValueError(f"{label} must be a non-negative integer")
+    number = int(value)
+    if number != value or number < 0:
+        raise ValueError(f"{label} must be a non-negative integer")
+    return number
+
+
+def _as_non_negative_float(label: str, value: float) -> float:
+    number = float(value)
+    if number < 0.0:
+        raise ValueError(f"{label} must be non-negative")
+    return number
+
+
+@dataclass(frozen=True)
+class GoblinNationalMilestone:
+    """One externally supplied national GOBLIN milestone.
+
+    ``dairy_cows`` and ``suckler_cows`` are the adult scenario controls.
+    ``total_cattle`` is an optional hard closure target for the complete
+    21-cohort cattle state. ``cattle_cohorts`` is the stronger optional control
+    and, when supplied, must contain every member of ``FINAL_21_COHORTS``.
+
+    ``livestock_land_release_ha`` is gross national land release attributable to
+    the livestock transition when the originating pathway supplies it.
+    ``livestock_land_release_by_system_ha`` can additionally carry an exact
+    decomposition such as dairy/beef/sheep.  When both are supplied the system
+    components must close to the gross total. ``available_land_residual_ha`` is
+    kept separately and must not be treated as the same quantity.
+    """
+
+    year: int
+    dairy_cows: int
+    suckler_cows: int
+    total_cattle: int | None = None
+    cattle_cohorts: Mapping[str, int] | None = None
+    livestock_land_release_ha: float | None = None
+    livestock_land_release_by_system_ha: Mapping[str, float] = field(default_factory=dict)
+    land_use_targets_ha: Mapping[str, float] = field(default_factory=dict)
+    available_land_residual_ha: float | None = None
+
+    def __post_init__(self) -> None:
+        if isinstance(self.year, bool) or int(self.year) != self.year:
+            raise ValueError("year must be an integer")
+        object.__setattr__(self, "year", int(self.year))
+
+        dairy = _as_non_negative_int("dairy_cows", self.dairy_cows)
+        suckler = _as_non_negative_int("suckler_cows", self.suckler_cows)
+        object.__setattr__(self, "dairy_cows", dairy)
+        object.__setattr__(self, "suckler_cows", suckler)
+
+        total = None
+        if self.total_cattle is not None:
+            total = _as_non_negative_int("total_cattle", self.total_cattle)
+            if total < dairy + suckler:
+                raise ValueError(
+                    "total_cattle cannot be smaller than dairy_cows + suckler_cows"
+                )
+            object.__setattr__(self, "total_cattle", total)
+
+        if self.cattle_cohorts is not None:
+            supplied = dict(self.cattle_cohorts)
+            expected = set(FINAL_21_COHORTS)
+            actual = set(supplied)
+            missing = sorted(expected - actual)
+            extra = sorted(actual - expected)
+            if missing or extra:
+                raise ValueError(
+                    "cattle_cohorts must contain the complete 21-cohort set; "
+                    f"missing={missing}, extra={extra}"
+                )
+            validated = {
+                cohort: _as_non_negative_int(
+                    f"cattle_cohorts[{cohort}]", supplied[cohort]
+                )
+                for cohort in FINAL_21_COHORTS
+            }
+            if validated["dairy_cows"] != dairy:
+                raise ValueError("cattle_cohorts[dairy_cows] must equal dairy_cows")
+            if validated["suckler_cows"] != suckler:
+                raise ValueError("cattle_cohorts[suckler_cows] must equal suckler_cows")
+            if total is not None and sum(validated.values()) != total:
+                raise ValueError(
+                    "sum(cattle_cohorts) must equal total_cattle when both are supplied"
+                )
+            object.__setattr__(
+                self, "cattle_cohorts", MappingProxyType(validated)
+            )
+
+        gross_release = None
+        if self.livestock_land_release_ha is not None:
+            gross_release = _as_non_negative_float(
+                "livestock_land_release_ha", self.livestock_land_release_ha
+            )
+            object.__setattr__(
+                self,
+                "livestock_land_release_ha",
+                gross_release,
+            )
+
+        system_release = {}
+        for raw_name, raw_value in dict(self.livestock_land_release_by_system_ha).items():
+            name = str(raw_name).strip().upper()
+            if not name:
+                raise ValueError("livestock land-release system names cannot be empty")
+            if name in system_release:
+                raise ValueError(f"duplicate livestock land-release system: {name}")
+            system_release[name] = _as_non_negative_float(
+                f"livestock_land_release_by_system_ha[{name}]", raw_value
+            )
+        if gross_release is not None and system_release:
+            if abs(sum(system_release.values()) - gross_release) > 1e-6:
+                raise ValueError(
+                    "category-resolved livestock land release must sum to gross "
+                    "livestock_land_release_ha"
+                )
+        object.__setattr__(
+            self,
+            "livestock_land_release_by_system_ha",
+            MappingProxyType(system_release),
+        )
+
+        targets = {}
+        for raw_name, raw_value in dict(self.land_use_targets_ha).items():
+            name = str(raw_name).strip()
+            if not name:
+                raise ValueError("land-use target names cannot be empty")
+            targets[name] = _as_non_negative_float(
+                f"land_use_targets_ha[{name}]", raw_value
+            )
+        object.__setattr__(
+            self, "land_use_targets_ha", MappingProxyType(targets)
+        )
+
+        if self.available_land_residual_ha is not None:
+            object.__setattr__(
+                self,
+                "available_land_residual_ha",
+                _as_non_negative_float(
+                    "available_land_residual_ha", self.available_land_residual_ha
+                ),
+            )
+
+    def adult_reductions_from_baseline(
+        self,
+        *,
+        baseline_dairy_cows: int,
+        baseline_suckler_cows: int,
+    ) -> dict[str, int | float]:
+        """Describe signed category change and the remaining overall adult contraction.
+
+        Dairy and suckler categories may move in opposite directions. The
+        principal transition requires only that the combined adult-cow endpoint
+        does not exceed the selected baseline total.
+        """
+
+        bd = _as_non_negative_int("baseline_dairy_cows", baseline_dairy_cows)
+        bs = _as_non_negative_int("baseline_suckler_cows", baseline_suckler_cows)
+        td = int(self.dairy_cows)
+        ts = int(self.suckler_cows)
+        base_adults = bd + bs
+        target_adults = td + ts
+        if target_adults > base_adults:
+            raise ValueError(
+                "principal pathway requires an overall adult-cow contraction; "
+                f"baseline={base_adults}, endpoint={target_adults}"
+            )
+
+        change_dairy = td - bd
+        change_suckler = ts - bs
+        dairy_reduction = max(0, -change_dairy)
+        suckler_reduction = max(0, -change_suckler)
+        adult_reduction = base_adults - target_adults
+
+        return {
+            "baseline_dairy_cows": bd,
+            "target_dairy_cows": td,
+            "change_dairy_cows": change_dairy,
+            "dairy_reduction_n": dairy_reduction,
+            "dairy_reduction_fraction": 0.0 if bd == 0 else dairy_reduction / bd,
+            "baseline_suckler_cows": bs,
+            "target_suckler_cows": ts,
+            "change_suckler_cows": change_suckler,
+            "suckler_reduction_n": suckler_reduction,
+            "suckler_reduction_fraction": 0.0 if bs == 0 else suckler_reduction / bs,
+            "baseline_adult_cows": base_adults,
+            "target_adult_cows": target_adults,
+            "change_adult_cows": target_adults - base_adults,
+            "adult_reduction_n": adult_reduction,
+            "adult_reduction_fraction": 0.0 if base_adults == 0 else adult_reduction / base_adults,
+        }
+
+
+@dataclass(frozen=True)
+class GoblinPathwayControls:
+    """National controls for one internally consistent pathway identifier."""
+
+    scenario_id: str
+    baseline_year: int
+    milestones: tuple[GoblinNationalMilestone, ...]
+    source_note: str | None = None
+
+    def __post_init__(self) -> None:
+        scenario_id = str(self.scenario_id).strip()
+        if not scenario_id:
+            raise ValueError("scenario_id cannot be empty")
+        object.__setattr__(self, "scenario_id", scenario_id)
+
+        if self.baseline_year not in SUPPORTED_SCENARIO_BASE_YEARS:
+            raise ValueError(
+                f"baseline_year must be one of {SUPPORTED_SCENARIO_BASE_YEARS}"
+            )
+
+        milestones = tuple(self.milestones)
+        if not milestones:
+            raise ValueError("at least one national milestone is required")
+        years = tuple(m.year for m in milestones)
+        if years != tuple(sorted(set(years))):
+            raise ValueError("milestone years must be unique and ascending")
+        if years[0] <= int(self.baseline_year):
+            raise ValueError("all milestone years must follow baseline_year")
+        object.__setattr__(self, "milestones", milestones)
+
+    @property
+    def target_year(self) -> int:
+        return self.milestones[-1].year
+
+    def milestone(self, year: int) -> GoblinNationalMilestone:
+        """Return one exact milestone or raise if the pathway does not supply it."""
+
+        year = int(year)
+        for milestone in self.milestones:
+            if milestone.year == year:
+                return milestone
+        raise KeyError(f"no GOBLIN national milestone for year {year}")
+
+    def adult_reductions_from_baseline(
+        self,
+        *,
+        baseline_dairy_cows: int,
+        baseline_suckler_cows: int,
+        year: int | None = None,
+    ) -> dict[str, int | float]:
+        """Return signed category changes and overall adult contraction."""
+
+        milestone = self.milestone(self.target_year if year is None else year)
+        return milestone.adult_reductions_from_baseline(
+            baseline_dairy_cows=baseline_dairy_cows,
+            baseline_suckler_cows=baseline_suckler_cows,
+        )
+
+    def total_cattle_targets_by_year(self) -> dict[int, int]:
+        """Return only explicitly supplied national total-cattle targets."""
+
+        return {
+            milestone.year: int(milestone.total_cattle)
+            for milestone in self.milestones
+            if milestone.total_cattle is not None
+        }
+
+    def cattle_cohort_targets_by_year(self) -> dict[int, dict[str, int]]:
+        """Return only explicitly supplied exact 21-cohort targets."""
+
+        return {
+            milestone.year: dict(milestone.cattle_cohorts)
+            for milestone in self.milestones
+            if milestone.cattle_cohorts is not None
+        }
+
+    def livestock_land_release_by_year(self) -> dict[int, float]:
+        """Return only explicitly supplied national livestock-land release."""
+
+        return {
+            milestone.year: float(milestone.livestock_land_release_ha)
+            for milestone in self.milestones
+            if milestone.livestock_land_release_ha is not None
+        }
+
+    def livestock_land_release_by_system_by_year(self) -> dict[int, dict[str, float]]:
+        """Return only explicitly supplied category-resolved land-release controls."""
+
+        return {
+            milestone.year: dict(milestone.livestock_land_release_by_system_ha)
+            for milestone in self.milestones
+            if milestone.livestock_land_release_by_system_ha
+        }
+
+
+def load_adult_endpoint_controls(
+    path: str | Path,
+    *,
+    scenario_id: str,
+    baseline_year: int,
+) -> GoblinPathwayControls:
+    """Load one source-controlled adult endpoint without inferring other controls.
+
+    Expected CSV fields are ``SCENARIO_ID``, ``TARGET_YEAR``, ``DAIRY_COWS`` and
+    ``SUCKLER_COWS``. ``DAIRY_SUCKLER_RATIO`` and ``SOURCE_NOTE`` are optional.
+    The loader intentionally leaves total cattle, land release and future land-use
+    targets unset unless they are supplied through a richer pathway contract.
+    """
+
+    path = Path(path)
+    with path.open("r", encoding="utf-8-sig", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+
+    requested = str(scenario_id).strip()
+    matches = [row for row in rows if str(row.get("SCENARIO_ID", "")).strip() == requested]
+    if len(matches) != 1:
+        raise ValueError(
+            f"expected exactly one endpoint row for {requested}; found {len(matches)}"
+        )
+    row = matches[0]
+
+    try:
+        target_year = int(row["TARGET_YEAR"])
+        dairy = int(row["DAIRY_COWS"])
+        suckler = int(row["SUCKLER_COWS"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("adult endpoint CSV contains invalid required fields") from exc
+
+    reported_ratio = str(row.get("DAIRY_SUCKLER_RATIO", "")).strip()
+    if reported_ratio:
+        ratio = float(reported_ratio)
+        if suckler == 0:
+            if dairy != 0:
+                raise ValueError("finite dairy:suckler ratio cannot be validated with zero suckler cows")
+        elif abs((dairy / suckler) - ratio) > 1e-9:
+            raise ValueError(
+                f"reported dairy:suckler ratio does not match endpoint counts for {requested}"
+            )
+
+    source_note = str(row.get("SOURCE_NOTE", "")).strip() or None
+    return GoblinPathwayControls(
+        scenario_id=requested,
+        baseline_year=int(baseline_year),
+        milestones=(
+            GoblinNationalMilestone(
+                year=target_year,
+                dairy_cows=dairy,
+                suckler_cows=suckler,
+            ),
+        ),
+        source_note=source_note,
+    )

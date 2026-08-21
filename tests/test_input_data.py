@@ -119,3 +119,7 @@ def test_small_controls_exist() -> None:
         "county_region_map.csv",
     ):
         assert (controls / name).exists()
+
+    so = controls / "standard_output"
+    assert (so / "IFS_SOC2020_IE_model_controls.csv").exists()
+    assert (so / "NFS_2020_TSO_benchmarks.csv").exists()

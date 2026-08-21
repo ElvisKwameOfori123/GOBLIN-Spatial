@@ -1,0 +1,52 @@
+schema_version: "1.0"
+last_updated: "2026-08-13"
+concept_parent_record_id: 21918923
+
+# This file is the durable source-of-truth for the large LPIS parcel inputs.
+# Large parcel GeoParquets are intentionally not ordinary historical-build
+# dependencies. Place them at the configured paths before running
+# `goblin-spatial-lpis --year both`, or pass explicit local paths.
+
+sources:
+  lpis_2020_corrected_v2:
+    repository: "Zenodo"
+    record_id: 21922002
+    version: "v2"
+    version_doi: "10.5281/zenodo.21922002"
+    filename: "LPIS_2020_GOBLIN_reduced_v2.parquet"
+    configured_path: "data/external/spatial/lpis/LPIS_2020_GOBLIN_reduced_v2.parquet"
+    zenodo_md5: "ef6ff159320a13d7059770d20d1a0c3a"
+    role: "Use for every new 2020 LPIS-to-ED build."
+    note: >-
+      Corrected publication derivative. COMMONAGE_FRACTION is reconstructed
+      from COM_NUM/COM_DEN; share-adjusted digitised, eligible and geometry
+      diagnostics are complete. CLAIMED_AREA_HA is not fraction-adjusted again.
+
+  lpis_2025_validated_v1:
+    repository: "Zenodo"
+    record_id: 21918924
+    version: "v1"
+    version_doi: "10.5281/zenodo.21918924"
+    filename: "LPIS_2025_GOBLIN_reduced.parquet"
+    configured_path: "data/external/spatial/lpis/LPIS_2025_GOBLIN_reduced.parquet"
+    zenodo_md5: "8c10e49514997b9bedec77bebd5d52ed"
+    role: "Use for the 2025 LPIS-to-ED build until deliberately superseded."
+    note: >-
+      Zenodo v2 was published to correct 2020 and does not currently include
+      the unchanged 2025 parquet. This split-version pin is deliberate. Do not
+      revert 2020 to v1 merely to make the two years come from one record.
+
+spatial_bridge:
+  saps_ed_record_id: 21906755
+  saps_ed_version_doi: "10.5281/zenodo.21906755"
+  expected_model_eds: 2857
+  expected_lpis_ed_profile_rows: 5714
+  join_authority: "CSOED"
+
+scientific_guardrails:
+  - "ALL_GRASSLAND remains the authoritative ED grassland total."
+  - "LPIS is downstream spatial composition/opportunity context only."
+  - "Do not multiply CLAIMED_AREA_HA by COMMONAGE_FRACTION a second time."
+  - "Preserve repeated parcel IDs; never blindly drop_duplicates(PARCEL_ID)."
+  - "2020 LPIS is used with a 2020 baseline; 2025 LPIS is used with a 2025 baseline."
+  - "PotentialRelease != Opportunity != RealisedConversion."

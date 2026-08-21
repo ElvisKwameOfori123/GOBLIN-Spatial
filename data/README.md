@@ -1,69 +1,197 @@
 # Data
 
-GOBLIN-Spatial uses a hybrid development data layout. **Compact, auditable inputs are versioned directly in GitHub**, while the two larger full-data inputs are kept outside normal Git history and pinned in `data_manifest.yaml` by exact SHA256 checksums.
+GOBLIN-Spatial v1 uses a **hybrid scientific-data layout**.
 
-The data are organised by scientific module rather than by the historical script number.
+The rule is deliberately simple:
+
+- **compact historical-baseline inputs are versioned directly in GitHub** so the 2015-2025 reconstruction is easy to inspect, test and rebuild;
+- **large spatial/scenario-preparation inputs are fetched from the frozen Zenodo release** and verified by checksum;
+- generated intermediate, validation and scenario-result files are never treated as required model inputs.
+
+The historical baseline is anchored to the **2020 CSO Electoral Division agricultural census** and reconstructed through time using **2015-2025 official controls for livestock, crops and agricultural land**.
+
+## Packaged baseline status
+
+The compact historical input package under `data/inputs/baseline/` is generated from the pinned Zenodo v1 record by `scripts/package_baseline_inputs.py`. The packaging helper verifies every file against the SHA256 recorded in `data_manifest.yaml` before the file is accepted in GitHub. Only verified historical-baseline entries are activated as `source: git`.
+
+The package contains the eight production inputs used by Stages 01-08 plus the separate DAFM county-sheep hold-out validation file. Soil, LPIS, ED geometry and SC1-SC3 controls are deliberately excluded from this packaging step.
+
+The migration is guarded by three CI layers:
+
+1. **checksum verification** of all nine Git-tracked baseline/validation files against `data_manifest.yaml`;
+2. **legacy-input equivalence tests** for the eight production inputs, comparing byte identity where possible and production-semantic tables where file formats or provenance fields changed;
+3. a **complete Stage 01-09 baseline rebuild** checking the ED-year universe, cattle and sheep cohort closure, land accounting, Standard Output fields and Stage 09 signature structure.
+
+The current verified run passes all three layers: **9/9 SHA256 checks, 8/8 input-equivalence tests, 27/27 baseline contract/unit tests, and the complete Stage 01-09 regression**.
+
+The DAFM county-sheep hold-out has no equivalent legacy Git-tracked source and is therefore verified by its pinned SHA256 rather than by an old-versus-new table comparison.
+
+The historical baseline package is therefore technically ready for review. It remains on the draft refactor branch and is not merged into `main` until explicitly approved.
+
+## Intended v1 layout
 
 ```text
 data/
-├── raw/
-│   ├── cattle/
-│   ├── sheep/
-│   └── land/
-├── controls/
-├── interim/      # generated, ignored by Git
-└── processed/    # generated, ignored by Git
+├── inputs/
+│   ├── baseline/          # compact Git-tracked historical inputs
+│   ├── scenario/          # compact Git-tracked future-scenario controls
+│   └── spatial/           # large Zenodo-backed soil/LPIS/geography inputs
+│
+├── interim/               # generated stage outputs, Git-ignored
+└── outputs/               # generated final outputs, Git-ignored
 ```
 
-## Cattle inputs
+## Historical baseline inputs
 
-Git-tracked:
+The production historical baseline uses these compact inputs:
 
-- `data/raw/cattle/CSO_county_WIDE_2015_2025.csv.xz`, annual county cattle controls.
+```text
+data/inputs/baseline/
+├── 01_CSO_ED_Agricultural_Baseline_2020.csv
+├── 01_CSO_AAA10_Cattle_County_2015_2025.csv
+├── 03_CSO_AAA09_Sheep_County_Region_2015_2025.xlsx
+├── 05A_DAFM_Sheep_Breed_Anchors_2016_2020_2022_2025.csv
+├── 05C_Cattle_Cohort_Relationships_2012_2020.csv
+├── 06_CSO_AQA06_Agricultural_Land_Use.xlsx
+├── 06_Farm_Structure_Demographic_Controls.csv
+└── 08_IFS2020_Standard_Output_Mapping.xlsx
+```
 
-External full-data input:
+`01_CSO_ED_Agricultural_Baseline_2020.csv` is the fine-scale spatial anchor.
 
-- `data/raw/cattle/CSO_ED_2020.csv`, the fixed 2,857-ED Census of Agriculture baseline.
+`01_CSO_AAA10_Cattle_County_2015_2025.csv` supplies the annual county cattle controls. The 2020 ED cattle pattern is reconciled to AAA10, and the fixed 2020 within-county spatial support is then used for reconstructed non-2020 ED years.
 
-The ED baseline is intentionally not replaced by higher-level annual controls. It is the fixed spatial anchor from which the 2015-2025 cattle panel is reconstructed.
+`03_CSO_AAA09_Sheep_County_Region_2015_2025.xlsx` supplies the sheep hierarchy. `County_WIDE` is used for the county-to-region/NUTS2 crosswalk, while `Region_WIDE` provides the raw AAA09 detailed-region population and demographic controls. County sheep totals are reconstructed from the corrected 2020 ED anchor and AAA09 regional totals; the old `County_WIDE` sheep numbers are not treated as independent population controls.
 
-## Sheep inputs
+`05A_DAFM_Sheep_Breed_Anchors_2016_2020_2022_2025.csv` supplies sheep breed composition only. It does not replace the CSO/AAA09 sheep population.
 
-The current sheep inputs are compact enough to remain in GitHub during development:
+`05C_Cattle_Cohort_Relationships_2012_2020.csv` is the shared GOBLIN biological relationship source used to construct both the 21 cattle cohorts and the 10 sheep cohorts. The published filename is retained for reproducibility even though the source contains both cattle and sheep series.
 
-- county sheep controls;
-- regional sheep controls;
-- the combined county/region source workbook;
-- DAFM county sheep breed-composition anchors for 2016, 2020, 2022 and 2025.
+`06_CSO_AQA06_Agricultural_Land_Use.xlsx` and `06_Farm_Structure_Demographic_Controls.csv` supply crop, land, holding-size and holder-demographic controls.
 
-The DAFM anchor ZIP contains one canonical CSV and can be read directly by pandas. The annual 2015-2025 county composition table is generated by the sheep module from these observed anchor years. It is an intermediate product, not another raw input.
+`08_IFS2020_Standard_Output_Mapping.xlsx` supplies the fixed IFS-2020 Standard Output mapping used to calculate agricultural production-value exposure. The frozen workbook adds clearer descriptive/provenance fields, while CI verifies that the runtime mapping keys and coefficients remain identical to the validated legacy control.
 
-## Land inputs
+## DAFM county sheep hold-out
 
-External full-data input:
+The frozen bundle also retains:
 
-- `data/raw/land/AQA06_Unpivoted_2013_2025.csv`, the annual regional land-use controls used to reconstruct ED land trajectories around the fixed 2020 ED anchor.
+```text
+03_0_DAFM_Sheep_County_Totals_2015_2020_2022_2025.csv
+```
 
-The exact expected SHA256 is pinned in `data_manifest.yaml`.
+This file is retained for independent/hold-out validation of the reconstructed sheep geography. It is **not** allowed to replace the production CSO/AAA09 sheep population controls unless a separately validated production algorithm is explicitly adopted in a future version.
 
-## `data/controls/`
+## Final historical-baseline boundary
 
-Small, auditable files that are part of the package logic are versioned here:
+The historical model finishes at **Stage 09**:
 
-- `cohort2012-2020.csv`, the GOBLIN cohort relationships used for cattle and sheep biological disaggregation;
-- `06_SE_Data_Controls.csv`, the official structural and holder-age controls used by the SE module;
-- `county_region_map.csv`, the Irish county-to-region mapping used by the land/sheep hierarchy.
+```text
+cattle
+  ↓
+sheep
+  ↓
+merge
+  ↓
+land + crops + farm structure / SE
+  ↓
+07 clean validated baseline
+  ↓
+08 Standard Output
+  ↓
+09 frozen ED cohort signatures
+  ↓
+HISTORICAL BASELINE COMPLETE
+```
 
-## Authoritative input inventory
+Stage 09 freezes the pre-scenario ED cohort relationships required by later transition analysis. It does not run a scenario.
 
-The repository-root `data_manifest.yaml` is the authoritative list of inputs expected by a clean build. Git-tracked inputs are pinned by the Git commit. External full-data inputs are pinned by SHA256 and will receive Zenodo and/or stable official URLs before the public v1.0 release.
+## Scenario-preparation spatial inputs
 
-During development, CI verifies all Git-tracked inputs on every push. Full-data integration tests are run when the external 2020 ED and AQA06 files are available.
+Stages **08B and 08C begin the downstream scenario-preparation side**, rather than the historical reconstruction itself.
 
-## Generated data
+Large spatial files are fetched from the frozen Zenodo release:
 
-`data/interim/` and `data/processed/` are generated by the package and are not committed as working source data. Stable final data products can later be attached to a formal release and archived on Zenodo.
+**Version DOI:** `10.5281/zenodo.22035538`
 
-## 2020 principle
+**Concept DOI:** `10.5281/zenodo.22035537`
 
-The 2020 CSO Electoral Division agricultural baseline is the fixed fine-scale spatial anchor. Coarser annual statistics are used as temporal controls around that baseline rather than to overwrite it.
+```text
+data/inputs/spatial/
+├── 08B_NFS_Agricultural_Soil_Capability.csv
+├── 08C_IFS_Mapped_Physical_Soil_Package.zip
+├── SC2_LPIS_2020_Frozen.parquet
+├── SC2_LPIS_2025_Frozen.parquet
+└── SC2_ED_Boundaries_Frozen.gpkg
+```
+
+The two soil systems remain independent:
+
+- `08B_NFS_Agricultural_Soil_Capability.csv` provides the Cathal/NFS agricultural-capability representation;
+- `08C_IFS_Mapped_Physical_Soil_Package.zip` provides the independent Colm/IFS mapped physical-soil representation.
+
+They are not blended into one soil index, and neither is used to reconstruct historical livestock numbers.
+
+LPIS is also downstream spatial evidence. It does not determine historical cattle or sheep populations.
+
+## Compact scenario controls
+
+Small future-scenario controls can remain in GitHub:
+
+```text
+data/inputs/scenario/
+├── SC1_Cattle_Scenario_Endpoints_2050.csv
+└── SC1_ED_Rural_Mixed_Urban_2022.xlsx
+```
+
+They are not read by the historical `run_baseline()` workflow.
+
+## Generated files
+
+Generated stages are recreated by the package and are not mandatory downloads. Examples include:
+
+```text
+01_CSO_ED_2020_age_sex_baseline.csv
+02_CSO_ED_cattle_panel_2015_2025.csv
+03A_* corrected sheep county/anchor outputs
+03B_* ED sheep panel
+05A_* annual sheep composition
+05B_* sheep breed/type enrichment
+05C_* cattle-cohort outputs
+05D_* 31-cohort livestock master
+06_* land/farm-structure master
+07_* clean historical export
+08_GOBLIN_Spatial_Standard_Output_2015_2025.csv
+09_GOBLIN_Spatial_ED_Cohort_Signatures_2020.csv
+```
+
+Future 08B/08C/SC1/SC2/SC3 outputs are likewise generated rather than model inputs.
+
+## Data authority
+
+The historical hierarchy is:
+
+```text
+2020 CSO ED agricultural census
+        ↓
+fine-scale spatial anchor
+
+2015-2025 official county/region controls
+        ↓
+annual livestock + crop + land reconstruction
+
+GOBLIN biological relationships
+        ↓
+31-cohort livestock representation
+
+IFS-2020 Standard Output coefficients
+        ↓
+production-value exposure
+
+Stage 09
+        ↓
+frozen pre-scenario ED cohort signatures
+```
+
+Only after this historical baseline is complete do soil, LPIS and future scenario controls enter the transition-analysis workflow.
+
+`data_manifest.yaml` is the machine-readable authority for exact paths, checksums and source locations.

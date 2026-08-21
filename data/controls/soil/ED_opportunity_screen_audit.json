@@ -1,0 +1,29 @@
+{
+  "audit_version": "0.1.0",
+  "source_profile_file": "ED_GOBLIN_soil_profile_compact.csv.xz",
+  "source_profile_sha256": "c9fd0c19b642254466a65bb4dc2f8cbaf1d7c9023de1ca39083699453dfe3a1b",
+  "source_profile_eds": 2895,
+  "source_profile_source_uaa_ha": 4237568.48352803,
+  "production_soil_score": {
+    "formula": "(0.85*G1 + 0.80*G2 + 0.70*G3 - 0.70) / 0.15",
+    "interpretation": "relative GOBLIN production-soil screening index, not observed yield",
+    "source_uaa_weighted_mean": 0.6763543360931237
+  },
+  "forestry_score": {
+    "formula": "clip((FOREST_YC_WEIGHTED_MEAN - 14) / 10, 0, 1)",
+    "interpretation": "forestry production-context screen only; not an afforestation suitability model",
+    "eds_with_yield_class_context": 2895,
+    "source_uaa_weighted_mean": 0.7920541828584692
+  },
+  "rewetting_score": {
+    "eligibility_rule": "dominant IFS soil code ends with PT or equals CUT",
+    "weight": "IFS_SOIL_DOMINANT_SHARE",
+    "interpretation": "conservative first-stage peat/cutover screen; not parcel-level peat area",
+    "dominant_peat_or_cutover_eds": 423,
+    "dominant_peat_or_cutover_source_uaa_ha": 565824.0321121999,
+    "dominant_peat_or_cutover_source_uaa_share": 0.1335256372402311,
+    "source_uaa_weighted_score_mean": 0.07173160159811588
+  },
+  "envelope_boundary": "PotentialRelease != Opportunity != RealisedConversion. Land-use opportunity envelopes overlap and must not be summed across uses.",
+  "allocation_boundary": "No forest, rewetting, AD-grass, willow, energy-grass or nature hectares are allocated unless explicit study/policy shares are supplied separately."
+}

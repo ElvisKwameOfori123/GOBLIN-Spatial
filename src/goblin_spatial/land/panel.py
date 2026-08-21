@@ -1,4 +1,9 @@
-"""Annual ED land reconstruction around the fixed 2020 CSO baseline."""
+"""Annual ED land reconstruction around the fixed 2020 CSO baseline.
+
+This module preserves the validated Script 06 land method. The seven AQA06
+regions and their 26-county mapping are deterministic model metadata from the
+validated script, so no separate county-region input file is required.
+"""
 
 from __future__ import annotations
 
@@ -14,6 +19,53 @@ LAND_COLUMNS = ["AREA_FARMED", "ALL_GRASSLAND", "TOTAL_CEREALS", "OTHER_CROPS_HA
 COMPONENT_COLUMNS = ["ALL_GRASSLAND", "TOTAL_CEREALS", "OTHER_CROPS_HA"]
 GRASS_SOURCE_TYPES = ["Pasture", "Hay", "Grass silage", "Rough grazing in use"]
 
+# Exact county -> AQA06 detailed-region mapping used by validated Script 06.
+COUNTY_TO_AQA_REGION = {
+    # Border
+    "Cavan": "Border",
+    "Donegal": "Border",
+    "Leitrim": "Border",
+    "Monaghan": "Border",
+    "Sligo": "Border",
+    # West
+    "Galway": "West",
+    "Mayo": "West",
+    "Roscommon": "West",
+    # Mid-West
+    "Clare": "Mid-West",
+    "Limerick": "Mid-West",
+    "Tipperary": "Mid-West",
+    # South-East
+    "Carlow": "South-East",
+    "Kilkenny": "South-East",
+    "Waterford": "South-East",
+    "Wexford": "South-East",
+    # South-West
+    "Cork": "South-West",
+    "Kerry": "South-West",
+    # Dublin and Mid-East
+    "Dublin": "Dublin and Mid-East",
+    "Kildare": "Dublin and Mid-East",
+    "Louth": "Dublin and Mid-East",
+    "Meath": "Dublin and Mid-East",
+    "Wicklow": "Dublin and Mid-East",
+    # Midland
+    "Laois": "Midland",
+    "Longford": "Midland",
+    "Offaly": "Midland",
+    "Westmeath": "Midland",
+}
+
+AQA_REGIONS = (
+    "Border",
+    "West",
+    "Mid-West",
+    "South-East",
+    "South-West",
+    "Dublin and Mid-East",
+    "Midland",
+)
+
 
 def _normalise_county(value) -> str:
     if pd.isna(value):
@@ -22,22 +74,22 @@ def _normalise_county(value) -> str:
     return " ".join(text.split()).title()
 
 
-def _load_crosswalk(path) -> pd.DataFrame:
-    mapping = pd.read_csv(path)
-    required = {"County", "NUTS3_REGION"}
-    if not required.issubset(mapping.columns):
-        raise ValueError("county-region map must contain County and NUTS3_REGION")
-    mapping = mapping[["County", "NUTS3_REGION"]].drop_duplicates().copy()
-    mapping["County"] = mapping["County"].map(_normalise_county)
-    if len(mapping) != 26 or mapping["County"].nunique() != 26:
-        raise AssertionError("land county-region map must contain 26 unique counties")
-    return mapping.rename(columns={"NUTS3_REGION": "AQA06_REGION"})
+def _read_aqa06(path) -> pd.DataFrame:
+    """Read the frozen AQA06 workbook or the legacy tidy CSV."""
+
+    suffix = str(path).lower()
+    if suffix.endswith((".xlsx", ".xls")):
+        controls = pd.read_excel(path, sheet_name="Unpivoted")
+    else:
+        controls = pd.read_csv(path)
+    controls.columns = [str(column).strip() for column in controls.columns]
+    return controls
 
 
 def _load_land_controls(
     path, regions: set[str]
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    controls = pd.read_csv(path)
+    controls = _read_aqa06(path)
     required = {"Year", "Type of Land Use", "Region", "UNIT", "VALUE"}
     if not required.issubset(controls.columns):
         raise ValueError(
@@ -103,18 +155,28 @@ def add_land(master: pd.DataFrame, config: SpatialConfig) -> pd.DataFrame:
     protected_snapshot = result[protected_columns].copy()
 
     result["County"] = result["County"].map(_normalise_county)
-    crosswalk_path = config.files["county_region_map"]
     land_path = config.files["cso_land"]
-    for path in (crosswalk_path, land_path):
-        if not path.exists():
-            raise FileNotFoundError(path)
+    if not land_path.exists():
+        raise FileNotFoundError(land_path)
 
-    crosswalk = _load_crosswalk(crosswalk_path)
-    region_map = crosswalk.set_index("County")["AQA06_REGION"]
-    result["AQA06_REGION"] = result["County"].map(region_map)
+    if set(COUNTY_TO_AQA_REGION) != set(result["County"].dropna().unique()):
+        missing_counties = sorted(
+            set(result["County"].dropna().unique()) - set(COUNTY_TO_AQA_REGION)
+        )
+        extra_counties = sorted(
+            set(COUNTY_TO_AQA_REGION) - set(result["County"].dropna().unique())
+        )
+        raise AssertionError(
+            "county coverage differs from validated AQA06 mapping; "
+            f"missing_mapping={missing_counties}, absent_from_panel={extra_counties}"
+        )
+
+    result["AQA06_REGION"] = result["County"].map(COUNTY_TO_AQA_REGION)
     if result["AQA06_REGION"].isna().any():
         raise AssertionError("missing county-to-AQA06 region mapping")
-    regions = set(crosswalk["AQA06_REGION"].unique())
+    regions = set(AQA_REGIONS)
+    if set(result["AQA06_REGION"].unique()) != regions:
+        raise AssertionError("AQA06 region coverage differs from validated Script 06")
 
     baseline = result.loc[
         result["YEAR"] == config.base_year,
@@ -160,7 +222,7 @@ def add_land(master: pd.DataFrame, config: SpatialConfig) -> pd.DataFrame:
                 )
             continue
 
-        for region in sorted(regions):
+        for region in AQA_REGIONS:
             base_region = baseline.loc[
                 baseline["AQA06_REGION"] == region
             ].copy()

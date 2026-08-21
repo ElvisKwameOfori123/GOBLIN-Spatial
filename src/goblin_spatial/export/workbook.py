@@ -1,4 +1,4 @@
-"""Clean four-sheet Excel export for GOBLIN-Spatial."""
+"""Clean Excel export for GOBLIN-Spatial."""
 
 from __future__ import annotations
 
@@ -51,6 +51,51 @@ SE_LAND = [
     "OTHER_CROPS_HA",
 ]
 GOBLIN_31 = [*FINAL_21_COHORTS, *GOBLIN_SHEEP_10]
+STANDARD_OUTPUT = [
+    "FADN_REGION",
+    "FADN_REGION_LABEL",
+    "SO_DAIRY_COWS_2020_EUR",
+    "SO_SUCKLER_COWS_2020_EUR",
+    "SO_BULLS_2020_EUR",
+    "SO_FOLLOWERS_2020_EUR",
+    "SO_SHEEP_2020_EUR",
+    "SO_LIVESTOCK_2020_EUR",
+    "SO_CEREALS_2020_EUR",
+    "SO_OTHER_CROPS_2020_EUR",
+    "SO_OTHER_CROPS_CONSERVATIVE_2020_EUR",
+    "SO_COVERED_TOTAL_2020_EUR",
+    "SO_COVERED_TOTAL_CONSERVATIVE_2020_EUR",
+    "SO_OTHER_CROPS_IMPUTED_HA",
+    "SO_COVERED_PER_HOLDING_2020_EUR",
+    "SO_COVERED_PER_HOLDING_CONSERVATIVE_2020_EUR",
+]
+SOIL_PROFILE = [
+    "ALL_GRASSLAND",
+    "SOIL_PROFILE_SOURCE",
+    "SOIL_SOURCE_HOLDINGS",
+    "SOIL_SOURCE_UAA_HA",
+    "SOIL_USE_CLASS_1_SHARE",
+    "SOIL_USE_CLASS_2_SHARE",
+    "SOIL_USE_CLASS_3_SHARE",
+    "SOIL_USE_CLASS_4_SHARE",
+    "SOIL_USE_CLASS_5_SHARE",
+    "SOIL_USE_CLASS_6_SHARE",
+    "GOBLIN_SOIL_G1_SHARE",
+    "GOBLIN_SOIL_G2_SHARE",
+    "GOBLIN_SOIL_G3_SHARE",
+    "GOBLIN_SOIL_G1_GRASSLAND_HA",
+    "GOBLIN_SOIL_G2_GRASSLAND_HA",
+    "GOBLIN_SOIL_G3_GRASSLAND_HA",
+    "FOREST_YC_14_SHARE",
+    "FOREST_YC_18_SHARE",
+    "FOREST_YC_20_SHARE",
+    "FOREST_YC_24_SHARE",
+    "FOREST_YC_SOURCE_UAA_HA",
+    "FOREST_YC_WEIGHTED_MEAN",
+    "IFS_SOIL_DOMINANT",
+    "IFS_SOIL_DOMINANT_SHARE",
+    "IFS_SOIL_N_CLASSES",
+]
 BANNED_TOKENS = [
     "STATUS",
     "METHOD",
@@ -93,12 +138,16 @@ def _check_clean(frame: pd.DataFrame, name: str) -> None:
 def build_clean_sheets(
     master: pd.DataFrame, base_year: int = 2020
 ) -> dict[str, pd.DataFrame]:
-    """Return the exact four clean tables used by the validated workbook.
+    """Return clean biological, structural, SO and optional soil tables.
 
     ``LSU`` is intentionally excluded from the current baseline export because
     the historical source field is a static 2020 context value, not an annual
-    reconstructed indicator. Scenario-consistent LSU belongs in a later
-    pressure/scenario module.
+    reconstructed indicator. Scenario-consistent LSU belongs in the pressure
+    layer.
+
+    Standard Output and agricultural soil context are kept on separate sheets
+    so those downstream/contextual additions do not alter the validated
+    CSO/GOBLIN biological schemas.
     """
 
     ids = _existing(master, IDENTIFIERS)
@@ -149,6 +198,32 @@ def build_clean_sheets(
         "CSO_2020": cso_2020,
         "GOBLIN_2020": goblin_2020,
     }
+
+    so_columns = list(dict.fromkeys(ids + _existing(master, STANDARD_OUTPUT)))
+    if any(column.startswith("SO_") for column in so_columns):
+        so_all = (
+            master[so_columns]
+            .sort_values(["YEAR", "CSOED"], kind="stable")
+            .reset_index(drop=True)
+        )
+        sheets["Standard_Output"] = so_all
+
+    if "GOBLIN_SOIL_G1_SHARE" in master.columns:
+        soil_base = master.loc[master["YEAR"] == base_year].copy()
+        requested = list(dict.fromkeys(ids + SOIL_PROFILE))
+        soil_columns = [
+            column
+            for column in requested
+            if column in soil_base.columns
+            and not soil_base[column].isna().all()
+        ]
+        soil_frame = (
+            soil_base[soil_columns]
+            .sort_values(["CSOED"], kind="stable")
+            .reset_index(drop=True)
+        )
+        sheets["Soil_Profile"] = soil_frame
+
     for name, frame in sheets.items():
         _check_clean(frame, name)
 
@@ -189,6 +264,8 @@ def _format_sheet(
     )
     integer = workbook.add_format({"num_format": "#,##0"})
     decimal = workbook.add_format({"num_format": "#,##0.00"})
+    currency = workbook.add_format({"num_format": "€#,##0.00"})
+    percent = workbook.add_format({"num_format": "0.00%"})
     age = workbook.add_format({"num_format": "0.00"})
 
     for col, value in enumerate(frame.columns):
@@ -202,18 +279,32 @@ def _format_sheet(
         "ALL_GRASSLAND",
         "TOTAL_CEREALS",
         "OTHER_CROPS_HA",
+        "SO_OTHER_CROPS_IMPUTED_HA",
+        "SOIL_SOURCE_UAA_HA",
+        "GOBLIN_SOIL_G1_GRASSLAND_HA",
+        "GOBLIN_SOIL_G2_GRASSLAND_HA",
+        "GOBLIN_SOIL_G3_GRASSLAND_HA",
+        "FOREST_YC_SOURCE_UAA_HA",
+        "FOREST_YC_WEIGHTED_MEAN",
     }
     age_names = {"AVERAGE_AGE_OF_HOLDER", "MEDIAN_AGE_OF_HOLDER"}
 
     for col_idx, column in enumerate(frame.columns):
-        width = max(12, min(27, len(str(column)) + 2))
+        width = max(12, min(30, len(str(column)) + 2))
         fmt = None
-        if column in integer_names:
+        if column in integer_names or column in {
+            "SOIL_SOURCE_HOLDINGS",
+            "IFS_SOIL_N_CLASSES",
+        }:
             fmt = integer
+        elif column.endswith("_SHARE"):
+            fmt = percent
         elif column in decimal_names:
             fmt = decimal
         elif column in age_names:
             fmt = age
+        elif column.startswith("SO_") and column.endswith("_EUR"):
+            fmt = currency
 
         if column in {"ELECTORAL_DIVISIONS", "EDNAME", "COUNTYNAME"}:
             width = 24
@@ -227,7 +318,7 @@ def export_clean_workbook(
     output_path: str | Path,
     base_year: int = 2020,
 ) -> dict[str, pd.DataFrame]:
-    """Write the final clean four-sheet workbook and return its tables."""
+    """Write the final clean workbook and return its tables."""
 
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
