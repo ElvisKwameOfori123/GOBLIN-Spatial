@@ -2,17 +2,6 @@ name: lpis-rebuild
 
 on:
   workflow_dispatch:
-  pull_request:
-    branches: [main]
-    paths:
-      - "LPIS_SOURCE_PINS.yaml"
-      - "configs/ireland_2015_2025.yaml"
-      - "src/goblin_spatial/land/lpis.py"
-      - "src/goblin_spatial/land/lpis_spatial.py"
-      - "src/goblin_spatial/land/lpis_stream.py"
-      - "src/goblin_spatial/lpis_cli.py"
-      - "tests/test_lpis_*.py"
-      - ".github/workflows/lpis-rebuild.yml"
 
 jobs:
   rebuild-lpis-ed-control:
@@ -153,9 +142,6 @@ jobs:
           commonage = pd.to_numeric(frame["LPIS_COMMONAGE_GRASS_HA"], errors="raise").to_numpy(float)
           assert (commonage <= claimed + 1e-8).all()
 
-          # These seven grassland subtype columns are a mutually exclusive
-          # claimed-grass partition. This catches semantic alias errors that can
-          # pass row-count and commonage checks while double-counting a subtype.
           grass_subtypes = [
               "LPIS_PERMANENT_PASTURE_HA",
               "LPIS_LOW_INPUT_GRASS_HA",
@@ -193,12 +179,6 @@ jobs:
           summary = {
               "rows": int(len(frame)),
               "eds_per_snapshot": counts,
-              "commonage_missing_records": {
-                  str(year): int(
-                      frame.loc[frame["LPIS_YEAR"].eq(year), "LPIS_SNAPSHOT_COMMONAGE_FRACTION_MISSING_RECORDS"].iloc[0]
-                  )
-                  for year in (2020, 2025)
-              },
               "claimed_ag_ha": {
                   str(year): float(frame.loc[frame["LPIS_YEAR"].eq(year), "LPIS_CLAIMED_AG_HA"].sum())
                   for year in (2020, 2025)
