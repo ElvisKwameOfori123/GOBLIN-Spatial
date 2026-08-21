@@ -31,6 +31,20 @@ from .transition import (
 from .lpis import add_ed_lpis_context, read_ed_lpis_profile
 from .lpis_spatial import build_ed_lpis_profile
 from .opportunity_v2 import add_ed_land_opportunity_scores_v2
+from .sc2_context import (
+    PHYSICAL_SOIL_SHARE_COLUMNS,
+    add_physical_soil_context,
+    prepare_sc2_context,
+    read_physical_soil_context,
+)
+from .sc3_allocation import (
+    DEFAULT_STAGE_A_PRIORITY,
+    REWETTING_USE,
+    SC3_USES,
+    STAGE_A_USES,
+    allocate_sc3_targets,
+    summarise_sc3_allocation,
+)
 
 __all__ = [
     "AUTHORITATIVE_RELEASE_COLUMN",
@@ -57,4 +71,14 @@ __all__ = [
     "summarise_transition_land_opportunity_envelope",
     "summarise_transition_land_targets",
     "transition_release_column",
+    "PHYSICAL_SOIL_SHARE_COLUMNS",
+    "read_physical_soil_context",
+    "add_physical_soil_context",
+    "prepare_sc2_context",
+    "STAGE_A_USES",
+    "REWETTING_USE",
+    "SC3_USES",
+    "DEFAULT_STAGE_A_PRIORITY",
+    "allocate_sc3_targets",
+    "summarise_sc3_allocation",
 ]
