@@ -149,11 +149,11 @@ def load_soc2020_controls(path: str | Path | None = None) -> pd.DataFrame:
 
 
 def load_model_mapping(path: str | Path | None = None) -> pd.DataFrame:
-    """Load the canonical GOBLIN variable to fixed-2020 SO mapping.
+    """Load the canonical GOBLIN variable -> fixed-2020 SO mapping control.
 
     The repository authority is the packaged IFS-2020 workbook sheet
-    ``SO_Mapping``. CSV input remains accepted only when an explicit path is
-    supplied, which is useful for small tests or independently exported copies.
+    ``SO_Mapping``. CSV input remains accepted when an explicit path is supplied
+    for compact tests or independent audit copies.
     """
 
     source = Path(path) if path is not None else DEFAULT_MAPPING_PATH
@@ -165,32 +165,129 @@ def load_model_mapping(path: str | Path | None = None) -> pd.DataFrame:
         mapping = pd.read_csv(source)
 
     mapping.columns = [str(column).strip() for column in mapping.columns]
-    required = {"MODEL_VARIABLE", "CD_PRODUCT", "UNIT_BASIS"}
+    required = {
+        "MODEL_VARIABLE",
+        "DOMAIN",
+        "IFS_PRODUCT_CODE",
+        "SOC_EUR_381",
+        "SOC_EUR_382",
+        "APPLY_IN_SO",
+        "IMPUTED",
+        "SENSITIVITY_SOC_EUR_381",
+        "SENSITIVITY_SOC_EUR_382",
+    }
     missing = sorted(required - set(mapping.columns))
     if missing:
         raise ValueError(f"SO mapping missing columns: {missing}")
 
     mapping["MODEL_VARIABLE"] = mapping["MODEL_VARIABLE"].astype(str).str.strip()
-    mapping["CD_PRODUCT"] = mapping["CD_PRODUCT"].astype(str).str.strip()
-    mapping["UNIT_BASIS"] = mapping["UNIT_BASIS"].astype(str).str.strip().str.upper()
+    mapping["DOMAIN"] = mapping["DOMAIN"].astype(str).str.strip().str.upper()
+    mapping["IFS_PRODUCT_CODE"] = mapping["IFS_PRODUCT_CODE"].fillna("").astype(str).str.strip()
+    mapping["APPLY_IN_SO"] = mapping["APPLY_IN_SO"].astype(str).str.strip().str.upper()
+    mapping["IMPUTED"] = mapping["IMPUTED"].astype(str).str.strip().str.upper()
+
     if mapping["MODEL_VARIABLE"].duplicated().any():
-        raise AssertionError("SO mapping contains duplicate MODEL_VARIABLE rows")
+        duplicates = mapping.loc[
+            mapping["MODEL_VARIABLE"].duplicated(keep=False), "MODEL_VARIABLE"
+        ].tolist()
+        raise AssertionError(f"duplicate SO mapping variables: {duplicates}")
 
-    expected_variables = set(COHORT_PRODUCT_CODE) | {"TOTAL_CEREALS"}
-    actual_variables = set(mapping["MODEL_VARIABLE"])
-    missing_variables = sorted(expected_variables - actual_variables)
-    if missing_variables:
-        raise AssertionError(f"SO mapping missing model variables: {missing_variables}")
+    expected_cohorts = set(COHORT_PRODUCT_CODE)
+    livestock = mapping.loc[mapping["DOMAIN"].isin(["CATTLE", "SHEEP"])].copy()
+    actual_cohorts = set(livestock["MODEL_VARIABLE"])
+    if actual_cohorts != expected_cohorts:
+        missing_cohorts = sorted(expected_cohorts - actual_cohorts)
+        extra_cohorts = sorted(actual_cohorts - expected_cohorts)
+        raise AssertionError(
+            f"SO livestock mapping mismatch; missing={missing_cohorts}, extra={extra_cohorts}"
+        )
 
-    expected_codes = {
-        variable: code for variable, code in COHORT_PRODUCT_CODE.items()
-    }
-    for variable, code in expected_codes.items():
-        actual = mapping.loc[
-            mapping["MODEL_VARIABLE"].eq(variable), "CD_PRODUCT"
-        ].iloc[0]
-        if actual != code:
+    actual_codes = livestock.set_index("MODEL_VARIABLE")["IFS_PRODUCT_CODE"]
+    for cohort, code in COHORT_PRODUCT_CODE.items():
+        if actual_codes.loc[cohort] != code:
             raise AssertionError(
-                f"SO mapping code changed for {variable}: expected={code}, actual={actual}"
+                f"SO mapping product mismatch for {cohort}: "
+                f"{actual_codes.loc[cohort]!r} != {code!r}"
             )
+
+    if "A4100" in set(livestock["IFS_PRODUCT_CODE"]):
+        raise AssertionError("detailed GOBLIN sheep cohorts must not use parent code A4100")
+    if actual_codes.loc["Lowland ewes"] != "A4110K":
+        raise AssertionError("Lowland ewes must map to A4110K")
+    if actual_codes.loc["Upland ewes"] != "A4110K":
+        raise AssertionError("Upland ewes must map to A4110K")
+
+    required_land = {"TOTAL_CEREALS", "OTHER_CROPS_HA"}
+    land_apply = set(
+        mapping.loc[
+            (mapping["DOMAIN"] == "LAND") & (mapping["APPLY_IN_SO"] == "YES"),
+            "MODEL_VARIABLE",
+        ]
+    )
+    if not required_land.issubset(land_apply):
+        raise AssertionError(
+            f"SO mapping missing valued land variables: {sorted(required_land - land_apply)}"
+        )
+
+    valued = mapping.loc[mapping["APPLY_IN_SO"] == "YES"].copy()
+    for column in ("SOC_EUR_381", "SOC_EUR_382"):
+        valued[column] = pd.to_numeric(valued[column], errors="raise")
+        if (valued[column] < 0).any():
+            raise AssertionError(f"negative coefficients in {column}")
+
+    for column in ("SENSITIVITY_SOC_EUR_381", "SENSITIVITY_SOC_EUR_382"):
+        mapping[column] = pd.to_numeric(mapping[column], errors="coerce")
+
     return mapping.reset_index(drop=True)
+
+
+def model_coefficient_lookup(
+    mapping: pd.DataFrame | None = None,
+    *,
+    sensitivity: bool = False,
+) -> dict[tuple[str, str], float]:
+    """Return ``(MODEL_VARIABLE, region) -> EUR/head-or-ha``."""
+
+    table = load_model_mapping() if mapping is None else mapping
+    column_by_region = {
+        "381": "SENSITIVITY_SOC_EUR_381" if sensitivity else "SOC_EUR_381",
+        "382": "SENSITIVITY_SOC_EUR_382" if sensitivity else "SOC_EUR_382",
+    }
+    lookup: dict[tuple[str, str], float] = {}
+    for row in table.loc[table["APPLY_IN_SO"] == "YES"].itertuples(index=False):
+        for region, column in column_by_region.items():
+            raw = getattr(row, column)
+            if pd.isna(raw):
+                raw = getattr(row, f"SOC_EUR_{region}")
+            lookup[(str(row.MODEL_VARIABLE), region)] = float(raw)
+    return lookup
+
+
+def coefficient_lookup(
+    controls: pd.DataFrame | None = None,
+) -> dict[tuple[str, str], float]:
+    """Return source ``(product, region) -> SOC_EUR`` for audit/reproduction."""
+
+    table = load_soc2020_controls() if controls is None else controls
+    return {
+        (str(row.CD_PRODUCT), str(row.FADN_REGION)): float(row.SOC_EUR)
+        for row in table.itertuples(index=False)
+    }
+
+
+def cereal_composite_coefficients(
+    controls: pd.DataFrame | None = None,
+) -> dict[str, float]:
+    """Reproduce the fixed 2020 aggregate-cereal SO coefficients by region."""
+
+    lookup = coefficient_lookup(controls)
+    out: dict[str, float] = {}
+    for region, areas in CEREAL_AREAS_2020_HA.items():
+        total_area = float(sum(areas.values()))
+        if total_area <= 0:
+            raise AssertionError(f"zero cereal area for SO region {region}")
+        total_so = 0.0
+        for crop, area in areas.items():
+            total_so += float(area) * lookup[(CEREAL_PRODUCT_CODES[crop], region)]
+        out[region] = total_so / total_area
+    return out
