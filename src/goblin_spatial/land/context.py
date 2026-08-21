@@ -109,12 +109,27 @@ LPIS_GRASS_PARTITION_COLUMNS = (
 
 
 def _canonical_csoed(value: object) -> str:
+    """Normalize simple and compound CSO ED identifiers for exact joins.
+
+    Pandas naturally reads simple numeric ED codes without leading zeroes, while
+    compound identifiers remain strings and can retain zero-padded components
+    (for example ``08045/08046``). Numeric components are therefore normalized
+    consistently so scientifically identical ED identifiers join one-to-one.
+    """
+
     text = str(value).strip()
-    if text.endswith(".0") and text[:-2].isdigit():
-        text = text[:-2]
-    if "/" not in text:
-        return text
-    return "/".join(part.strip() for part in text.split("/") if part.strip())
+    parts = text.split("/")
+    normalized: list[str] = []
+    for part in parts:
+        token = part.strip()
+        if not token:
+            continue
+        if token.endswith(".0") and token[:-2].isdigit():
+            token = token[:-2]
+        if token.isdigit():
+            token = str(int(token))
+        normalized.append(token)
+    return "/".join(normalized)
 
 
 def _sha256_file(path: Path) -> str:
