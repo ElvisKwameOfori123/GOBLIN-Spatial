@@ -1,13 +1,17 @@
-"""Principal sourced-endpoint transition runner."""
+"""Principal SC1 sourced-endpoint transition runner.
+
+This is the supported livestock scenario engine. National GOBLIN controls set
+the endpoint and gross released land; GOBLIN-Spatial resolves their geography
+without introducing a second scenario generator or pathway-specific release
+method.
+"""
 
 from __future__ import annotations
 
 from collections.abc import Mapping
+
 import pandas as pd
 
-from goblin_spatial.pressure.category_release import (
-    allocate_category_resolved_goblin_land_release,
-)
 from goblin_spatial.pressure.national_release import allocate_national_goblin_land_release
 from goblin_spatial.scenario.definition import AllocationRule
 from goblin_spatial.scenario.endpoint_allocation import allocate_adult_endpoint
@@ -27,12 +31,7 @@ def run_principal_goblin_endpoint(
     controls: GoblinPathwayControls,
     *,
     allocation_rule: AllocationRule = AllocationRule.PRORATA,
-    random_seed: int = 42,
-    score_column: str | None = None,
-    productivity_score_column: str | None = None,
-    vulnerability_score_column: str | None = None,
     protection_strength: float = PRINCIPAL_PROTECTION_STRENGTH,
-    hybrid_weights: tuple[float, float, float, float] = (0.40, 0.25, 0.20, 0.15),
     expected_eds: int | None = None,
     include_standard_output: bool = True,
     mapping_path: str | None = None,
@@ -41,28 +40,19 @@ def run_principal_goblin_endpoint(
     cohort_reference_year: int = 2020,
     pasture_dm_t_per_head_by_year: Mapping[int, Mapping[str, float]] | None = None,
 ) -> pd.DataFrame:
-    """Run one absolute GOBLIN endpoint while preserving ED cohort signatures.
+    """Run one absolute national endpoint while preserving ED cohort signatures.
 
-    The input panel must already contain the selected Stage-08 fixed-2020
-    Standard Output fields used by the principal protection scores. When a
-    national released-land control is present it must also carry the precomputed
-    08B G1/G2/G3 agricultural-capability context before the release spatialiser
-    is entered.
+    Adult dairy and suckler targets are allocated first. The complete cattle
+    state is then reconstructed from the ED dependency/signature structure and
+    reconciled to exact national 21-cohort or total-cattle controls when those
+    are supplied. Sheep are carried unchanged unless a future explicit sheep
+    control is introduced.
 
-    National livestock biology and spatial livestock geography are deliberately
-    separated. Exact 21-cohort controls are used directly when supplied. If
-    only adult endpoints are supplied, an optional national GOBLIN/COHORTS
-    reference profile converts those adults into national 21-cohort margins.
-    The ED baseline then determines where those margins are represented through
-    local, county-receiver and national-orphan relationships.
-
-    When the pathway supplies category-resolved dairy/beef/sheep land-release
-    controls, they take precedence over the aggregate release spatialiser. Both
-    routes retain the authoritative national gross land total.
-
-    SC1 reporting metrics are attached only after the physical cattle state,
-    Standard Output valuation and released-land spatialisation are complete.
-    They are diagnostics and never feed back into allocation.
+    National land release is an authoritative pathway control. When supplied,
+    it is spatialised through the solved livestock state, pasture-DM pressure
+    and frozen 08B capacity. All pathways use the same spatialisation method.
+    Pasture-DM independently calculated spared hectares remain diagnostics and
+    do not replace the national land control.
     """
 
     milestone = controls.milestone(controls.target_year)
@@ -94,12 +84,7 @@ def run_principal_goblin_endpoint(
         panel,
         controls,
         allocation_rule=allocation_rule,
-        random_seed=random_seed,
-        score_column=score_column,
-        productivity_score_column=productivity_score_column,
-        vulnerability_score_column=vulnerability_score_column,
         protection_strength=protection_strength,
-        hybrid_weights=hybrid_weights,
         expected_eds=expected_eds,
     )
     livestock = build_endpoint_cattle_state(
@@ -121,26 +106,12 @@ def run_principal_goblin_endpoint(
             coefficient_path=coefficient_path,
         )
 
-    system_releases = controls.livestock_land_release_by_system_by_year()
     releases = controls.livestock_land_release_by_year()
-    if system_releases:
+    if releases:
         if pasture_dm_t_per_head_by_year is None:
             raise ValueError(
-                "category-resolved GOBLIN land release requires pasture-DM profiles"
+                "authoritative GOBLIN land release requires pasture-DM profiles"
             )
-        if set(system_releases) != {int(controls.target_year)}:
-            raise ValueError(
-                "principal category-resolved endpoint requires a system release "
-                "for the exact target year only"
-            )
-        livestock = allocate_category_resolved_goblin_land_release(
-            livestock,
-            system_releases[int(controls.target_year)],
-            pasture_dm_t_per_head_by_year,
-        )
-    elif releases:
-        if pasture_dm_t_per_head_by_year is None:
-            raise ValueError("authoritative GOBLIN land release requires pasture-DM profiles")
         livestock = allocate_national_goblin_land_release(
             livestock,
             releases,
