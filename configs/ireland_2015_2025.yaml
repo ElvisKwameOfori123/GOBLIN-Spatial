@@ -27,17 +27,12 @@ files:
     - data/raw/cattle/CSO_county_WIDE_2015_2025.csv.xz
 
   # SHEEP: stages 03A, 03B, 05A, 05B, 05D
-  # The combined workbook contains the county -> region crosswalk in
-  # County_WIDE and the raw AAA09 detailed-region controls in Region_WIDE.
   cso_sheep_workbook:
     - data/inputs/baseline/03_CSO_AAA09_Sheep_County_Region_2015_2025.xlsx
     - data/raw/sheep/CSO_Sheep_County_and_Region_WIDE_2015_2025.xlsx
   sheep_breed_anchors:
     - data/inputs/baseline/05A_DAFM_Sheep_Breed_Anchors_2016_2020_2022_2025.csv
     - data/raw/sheep/DAFM_Sheep_Breed_Anchors_2016_2020_2022_2025.zip
-
-  # DAFM county sheep totals are retained for independent/hold-out validation.
-  # They do not replace the CSO/AAA09 production-population controls.
   dafm_sheep_county_validation:
     - data/inputs/baseline/03_0_DAFM_Sheep_County_Totals_2015_2020_2022_2025.csv
     - data/raw/sheep/05A0_DAFM_County_Sheep_Totals_2015_2020_2022_2025.csv
@@ -59,21 +54,20 @@ files:
   standard_output_mapping:
     - data/inputs/baseline/08_IFS2020_Standard_Output_Mapping.xlsx
     - data/controls/standard_output/GOBLIN_SO_mapping.csv
-  # Optional source-audit extract retained during migration. Runtime valuation
-  # is controlled by standard_output_mapping above.
   standard_output_coefficients: data/controls/standard_output/IFS_SOC2020_IE_model_controls.csv
 
-  # 08B/08C are downstream scenario-preparation soil context, not historical
-  # baseline reconstruction stages.
+  # 08B/08C are prepared once before scenario runs. Heavy sources are retained
+  # separately from the compact ED controls consumed by SC1/SC2.
   agricultural_soil_source:
     - data/inputs/spatial/08B_NFS_Agricultural_Soil_Capability.csv
     - data/external/soil/cathal.csv
   agricultural_soil_profile: data/controls/soil/ED_GOBLIN_soil_profile.csv.xz
   physical_soil_package: data/inputs/spatial/08C_IFS_Mapped_Physical_Soil_Package.zip
+  physical_soil_profile: data/controls/soil/ED_IFS_mapped_physical_soil_profile.csv.xz
 
-  # EDITABLE NATIONAL SCENARIO CONTROLS. The scenario row is independent of the
-  # selected ED baseline. A 2020 or 2025 run derives gross released land from
-  # that year's actual ED ALL_GRASSLAND total minus TARGET_LIVESTOCK_LAND_HA.
+  # EDITABLE NATIONAL SCENARIO CONTROLS. A scenario row is independent of the
+  # selected ED baseline. A 2020 or 2025 run derives gross release from that
+  # year's actual ED ALL_GRASSLAND total minus TARGET_LIVESTOCK_LAND_HA.
   scenario_controls: data/controls/scenario/GOBLIN_Scenario_Controls.csv
 
   # Legacy/source-specific controls retained for provenance and regression only.
@@ -84,10 +78,11 @@ files:
   styles_split_gas_pathway_controls: configs/styles_split_gas_pathway_controls.csv
   rurality: data/inputs/scenario/SC1_ED_Rural_Mixed_Urban_2022.xlsx
 
-  # FROZEN GOBLIN PASTURE FEED CONTROL retained for later scenario diagnostics.
+  # FROZEN GOBLIN PASTURE FEED CONTROL retained for scenario land-release accounting.
   pasture_dm_controls: data/controls/pasture/GOBLIN_pasture_dm_2020_fixed.csv
 
-  # SCENARIO SPATIAL OPPORTUNITY INPUTS
+  # SCENARIO SPATIAL OPPORTUNITY INPUTS. Heavy LPIS parcels are one-time build
+  # sources; normal scenario runs consume only the compact ED profile.
   saps_ed_geography: data/external/spatial/ed/Electoral_Divisions_generalised_SAPS_Shp_with_proper_names.shp
   lpis_2020_parcels: data/external/spatial/lpis/LPIS_2020_GOBLIN_reduced_v2.parquet
   lpis_2025_parcels: data/external/spatial/lpis/LPIS_2025_GOBLIN_reduced.parquet
