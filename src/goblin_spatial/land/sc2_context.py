@@ -3,10 +3,9 @@
 SC2 never recomputes livestock or the land released in SC1. Principal SC1 has
 already used 08B agricultural capability as a capacity constraint and supplies
 the soil-resolved release columns ``GOBLIN_RELEASED_G1_HA`` to
-``GOBLIN_RELEASED_G3_HA``. SC2 carries those hectares forward exactly, attaches
-LPIS 2020 and independent 08C mapped physical-soil evidence from the single
-repository-contained ``ED_Land_Context_2020`` control, then applies the mature
-SC2 v3.1 opportunity and physical-eligibility science.
+``GOBLIN_RELEASED_G3_HA``. SC2 carries those hectares and the attached 08B
+capability fields forward exactly, then attaches only the LPIS and independent
+08C parts of the repository-contained ``ED_Land_Context_2020`` control.
 
 08C remains robustness/physical context. It is never blended with 08B and never
 changes the frozen SC1 release or the principal Opportunity-v2 score equations.
@@ -24,7 +23,7 @@ import pandas as pd
 from goblin_spatial.land.context import LAND_CONTEXT_YEAR, read_land_context_table
 from goblin_spatial.land.lpis import add_ed_lpis_context
 from goblin_spatial.land.sc2_opportunity import SC2_VERSION, build_sc2_opportunity
-from goblin_spatial.soil import add_principal_08c_context
+from goblin_spatial.soil import PHYSICAL_AREA_COLUMNS, add_principal_08c_context
 
 
 SC1_SOIL_RELEASE_COLUMNS = tuple(f"GOBLIN_RELEASED_G{i}_HA" for i in (1, 2, 3))
@@ -87,6 +86,9 @@ def prepare_sc2_context(
         "ALL_GRASSLAND",
         release_column,
         *SC1_SOIL_RELEASE_COLUMNS,
+        "GOBLIN_SOIL_G1_SHARE",
+        "GOBLIN_SOIL_G2_SHARE",
+        "GOBLIN_SOIL_G3_SHARE",
     }
     missing = sorted(required - set(sc1_ed.columns))
     if missing:
@@ -133,9 +135,16 @@ def prepare_sc2_context(
         out["SC2_08B_PEAT_CUTOVER_RELEASE_CONTEXT_HA_PROXY"] = release_before * peat_share
         out["SC2_08B_PEAT_CUTOVER_CONTEXT_AVAILABLE"] = valid
 
+    # The land-context table contains all three evidence layers. Attach only the
+    # LPIS subset here so already-frozen 08B columns from SC1 cannot be duplicated
+    # or silently suffixed by pandas during the merge.
+    lpis_columns = [
+        column for column in context.columns if column == "CSOED" or column.startswith("LPIS_")
+    ]
+    lpis_context = context[lpis_columns].copy()
     out = add_ed_lpis_context(
         out,
-        context,
+        lpis_context,
         baseline_year=LAND_CONTEXT_YEAR,
     )
     lpis_year = pd.to_numeric(out["LPIS_PROFILE_YEAR"], errors="raise").astype(int)
@@ -151,7 +160,11 @@ def prepare_sc2_context(
         out["SC2_LPIS_PEAT_GRASS_RELEASE_CONTEXT_HA_PROXY"] = release_before * peat_grass
         out["SC2_LPIS_PEAT_GRASS_CONTEXT_AVAILABLE"] = valid
 
-    out = add_principal_08c_context(out, context)
+    # Attach only the independent 08C physical areas. The 08C helper derives its
+    # own physical and mapped-soil-group shares from these areas and cannot see
+    # or overwrite the 08B agricultural-capability fields carried from SC1.
+    physical_context = context[["CSOED", *PHYSICAL_AREA_COLUMNS]].copy()
+    out = add_principal_08c_context(out, physical_context)
     out["SC2_PHYSICAL_SOIL_CONTEXT_AVAILABLE"] = True
     out["SC2_LAND_CONTEXT_YEAR"] = LAND_CONTEXT_YEAR
     out["SC2_LAND_CONTEXT_ROLE"] = "FROZEN_REPOSITORY_CONTROL"
