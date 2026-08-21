@@ -1,9 +1,14 @@
 """Principal SC1 soil-constrained spatialisation of national livestock-land release.
 
-The national released hectares are an external/pathway control. Geography is
+The national released hectares are an external pathway control. Geography is
 resolved from the solved 31-cohort livestock state, fixed pasture-DM controls and
 the precomputed 08B agricultural-capability cells. The independent 08C mapped
 physical-soil layer is never used to move SC1 release.
+
+All principal pathways use the same system-release method. Dairy, beef and sheep
+shares are derived from the actual baseline/scenario pasture-DM states and then
+rescaled to the authoritative runtime gross release. No pathway receives a
+special hard-coded system-land split inside this module.
 """
 from __future__ import annotations
 
@@ -21,16 +26,6 @@ GOBLIN_NFS_SYSTEM_SOIL_SHARES = {
     "DAIRY": {1: 0.554, 2: 0.393, 3: 0.053},
     "BEEF": {1: 0.420, 2: 0.503, 3: 0.077},
     "SHEEP": {1: 0.335, 2: 0.498, 3: 0.167},
-}
-SOURCE_2020_SYSTEM_LAND_HA = {
-    "SI_SG": {
-        "BASE": {"DAIRY": 999_000.0, "BEEF": 2_203_000.0, "SHEEP": 834_000.0},
-        "TARGET": {"DAIRY": 946_000.0, "BEEF": 669_000.0, "SHEEP": 828_000.0},
-    },
-    "BE_SG": {
-        "BASE": {"DAIRY": 999_000.0, "BEEF": 2_203_000.0, "SHEEP": 834_000.0},
-        "TARGET": {"DAIRY": 910_000.0, "BEEF": 711_000.0, "SHEEP": 828_000.0},
-    },
 }
 
 
@@ -169,33 +164,13 @@ def _ras_allocate(row_totals: np.ndarray, column_targets: np.ndarray, prior: np.
 
 def _system_land_controls(
     *,
-    scenario_id: str,
-    baseline_year: int,
     baseline_grassland_ha: float,
     target_livestock_land_ha: float,
     total_release_ha: float,
     base_system_dm: dict[str, np.ndarray],
     scenario_system_dm: dict[str, np.ndarray],
 ) -> dict:
-    """Resolve system land controls without changing the runtime gross release."""
-    source = SOURCE_2020_SYSTEM_LAND_HA.get(scenario_id)
-    if source is not None and baseline_year == 2020:
-        source_base_total = float(sum(source["BASE"].values()))
-        source_target_total = float(sum(source["TARGET"].values()))
-        if abs(baseline_grassland_ha - source_base_total) <= 1.0 and abs(target_livestock_land_ha - source_target_total) <= 1.0:
-            base = dict(source["BASE"])
-            target = dict(source["TARGET"])
-            raw_release = {s: max(0.0, base[s] - target[s]) for s in SYSTEMS}
-            raw_total = float(sum(raw_release.values()))
-            scale = total_release_ha / raw_total if raw_total > 0 else 0.0
-            release = {s: raw_release[s] * scale for s in SYSTEMS}
-            return {
-                "BASE": base,
-                "TARGET": target,
-                "RELEASE": release,
-                "AUTHORITY": "STYLES_TABLE_S3_SYSTEM_STOCKS_RUNTIME_TOTAL_CLOSED",
-                "SYSTEM_SPLIT_SOURCE": "TABLE_S3_RELEASE_SHARE",
-            }
+    """Derive one symmetric dairy/beef/sheep split and preserve gross release."""
 
     base_dm = {s: float(np.sum(base_system_dm[s])) for s in SYSTEMS}
     scenario_dm = {s: float(np.sum(scenario_system_dm[s])) for s in SYSTEMS}
@@ -203,19 +178,24 @@ def _system_land_controls(
     scenario_sum = float(sum(scenario_dm.values()))
     if base_sum <= 0 or scenario_sum <= 0:
         raise AssertionError("cannot derive system land controls from zero pasture DM")
+
     base = {s: baseline_grassland_ha * base_dm[s] / base_sum for s in SYSTEMS}
     target = {s: target_livestock_land_ha * scenario_dm[s] / scenario_sum for s in SYSTEMS}
     positive = {s: max(0.0, base[s] - target[s]) for s in SYSTEMS}
     psum = float(sum(positive.values()))
     if total_release_ha > 0 and psum <= 0:
         raise AssertionError("positive runtime land release has no positive system release")
-    release = {s: total_release_ha * positive[s] / psum for s in SYSTEMS} if psum > 0 else {s: 0.0 for s in SYSTEMS}
+    release = (
+        {s: total_release_ha * positive[s] / psum for s in SYSTEMS}
+        if psum > 0
+        else {s: 0.0 for s in SYSTEMS}
+    )
     return {
         "BASE": base,
         "TARGET": target,
         "RELEASE": release,
         "AUTHORITY": "RUNTIME_GROSS_RELEASE_FROM_SELECTED_BASELINE",
-        "SYSTEM_SPLIT_SOURCE": "DERIVED_ACTUAL_DM_WEIGHT_ROUTE_RESCALED",
+        "SYSTEM_SPLIT_SOURCE": "DERIVED_ACTUAL_DM_WEIGHT_ROUTE_RESCALED_ALL_PATHWAYS",
     }
 
 
@@ -287,7 +267,6 @@ def allocate_national_goblin_land_release(
     if len(base_years) != 1 or len(scenario_ids) != 1:
         raise ValueError("principal SC1 release requires one baseline year and scenario")
     baseline_year = int(base_years[0])
-    scenario_id = str(scenario_ids[0])
 
     rows = []
     for year in years:
@@ -306,8 +285,6 @@ def allocate_national_goblin_land_release(
         base_system_dm = _system_dm(block, "BASE", base_profile)
         scenario_system_dm = _system_dm(block, "SCENARIO", scenario_profile)
         controls = _system_land_controls(
-            scenario_id=scenario_id,
-            baseline_year=baseline_year,
             baseline_grassland_ha=baseline_grass,
             target_livestock_land_ha=target_land,
             total_release_ha=target_release,
