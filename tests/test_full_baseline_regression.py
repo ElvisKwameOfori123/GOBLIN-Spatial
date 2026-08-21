@@ -12,6 +12,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from goblin_spatial.baseline.signatures import build_signatures
 from goblin_spatial.cattle.cohorts import FINAL_21_COHORTS
 from goblin_spatial.config import load_config
 from goblin_spatial.pipeline import run_baseline
@@ -19,18 +20,38 @@ from goblin_spatial.sheep.cohorts import GOBLIN_SHEEP_10
 
 
 CONFIG = Path("configs/ireland_2015_2025.yaml")
+EXPECTED_YEARS = tuple(range(2015, 2026))
+SCENARIO_START_YEARS = (2020, 2025)
 
 
 def test_full_historical_baseline_through_stage09():
     cfg = load_config(CONFIG)
     baseline = run_baseline(cfg)
 
+    # The baseline is an 11-year ED panel, not only a 2020 anchor table.
     assert len(baseline) == 31_427
     assert baseline["CSOED"].nunique() == 2_857
-    assert set(pd.to_numeric(baseline["YEAR"], errors="raise").astype(int)) == set(
-        range(2015, 2026)
-    )
+
+    year_values = pd.to_numeric(baseline["YEAR"], errors="raise").astype(int)
+    assert set(year_values) == set(EXPECTED_YEARS)
     assert not baseline[["YEAR", "CSOED"]].duplicated().any()
+
+    panel = baseline.assign(_YEAR_CHECK=year_values)
+    rows_by_year = panel.groupby("_YEAR_CHECK", sort=True).size()
+    eds_by_year = panel.groupby("_YEAR_CHECK", sort=True)["CSOED"].nunique()
+    assert rows_by_year.to_dict() == {year: 2_857 for year in EXPECTED_YEARS}
+    assert eds_by_year.to_dict() == {year: 2_857 for year in EXPECTED_YEARS}
+
+    # Every reconstructed year must contain the same agricultural ED universe.
+    anchor_ed_universe = set(
+        baseline.loc[year_values == 2020, "CSOED"].astype(str).tolist()
+    )
+    assert len(anchor_ed_universe) == 2_857
+    for year in EXPECTED_YEARS:
+        year_ed_universe = set(
+            baseline.loc[year_values == year, "CSOED"].astype(str).tolist()
+        )
+        assert year_ed_universe == anchor_ed_universe
 
     cattle = baseline[FINAL_21_COHORTS].apply(pd.to_numeric, errors="raise")
     sheep = baseline[GOBLIN_SHEEP_10].apply(pd.to_numeric, errors="raise")
@@ -83,7 +104,74 @@ def test_full_historical_baseline_through_stage09():
         assert values.notna().all()
         assert (values >= -1e-9).all()
 
-    # Stage 09 is a separate long-form baseline output.
+    # Both supported scenario starting years must be complete historical states,
+    # not partial slices. Scenario code may later choose either snapshot without
+    # changing the historical reconstruction.
+    required_start_fields = {
+        "DAIRY_COW",
+        "OTHER_COW",
+        "TOTAL_CATTLE",
+        "TOTAL_SHEEP",
+        "AREA_FARMED",
+        "ALL_GRASSLAND",
+        "TOTAL_CEREALS",
+        "OTHER_CROPS_HA",
+        *required_structure,
+        *required_so,
+        *FINAL_21_COHORTS,
+        *GOBLIN_SHEEP_10,
+    }
+    assert required_start_fields.issubset(baseline.columns)
+
+    for start_year in SCENARIO_START_YEARS:
+        snapshot = baseline.loc[year_values == start_year].copy()
+        assert len(snapshot) == 2_857
+        assert snapshot["CSOED"].nunique() == 2_857
+        assert not snapshot["CSOED"].duplicated().any()
+        assert set(snapshot["CSOED"].astype(str)) == anchor_ed_universe
+
+        numeric = snapshot[sorted(required_start_fields)].apply(
+            pd.to_numeric, errors="raise"
+        )
+        assert numeric.notna().all().all()
+        assert np.isfinite(numeric.to_numpy(dtype=float)).all()
+
+        start_cattle = snapshot[FINAL_21_COHORTS].apply(
+            pd.to_numeric, errors="raise"
+        )
+        start_sheep = snapshot[GOBLIN_SHEEP_10].apply(
+            pd.to_numeric, errors="raise"
+        )
+        assert np.array_equal(
+            np.rint(start_cattle.sum(axis=1)).astype(np.int64),
+            np.rint(pd.to_numeric(snapshot["TOTAL_CATTLE"], errors="raise")).astype(
+                np.int64
+            ),
+        )
+        assert np.array_equal(
+            np.rint(start_sheep.sum(axis=1)).astype(np.int64),
+            np.rint(pd.to_numeric(snapshot["TOTAL_SHEEP"], errors="raise")).astype(
+                np.int64
+            ),
+        )
+
+        # Code 09 is baseline-owned and year-selectable. This proves the same
+        # dependency-signature machinery can be frozen from either supported
+        # scenario starting state, 2020 or 2025.
+        start_signatures = build_signatures(baseline, cfg, year=start_year)
+        assert len(start_signatures) == 2_857 * 19
+        assert start_signatures["CSOED"].nunique() == 2_857
+        assert start_signatures["COHORT"].nunique() == 19
+        assert set(pd.to_numeric(start_signatures["YEAR"], errors="raise").astype(int)) == {
+            start_year
+        }
+        assert not start_signatures[["CSOED", "COHORT"]].duplicated().any()
+        assert set(start_signatures["COHORT_SPATIAL_ROLE"]).issubset(
+            {"LOCAL_ED", "COUNTY_RECEIVER", "NATIONAL_ORPHAN", "NONE"}
+        )
+
+    # The configured Stage 09 output remains a separate long-form baseline
+    # deliverable for the default baseline year.
     signature_value = cfg.raw.get("outputs", {}).get(
         "ed_signatures", "data/processed/09_GOBLIN_Spatial_ED_Cohort_Signatures_2020.csv"
     )
