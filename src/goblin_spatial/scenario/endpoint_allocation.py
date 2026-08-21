@@ -1,4 +1,10 @@
-"""Allocate an absolute adult-cattle endpoint across the existing ED footprint."""
+"""Allocate exact dairy and suckler endpoints across existing ED footprints.
+
+Dairy and suckler categories are treated separately because a pathway can
+expand one category while contracting the other. Protection policies
+redistribute only a fixed national contraction. Expansion remains PRORATA and
+no new adult-category footprint is seeded.
+"""
 
 from __future__ import annotations
 
@@ -6,10 +12,15 @@ import numpy as np
 import pandas as pd
 
 from goblin_spatial.dynamics.baseline import select_baseline_year
-from goblin_spatial.scenario.allocation import _allocate_reduction_total, _rule_cut_weights
-from goblin_spatial.scenario.definition import AllocationRule, ScenarioDefinition
-from goblin_spatial.scenario.endpoint_composition import reconcile_endpoint_composition
+from goblin_spatial.scenario.definition import AllocationRule
 from goblin_spatial.scenario.goblin_controls import GoblinPathwayControls
+from goblin_spatial.scenario.principal_allocation import (
+    PRINCIPAL_ALLOCATION_POLICIES,
+    PRINCIPAL_PROTECTION_STRENGTH,
+    allocate_category_endpoint,
+    build_principal_baseline_scores,
+    policy_score_array,
+)
 
 
 def _integer(frame: pd.DataFrame, column: str) -> np.ndarray:
@@ -20,68 +31,98 @@ def _integer(frame: pd.DataFrame, column: str) -> np.ndarray:
     return rounded
 
 
+def _adult_columns(baseline: pd.DataFrame) -> tuple[str, str]:
+    dairy = "dairy_cows" if "dairy_cows" in baseline.columns else "DAIRY_COW"
+    suckler = "suckler_cows" if "suckler_cows" in baseline.columns else "OTHER_COW"
+    for column in (dairy, suckler, "TOTAL_SHEEP"):
+        if column not in baseline.columns:
+            raise ValueError(f"adult endpoint allocation requires {column}")
+    return dairy, suckler
+
+
 def allocate_adult_endpoint(
     panel: pd.DataFrame,
     controls: GoblinPathwayControls,
     *,
     allocation_rule: AllocationRule = AllocationRule.PRORATA,
-    random_seed: int = 42,
-    score_column: str | None = None,
-    productivity_score_column: str | None = None,
-    vulnerability_score_column: str | None = None,
-    protection_strength: float = 0.8,
-    hybrid_weights: tuple[float, float, float, float] = (0.40, 0.25, 0.20, 0.15),
+    protection_strength: float = PRINCIPAL_PROTECTION_STRENGTH,
     expected_eds: int | None = None,
 ) -> pd.DataFrame:
-    """Allocate total adult contraction, then impose exact pathway composition."""
+    """Allocate exact national adult-category endpoints using principal rules."""
 
-    baseline = select_baseline_year(panel, controls.baseline_year, expected_eds=expected_eds)
-    for column in ("DAIRY_COW", "OTHER_COW", "TOTAL_SHEEP"):
-        if column not in baseline.columns:
-            raise ValueError(f"adult endpoint allocation requires {column}")
+    policy = allocation_rule.value
+    if policy not in PRINCIPAL_ALLOCATION_POLICIES:
+        raise ValueError(
+            f"{policy} is not a validated principal SC1 policy; "
+            f"choose one of {PRINCIPAL_ALLOCATION_POLICIES}"
+        )
 
-    base_dairy = _integer(baseline, "DAIRY_COW")
-    base_suckler = _integer(baseline, "OTHER_COW")
+    baseline = select_baseline_year(
+        panel,
+        controls.baseline_year,
+        expected_eds=expected_eds,
+    )
+    dairy_col, suckler_col = _adult_columns(baseline)
+
+    # Protection scores are frozen from the selected baseline before scenario
+    # allocation. Fixed-2020 Standard Output contributes to the economic score.
+    scored = build_principal_baseline_scores(baseline)
+    base_dairy = _integer(scored, dairy_col)
+    base_suckler = _integer(scored, suckler_col)
     base_adults = base_dairy + base_suckler
+
+    if "DAIRY_COW" in scored.columns:
+        if not np.array_equal(_integer(scored, "DAIRY_COW"), base_dairy):
+            raise AssertionError("DAIRY_COW disagrees with dairy_cows in selected baseline")
+    if "OTHER_COW" in scored.columns:
+        if not np.array_equal(_integer(scored, "OTHER_COW"), base_suckler):
+            raise AssertionError("OTHER_COW disagrees with suckler_cows in selected baseline")
+
     milestone = controls.milestone(controls.target_year)
     target_dairy = int(milestone.dairy_cows)
     target_suckler = int(milestone.suckler_cows)
-    target_adults = target_dairy + target_suckler
-    baseline_adults = int(base_adults.sum())
-    if target_adults > baseline_adults:
-        raise ValueError("principal pathway requires an overall adult-cow contraction")
+    score = policy_score_array(scored, policy)
 
-    rule = ScenarioDefinition(
-        name=controls.scenario_id,
-        baseline_year=controls.baseline_year,
-        target_year=controls.target_year,
-        allocation_rule=allocation_rule,
-        random_seed=int(random_seed),
-        score_column=score_column,
-        productivity_score_column=productivity_score_column,
-        vulnerability_score_column=vulnerability_score_column,
-        protection_strength=float(protection_strength),
-        hybrid_weights=hybrid_weights,
-    )
-    cut_weights, protection_score = _rule_cut_weights(baseline, base_adults, rule)
-    preferred_retained, preferred_reduction = _allocate_reduction_total(
-        base_adults, baseline_adults - target_adults, cut_weights
-    )
-    scenario_dairy, scenario_suckler = reconcile_endpoint_composition(
+    scenario_dairy, _, dairy_burden, dairy_mode = allocate_category_endpoint(
         base_dairy,
+        target_dairy,
+        score,
+        policy,
+        "DAIRY",
+        protection_strength=float(protection_strength),
+    )
+    scenario_suckler, _, suckler_burden, suckler_mode = allocate_category_endpoint(
         base_suckler,
-        preferred_retained,
-        target_dairy=target_dairy,
-        target_suckler=target_suckler,
+        target_suckler,
+        score,
+        policy,
+        "SUCKLER",
+        protection_strength=float(protection_strength),
     )
     scenario_adults = scenario_dairy + scenario_suckler
-    adult_reductions = base_adults - scenario_adults
 
-    out = baseline.copy()
+    if int(scenario_dairy.sum()) != target_dairy:
+        raise AssertionError("national dairy endpoint failed exact closure")
+    if int(scenario_suckler.sum()) != target_suckler:
+        raise AssertionError("national suckler endpoint failed exact closure")
+    if ((base_dairy == 0) & (scenario_dairy > 0)).any():
+        raise AssertionError("principal allocation seeded a new dairy footprint")
+    if ((base_suckler == 0) & (scenario_suckler > 0)).any():
+        raise AssertionError("principal allocation seeded a new suckler footprint")
+
+    out = scored.copy()
     out.insert(0, "SCENARIO_NAME", controls.scenario_id)
     out.insert(1, "SCENARIO_BASELINE_YEAR", int(controls.baseline_year))
     out.insert(2, "SCENARIO_TARGET_YEAR", int(controls.target_year))
-    out.insert(3, "SCENARIO_ALLOCATION_RULE", allocation_rule.value)
+    out.insert(3, "SCENARIO_ALLOCATION_RULE", policy)
+    out["ALLOCATION_POLICY"] = policy
+    out["PROTECTION_STRENGTH_LAMBDA"] = float(protection_strength)
+    out["POLICY_PROTECTION_SCORE"] = score
+    out["DAIRY_BURDEN_FACTOR"] = dairy_burden
+    out["SUCKLER_BURDEN_FACTOR"] = suckler_burden
+    out["DAIRY_ALLOCATION_MODE"] = dairy_mode
+    out["SUCKLER_ALLOCATION_MODE"] = suckler_mode
+
     out["BASE_DAIRY_COW"] = base_dairy
     out["BASE_OTHER_COW"] = base_suckler
     out["BASE_ADULT_COWS"] = base_adults
@@ -90,27 +131,31 @@ def allocate_adult_endpoint(
     out["SCENARIO_ADULT_COWS"] = scenario_adults
     out["CHANGE_DAIRY_COW"] = scenario_dairy - base_dairy
     out["CHANGE_OTHER_COW"] = scenario_suckler - base_suckler
-    out["REDUCTION_ADULT_COWS"] = adult_reductions
-    out["REDUCTION_PCT_ADULT_COWS"] = np.divide(
-        100.0 * adult_reductions.astype(float), base_adults.astype(float),
-        out=np.zeros(len(base_adults)), where=base_adults > 0,
+    out["CHANGE_ADULT_COWS"] = scenario_adults - base_adults
+
+    out["DAIRY_REDUCTION_HEAD"] = np.maximum(0, base_dairy - scenario_dairy)
+    out["SUCKLER_REDUCTION_HEAD"] = np.maximum(0, base_suckler - scenario_suckler)
+    out["DAIRY_EXPANSION_HEAD"] = np.maximum(0, scenario_dairy - base_dairy)
+    out["SUCKLER_EXPANSION_HEAD"] = np.maximum(0, scenario_suckler - base_suckler)
+    out["ADULT_REDUCTION_HEAD"] = base_adults - scenario_adults
+    out["REDUCTION_ADULT_COWS"] = np.maximum(0, base_adults - scenario_adults)
+    out["ADULT_EXPANSION_HEAD"] = np.maximum(0, scenario_adults - base_adults)
+    out["ADULT_REDUCTION_PCT_SIGNED"] = np.divide(
+        100.0 * (base_adults - scenario_adults).astype(float),
+        base_adults.astype(float),
+        out=np.zeros(len(base_adults), dtype=float),
+        where=base_adults > 0,
     )
-    out["PREFERRED_SCENARIO_ADULT_COWS"] = preferred_retained
-    out["PREFERRED_REDUCTION_ADULT_COWS"] = preferred_reduction
-    out["COMPOSITION_RECONCILIATION_ADULT_COWS"] = scenario_adults - preferred_retained
-    out["COMPOSITION_RECONCILIATION_REDUCTION"] = adult_reductions - preferred_reduction
-    out["CUT_WEIGHT_ADULT_COWS"] = cut_weights
-    if protection_score is not None:
-        out["PROTECTION_SCORE_ADULT_COWS"] = protection_score
-    sheep = _integer(baseline, "TOTAL_SHEEP")
+    out["REDUCTION_PCT_ADULT_COWS"] = np.maximum(
+        out["ADULT_REDUCTION_PCT_SIGNED"].to_numpy(dtype=float),
+        0.0,
+    )
+    out["ADULT_BURDEN_RATE"] = np.maximum(
+        out["ADULT_REDUCTION_PCT_SIGNED"].to_numpy(dtype=float) / 100.0,
+        0.0,
+    )
+
+    sheep = _integer(out, "TOTAL_SHEEP")
     out["BASE_TOTAL_SHEEP"] = sheep
     out["SCENARIO_TOTAL_SHEEP"] = sheep
-
-    active = base_adults > 0
-    if ((adult_reductions[active] <= 0)).any():
-        raise AssertionError("an adult-cattle ED was exempted from the pathway contraction")
-    if int(scenario_dairy.sum()) != target_dairy or int(scenario_suckler.sum()) != target_suckler:
-        raise AssertionError("national adult endpoint failed exact closure")
-    if int(out["COMPOSITION_RECONCILIATION_ADULT_COWS"].sum()) != 0:
-        raise AssertionError("composition reconciliation changed the national adult endpoint")
     return out

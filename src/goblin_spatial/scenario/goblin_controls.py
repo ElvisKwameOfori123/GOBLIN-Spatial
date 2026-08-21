@@ -1,24 +1,19 @@
-"""External national GOBLIN controls for spatial transition studies.
+"""National GOBLIN controls consumed by the principal spatial workflow.
 
 This module is an input contract, not a scenario generator. National GOBLIN
-supplies the quantities. GOBLIN-Spatial locates those quantities across the
-validated ED baseline without changing national totals.
+supplies the quantities. GOBLIN-Spatial locates them across the validated ED
+baseline without changing national totals.
 
-The contract supports three levels of cattle control:
+Supported cattle control depth is deliberately explicit:
 
-1. adult dairy/suckler targets only;
-2. adult targets plus an authoritative national total-cattle target;
+1. adult dairy and suckler targets;
+2. adult targets plus an authoritative total-cattle target; or
 3. exact national targets for all 21 cattle cohorts.
 
-No missing national quantities are invented here. National livestock-land
-release, optional category-resolved livestock-land release, future land-use
-targets and residual available land are carried as separate fields because they
-have different accounting meanings.
-
-For the principal study, adult GOBLIN values are absolute endpoints. Category
-changes may have different signs, as in SI_SG where dairy can rise while
-sucklers fall sharply. The principal reduction condition applies to total adult
-cows, not independently to each adult category.
+National gross livestock-land release, land-use targets and residual available
+land are separate accounting quantities. No pathway-specific dairy/beef/sheep
+land-release decomposition is accepted here; the principal spatial engine uses
+one symmetric pasture-DM-based spatialisation method for every pathway.
 """
 
 from __future__ import annotations
@@ -51,20 +46,7 @@ def _as_non_negative_float(label: str, value: float) -> float:
 
 @dataclass(frozen=True)
 class GoblinNationalMilestone:
-    """One externally supplied national GOBLIN milestone.
-
-    ``dairy_cows`` and ``suckler_cows`` are the adult scenario controls.
-    ``total_cattle`` is an optional hard closure target for the complete
-    21-cohort cattle state. ``cattle_cohorts`` is the stronger optional control
-    and, when supplied, must contain every member of ``FINAL_21_COHORTS``.
-
-    ``livestock_land_release_ha`` is gross national land release attributable to
-    the livestock transition when the originating pathway supplies it.
-    ``livestock_land_release_by_system_ha`` can additionally carry an exact
-    decomposition such as dairy/beef/sheep.  When both are supplied the system
-    components must close to the gross total. ``available_land_residual_ha`` is
-    kept separately and must not be treated as the same quantity.
-    """
+    """One externally supplied national GOBLIN milestone."""
 
     year: int
     dairy_cows: int
@@ -72,7 +54,6 @@ class GoblinNationalMilestone:
     total_cattle: int | None = None
     cattle_cohorts: Mapping[str, int] | None = None
     livestock_land_release_ha: float | None = None
-    livestock_land_release_by_system_ha: Mapping[str, float] = field(default_factory=dict)
     land_use_targets_ha: Mapping[str, float] = field(default_factory=dict)
     available_land_residual_ha: float | None = None
 
@@ -121,52 +102,36 @@ class GoblinNationalMilestone:
                     "sum(cattle_cohorts) must equal total_cattle when both are supplied"
                 )
             object.__setattr__(
-                self, "cattle_cohorts", MappingProxyType(validated)
+                self,
+                "cattle_cohorts",
+                MappingProxyType(validated),
             )
 
-        gross_release = None
         if self.livestock_land_release_ha is not None:
-            gross_release = _as_non_negative_float(
-                "livestock_land_release_ha", self.livestock_land_release_ha
-            )
             object.__setattr__(
                 self,
                 "livestock_land_release_ha",
-                gross_release,
+                _as_non_negative_float(
+                    "livestock_land_release_ha",
+                    self.livestock_land_release_ha,
+                ),
             )
 
-        system_release = {}
-        for raw_name, raw_value in dict(self.livestock_land_release_by_system_ha).items():
+        targets: dict[str, float] = {}
+        for raw_name, raw_value in dict(self.land_use_targets_ha).items():
             name = str(raw_name).strip().upper()
             if not name:
-                raise ValueError("livestock land-release system names cannot be empty")
-            if name in system_release:
-                raise ValueError(f"duplicate livestock land-release system: {name}")
-            system_release[name] = _as_non_negative_float(
-                f"livestock_land_release_by_system_ha[{name}]", raw_value
+                raise ValueError("land-use target names cannot be empty")
+            if name in targets:
+                raise ValueError(f"duplicate land-use target: {name}")
+            targets[name] = _as_non_negative_float(
+                f"land_use_targets_ha[{name}]",
+                raw_value,
             )
-        if gross_release is not None and system_release:
-            if abs(sum(system_release.values()) - gross_release) > 1e-6:
-                raise ValueError(
-                    "category-resolved livestock land release must sum to gross "
-                    "livestock_land_release_ha"
-                )
         object.__setattr__(
             self,
-            "livestock_land_release_by_system_ha",
-            MappingProxyType(system_release),
-        )
-
-        targets = {}
-        for raw_name, raw_value in dict(self.land_use_targets_ha).items():
-            name = str(raw_name).strip()
-            if not name:
-                raise ValueError("land-use target names cannot be empty")
-            targets[name] = _as_non_negative_float(
-                f"land_use_targets_ha[{name}]", raw_value
-            )
-        object.__setattr__(
-            self, "land_use_targets_ha", MappingProxyType(targets)
+            "land_use_targets_ha",
+            MappingProxyType(targets),
         )
 
         if self.available_land_residual_ha is not None:
@@ -174,7 +139,8 @@ class GoblinNationalMilestone:
                 self,
                 "available_land_residual_ha",
                 _as_non_negative_float(
-                    "available_land_residual_ha", self.available_land_residual_ha
+                    "available_land_residual_ha",
+                    self.available_land_residual_ha,
                 ),
             )
 
@@ -184,47 +150,58 @@ class GoblinNationalMilestone:
         baseline_dairy_cows: int,
         baseline_suckler_cows: int,
     ) -> dict[str, int | float]:
-        """Describe signed category change and the remaining overall adult contraction.
+        """Describe signed category change and overall adult-cow contraction."""
 
-        Dairy and suckler categories may move in opposite directions. The
-        principal transition requires only that the combined adult-cow endpoint
-        does not exceed the selected baseline total.
-        """
-
-        bd = _as_non_negative_int("baseline_dairy_cows", baseline_dairy_cows)
-        bs = _as_non_negative_int("baseline_suckler_cows", baseline_suckler_cows)
-        td = int(self.dairy_cows)
-        ts = int(self.suckler_cows)
-        base_adults = bd + bs
-        target_adults = td + ts
-        if target_adults > base_adults:
+        baseline_dairy = _as_non_negative_int(
+            "baseline_dairy_cows",
+            baseline_dairy_cows,
+        )
+        baseline_suckler = _as_non_negative_int(
+            "baseline_suckler_cows",
+            baseline_suckler_cows,
+        )
+        target_dairy = int(self.dairy_cows)
+        target_suckler = int(self.suckler_cows)
+        baseline_adults = baseline_dairy + baseline_suckler
+        target_adults = target_dairy + target_suckler
+        if target_adults > baseline_adults:
             raise ValueError(
                 "principal pathway requires an overall adult-cow contraction; "
-                f"baseline={base_adults}, endpoint={target_adults}"
+                f"baseline={baseline_adults}, endpoint={target_adults}"
             )
 
-        change_dairy = td - bd
-        change_suckler = ts - bs
+        change_dairy = target_dairy - baseline_dairy
+        change_suckler = target_suckler - baseline_suckler
         dairy_reduction = max(0, -change_dairy)
         suckler_reduction = max(0, -change_suckler)
-        adult_reduction = base_adults - target_adults
+        adult_reduction = baseline_adults - target_adults
 
         return {
-            "baseline_dairy_cows": bd,
-            "target_dairy_cows": td,
+            "baseline_dairy_cows": baseline_dairy,
+            "target_dairy_cows": target_dairy,
             "change_dairy_cows": change_dairy,
             "dairy_reduction_n": dairy_reduction,
-            "dairy_reduction_fraction": 0.0 if bd == 0 else dairy_reduction / bd,
-            "baseline_suckler_cows": bs,
-            "target_suckler_cows": ts,
+            "dairy_reduction_fraction": (
+                0.0 if baseline_dairy == 0 else dairy_reduction / baseline_dairy
+            ),
+            "baseline_suckler_cows": baseline_suckler,
+            "target_suckler_cows": target_suckler,
             "change_suckler_cows": change_suckler,
             "suckler_reduction_n": suckler_reduction,
-            "suckler_reduction_fraction": 0.0 if bs == 0 else suckler_reduction / bs,
-            "baseline_adult_cows": base_adults,
+            "suckler_reduction_fraction": (
+                0.0
+                if baseline_suckler == 0
+                else suckler_reduction / baseline_suckler
+            ),
+            "baseline_adult_cows": baseline_adults,
             "target_adult_cows": target_adults,
-            "change_adult_cows": target_adults - base_adults,
+            "change_adult_cows": target_adults - baseline_adults,
             "adult_reduction_n": adult_reduction,
-            "adult_reduction_fraction": 0.0 if base_adults == 0 else adult_reduction / base_adults,
+            "adult_reduction_fraction": (
+                0.0
+                if baseline_adults == 0
+                else adult_reduction / baseline_adults
+            ),
         }
 
 
@@ -251,7 +228,7 @@ class GoblinPathwayControls:
         milestones = tuple(self.milestones)
         if not milestones:
             raise ValueError("at least one national milestone is required")
-        years = tuple(m.year for m in milestones)
+        years = tuple(milestone.year for milestone in milestones)
         if years != tuple(sorted(set(years))):
             raise ValueError("milestone years must be unique and ascending")
         if years[0] <= int(self.baseline_year):
@@ -263,8 +240,6 @@ class GoblinPathwayControls:
         return self.milestones[-1].year
 
     def milestone(self, year: int) -> GoblinNationalMilestone:
-        """Return one exact milestone or raise if the pathway does not supply it."""
-
         year = int(year)
         for milestone in self.milestones:
             if milestone.year == year:
@@ -278,8 +253,6 @@ class GoblinPathwayControls:
         baseline_suckler_cows: int,
         year: int | None = None,
     ) -> dict[str, int | float]:
-        """Return signed category changes and overall adult contraction."""
-
         milestone = self.milestone(self.target_year if year is None else year)
         return milestone.adult_reductions_from_baseline(
             baseline_dairy_cows=baseline_dairy_cows,
@@ -287,8 +260,6 @@ class GoblinPathwayControls:
         )
 
     def total_cattle_targets_by_year(self) -> dict[int, int]:
-        """Return only explicitly supplied national total-cattle targets."""
-
         return {
             milestone.year: int(milestone.total_cattle)
             for milestone in self.milestones
@@ -296,8 +267,6 @@ class GoblinPathwayControls:
         }
 
     def cattle_cohort_targets_by_year(self) -> dict[int, dict[str, int]]:
-        """Return only explicitly supplied exact 21-cohort targets."""
-
         return {
             milestone.year: dict(milestone.cattle_cohorts)
             for milestone in self.milestones
@@ -305,21 +274,10 @@ class GoblinPathwayControls:
         }
 
     def livestock_land_release_by_year(self) -> dict[int, float]:
-        """Return only explicitly supplied national livestock-land release."""
-
         return {
             milestone.year: float(milestone.livestock_land_release_ha)
             for milestone in self.milestones
             if milestone.livestock_land_release_ha is not None
-        }
-
-    def livestock_land_release_by_system_by_year(self) -> dict[int, dict[str, float]]:
-        """Return only explicitly supplied category-resolved land-release controls."""
-
-        return {
-            milestone.year: dict(milestone.livestock_land_release_by_system_ha)
-            for milestone in self.milestones
-            if milestone.livestock_land_release_by_system_ha
         }
 
 
@@ -329,20 +287,18 @@ def load_adult_endpoint_controls(
     scenario_id: str,
     baseline_year: int,
 ) -> GoblinPathwayControls:
-    """Load one source-controlled adult endpoint without inferring other controls.
-
-    Expected CSV fields are ``SCENARIO_ID``, ``TARGET_YEAR``, ``DAIRY_COWS`` and
-    ``SUCKLER_COWS``. ``DAIRY_SUCKLER_RATIO`` and ``SOURCE_NOTE`` are optional.
-    The loader intentionally leaves total cattle, land release and future land-use
-    targets unset unless they are supplied through a richer pathway contract.
-    """
+    """Load one adult endpoint without inferring missing national quantities."""
 
     path = Path(path)
     with path.open("r", encoding="utf-8-sig", newline="") as handle:
         rows = list(csv.DictReader(handle))
 
     requested = str(scenario_id).strip()
-    matches = [row for row in rows if str(row.get("SCENARIO_ID", "")).strip() == requested]
+    matches = [
+        row
+        for row in rows
+        if str(row.get("SCENARIO_ID", "")).strip() == requested
+    ]
     if len(matches) != 1:
         raise ValueError(
             f"expected exactly one endpoint row for {requested}; found {len(matches)}"
@@ -361,7 +317,9 @@ def load_adult_endpoint_controls(
         ratio = float(reported_ratio)
         if suckler == 0:
             if dairy != 0:
-                raise ValueError("finite dairy:suckler ratio cannot be validated with zero suckler cows")
+                raise ValueError(
+                    "finite dairy:suckler ratio cannot be validated with zero suckler cows"
+                )
         elif abs((dairy / suckler) - ratio) > 1e-9:
             raise ValueError(
                 f"reported dairy:suckler ratio does not match endpoint counts for {requested}"
