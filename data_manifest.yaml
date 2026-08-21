@@ -109,7 +109,7 @@ datasets:
     description: "Editable national GOBLIN livestock-land endpoints and alternative land-use targets."
     source: "git"
     path: "data/controls/scenario/GOBLIN_Scenario_Controls.csv"
-    sha256: "ce0a03982de16213bd81f28e3c94664dd105b604c67365003f1bea5423fcc95d"
+    sha256: "3b099872352b66af9dc6b7f307b694ab65a53e26c12dbc846dcc82e30c43f9e4"
     required: true
     note: "Runtime gross release is selected-year sum(ALL_GRASSLAND) minus TARGET_LIVESTOCK_LAND_HA."
 
