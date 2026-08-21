@@ -29,7 +29,6 @@ datasets:
     path: "data/inputs/baseline/01_CSO_ED_Agricultural_Baseline_2020.csv"
     sha256: "bc93d1f9747809aed79ea7e7160f5853265d73e5056cceaae0353ee2fc63a657"
     required: true
-    legacy_path: "data/raw/cattle/CSO_ED_2020.csv"
 
   cso_aaa10_cattle_county_2015_2025:
     stage: "01"
@@ -39,7 +38,6 @@ datasets:
     path: "data/inputs/baseline/01_CSO_AAA10_Cattle_County_2015_2025.csv"
     sha256: "4df4e3c7dcf7f3183cec422b55da627249c62fc061851132d30ad95c902bcbf7"
     required: true
-    legacy_path: "data/raw/cattle/CSO_county_WIDE_2015_2025.csv.xz"
 
   cso_aaa09_sheep_county_region_2015_2025:
     stage: "03A"
@@ -49,7 +47,6 @@ datasets:
     path: "data/inputs/baseline/03_CSO_AAA09_Sheep_County_Region_2015_2025.xlsx"
     sha256: "64d4f36639090a62b95b4cae69fdade6a171f63a7008fb2c8dff02c3ec12dd11"
     required: true
-    legacy_path: "data/raw/sheep/CSO_Sheep_County_and_Region_WIDE_2015_2025.xlsx"
 
   dafm_sheep_county_totals_2015_2020_2022_2025:
     stage: "VALIDATION"
@@ -79,7 +76,6 @@ datasets:
     path: "data/inputs/baseline/05C_Cattle_Cohort_Relationships_2012_2020.csv"
     sha256: "7c9f8c38a4eb53b11631d92fb0e9ccf37fc130a83ebd6d6d17b04e5f8de5232e"
     required: true
-    legacy_path: "data/controls/cohort2012-2020.csv"
     note: "Published filename is retained although the source contains both cattle and sheep cohort series."
 
   cso_aqa06_agricultural_land_use:
@@ -99,7 +95,6 @@ datasets:
     path: "data/inputs/baseline/06_Farm_Structure_Demographic_Controls.csv"
     sha256: "cdfaec77532ea7630886195b060d63e94cf732d6543a153513e948eeb9766a4c"
     required: true
-    legacy_path: "data/controls/06_SE_Data_Controls.csv"
 
   ifs2020_standard_output_mapping:
     stage: "08"
@@ -131,24 +126,6 @@ datasets:
     expected_columns: 40
     logical_sha256: "6a94c125413260ed462c9d5430fe6d39be7df48d282734eea218351829aa6e5d"
     note: "The runtime loader reconstructs the logical CSV, verifies this SHA256 and enforces the scientific closure contract. SC1 uses only 08B fields; SC2/SC3 enter LPIS and 08C only after SC1 is frozen."
-
-  sc1_cattle_scenario_endpoints_2050:
-    stage: "LEGACY"
-    module: [legacy]
-    description: "Superseded endpoint control retained only for historical provenance."
-    source: "git_pending"
-    path: "data/inputs/scenario/SC1_Cattle_Scenario_Endpoints_2050.csv"
-    sha256: "316708db50f2d3ab2e2aa38b75672ec85e93e9a59222a36b6ce6c87767028227"
-    required: false
-
-  sc1_ed_rural_mixed_urban_2022:
-    stage: "LEGACY"
-    module: [legacy]
-    description: "Rural/Mixed/Urban classification retained for optional analysis; not required by the principal runtime."
-    source: "git_pending"
-    path: "data/inputs/scenario/SC1_ED_Rural_Mixed_Urban_2022.xlsx"
-    sha256: "d6178bacb2ddeef830a9f0fba4715e183ea53813448fcf54a0d29199a332552f"
-    required: false
 
   # OPTIONAL FIRST-PRINCIPLES REBUILD SOURCES
   nfs_agricultural_soil_capability:
