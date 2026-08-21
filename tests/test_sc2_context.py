@@ -1,22 +1,16 @@
+"""Tests for mature SC2 using the single frozen 2020 land-context contract."""
+
 from __future__ import annotations
 
 import numpy as np
 import pandas as pd
 import pytest
 
+from goblin_spatial.land.context import LAND_CONTEXT_COLUMNS, LAND_CONTEXT_EXPECTED_EDS
 from goblin_spatial.land.sc2_context import prepare_sc2_context
 
 
 CLASS_SHARE_COLUMNS = [f"SOIL_USE_CLASS_{i}_SHARE" for i in range(1, 7)]
-PHYSICAL_AREA_COLUMNS = (
-    "IFS_MAP_DEEP_WELL_DRAINED_HA",
-    "IFS_MAP_SHALLOW_WELL_DRAINED_HA",
-    "IFS_MAP_POORLY_DRAINED_HA",
-    "IFS_MAP_POORLY_DRAINED_PEATY_HA",
-    "IFS_MAP_ALLUVIUM_HA",
-    "IFS_MAP_PEAT_HA",
-    "IFS_MAP_MISCELLANEOUS_HA",
-)
 
 
 def _sc1() -> pd.DataFrame:
@@ -29,7 +23,7 @@ def _sc1() -> pd.DataFrame:
     )
     frame = pd.DataFrame(
         {
-            "CSOED": [1001, 1002],
+            "CSOED": ["1001", "1002"],
             "County": ["A", "B"],
             "ALL_GRASSLAND": grass,
             "GOBLIN_RELEASED_GRASSLAND_HA": [300.0, 100.0],
@@ -46,56 +40,69 @@ def _sc1() -> pd.DataFrame:
     )
     for idx, column in enumerate(CLASS_SHARE_COLUMNS):
         frame[column] = classes[:, idx]
-        frame[f"SOIL_USE_CLASS_{idx + 1}_GRASSLAND_HA"] = (
-            classes[:, idx] * grass
-        )
+        frame[f"SOIL_USE_CLASS_{idx + 1}_GRASSLAND_HA"] = classes[:, idx] * grass
     return frame
 
 
-def _lpis() -> pd.DataFrame:
-    return pd.DataFrame(
-        {
-            "LPIS_YEAR": [2020, 2020],
-            "CSOED": [1001, 1002],
-            "LPIS_CLAIMED_AG_HA": [900.0, 450.0],
-            "LPIS_ELIGIBLE_AG_HA": [850.0, 420.0],
-            "LPIS_CLAIMED_GRASS_HA": [800.0, 400.0],
-            "LPIS_ELIGIBLE_GRASS_HA": [750.0, 380.0],
-            "LPIS_PERMANENT_PASTURE_HA": [600.0, 250.0],
-            "LPIS_LOW_INPUT_GRASS_HA": [80.0, 50.0],
-            "LPIS_TEMPORARY_GRASS_HA": [60.0, 30.0],
-            "LPIS_HAY_MEADOW_HA": [40.0, 10.0],
-            "LPIS_PEAT_GRASS_HA": [80.0, 100.0],
-            "LPIS_RIPARIAN_GRASS_HA": [20.0, 10.0],
-            "LPIS_OTHER_GRASS_HA": [0.0, 0.0],
+def _land_context() -> pd.DataFrame:
+    """Return a contract-valid neutral context; only the first two EDs are used."""
+
+    rows: list[dict[str, object]] = []
+    for index in range(LAND_CONTEXT_EXPECTED_EDS):
+        ed = str(1001 + index)
+        classes = (
+            (0.30, 0.20, 0.20, 0.10, 0.10, 0.10)
+            if index == 0
+            else (0.10, 0.10, 0.20, 0.30, 0.20, 0.10)
+            if index == 1
+            else (0.20, 0.20, 0.20, 0.20, 0.10, 0.10)
+        )
+        groups = (
+            classes[0] + classes[1],
+            classes[2] + classes[3],
+            classes[4] + classes[5],
+        )
+        row: dict[str, object] = {
+            "CSOED": ed,
+            "SOIL_PROFILE_SOURCE": "ED" if index < 2820 else "COUNTY_FALLBACK",
+            "SOIL_SOURCE_HOLDINGS": 10.0,
+            "SOIL_SOURCE_UAA_HA": 100.0,
+            "FOREST_YC_WEIGHTED_MEAN": 20.0 if index == 0 else 18.0,
+            "IFS_PEAT_CUTOVER_UAA_SHARE": 0.10 if index == 0 else 0.40 if index == 1 else 0.10,
+            "IFS_MAP_DEEP_WELL_DRAINED_HA": 35.0,
+            "IFS_MAP_SHALLOW_WELL_DRAINED_HA": 20.0,
+            "IFS_MAP_POORLY_DRAINED_HA": 15.0,
+            "IFS_MAP_POORLY_DRAINED_PEATY_HA": 10.0,
+            "IFS_MAP_ALLUVIUM_HA": 5.0,
+            "IFS_MAP_PEAT_HA": 10.0,
+            "IFS_MAP_MISCELLANEOUS_HA": 5.0,
+            "LPIS_YEAR": 2020,
+            "LPIS_CLAIMED_AG_HA": 100.0,
+            "LPIS_ELIGIBLE_AG_HA": 90.0,
+            "LPIS_SPATIAL_FOOTPRINT_HA": 120.0,
+            "LPIS_CLAIMED_GRASS_HA": 90.0,
+            "LPIS_ELIGIBLE_GRASS_HA": 80.0,
+            "LPIS_PERMANENT_PASTURE_HA": 60.0,
+            "LPIS_LOW_INPUT_GRASS_HA": 10.0,
+            "LPIS_TEMPORARY_GRASS_HA": 10.0,
+            "LPIS_HAY_MEADOW_HA": 5.0,
+            "LPIS_OTHER_GRASS_HA": 5.0,
+            "LPIS_COMMONAGE_GRASS_HA": 0.0,
+            "LPIS_ANC_GRASS_HA": 50.0,
+            "LPIS_ENV_SCHEME_GRASS_HA": 20.0,
+            "LPIS_ORGANIC_GRASS_HA": 5.0,
+            "LPIS_BOG_PEAT_CONTEXT_HA": 2.0,
+            "LPIS_HABITAT_CONTEXT_HA": 3.0,
+            "LPIS_FORESTRY_CONTEXT_HA": 4.0,
         }
-    )
-
-
-def _physical() -> pd.DataFrame:
-    values = (
-        (35.0, 20.0, 15.0, 10.0, 5.0, 10.0, 5.0),
-        (15.0, 15.0, 20.0, 15.0, 5.0, 25.0, 5.0),
-    )
-    rows = []
-    for ed, areas in zip((1001, 1002), values, strict=True):
-        row = {"CSOED": ed}
-        row.update(dict(zip(PHYSICAL_AREA_COLUMNS, areas, strict=True)))
-        total = float(sum(areas))
-        for column, area in zip(PHYSICAL_AREA_COLUMNS, areas, strict=True):
-            row[column.replace("_HA", "_SHARE")] = area / total
-
-        deep, shallow, poor, poor_peaty, alluvium, peat, misc = areas
-        effective_peat = 0.10 * peat
-        sg1 = deep + 0.5 * shallow
-        sg2 = 0.5 * shallow + poor + 0.5 * poor_peaty + alluvium
-        sg3 = 0.5 * poor_peaty + effective_peat + misc
-        denom = sg1 + sg2 + sg3
-        row["IFS_MAP_SG1_SHARE"] = sg1 / denom
-        row["IFS_MAP_SG2_SHARE"] = sg2 / denom
-        row["IFS_MAP_SG3_SHARE"] = sg3 / denom
+        for number, value in enumerate(classes, start=1):
+            row[f"SOIL_USE_CLASS_{number}_SHARE"] = value
+        for number, value in enumerate(groups, start=1):
+            row[f"GOBLIN_SOIL_G{number}_SHARE"] = value
         rows.append(row)
-    return pd.DataFrame(rows)
+
+    frame = pd.DataFrame(rows)
+    return frame.loc[:, list(LAND_CONTEXT_COLUMNS)]
 
 
 def test_sc2_v31_preserves_sc1_release_and_class_group_closure() -> None:
@@ -103,23 +110,13 @@ def test_sc2_v31_preserves_sc1_release_and_class_group_closure() -> None:
     original_release = sc1["GOBLIN_RELEASED_GRASSLAND_HA"].copy()
     out = prepare_sc2_context(
         sc1,
-        lpis_profile=_lpis(),
+        land_context=_land_context(),
         baseline_year=2020,
-        physical_soil_context=_physical(),
     )
 
-    assert np.array_equal(
-        out["GOBLIN_RELEASED_GRASSLAND_HA"],
-        original_release,
-    )
+    assert np.array_equal(out["GOBLIN_RELEASED_GRASSLAND_HA"], original_release)
     assert np.allclose(
-        out[
-            [
-                "SC2_RELEASED_G1_HA",
-                "SC2_RELEASED_G2_HA",
-                "SC2_RELEASED_G3_HA",
-            ]
-        ].sum(axis=1),
+        out[["SC2_RELEASED_G1_HA", "SC2_RELEASED_G2_HA", "SC2_RELEASED_G3_HA"]].sum(axis=1),
         original_release,
     )
     assert np.allclose(
@@ -141,14 +138,14 @@ def test_sc2_v31_preserves_sc1_release_and_class_group_closure() -> None:
     assert out["SC2_OPPORTUNITY_SCIENCE_APPLIED"].all()
     assert set(out["SC2_OPPORTUNITY_VERSION"]) == {"3.1.0"}
     assert set(out["SC2_CONTEXT_VERSION"]) == {"3.1"}
+    assert set(out["SC2_LAND_CONTEXT_ROLE"]) == {"FROZEN_REPOSITORY_CONTROL"}
 
 
-def test_sc2_v31_retains_mature_productivity_science_and_dual_soil_no_blend() -> None:
+def test_sc2_retains_08b_productivity_and_keeps_08c_independent() -> None:
     out = prepare_sc2_context(
         _sc1(),
-        lpis_profile=_lpis(),
+        land_context=_land_context(),
         baseline_year=2020,
-        physical_soil_context=_physical(),
     )
 
     expected = (
@@ -172,25 +169,13 @@ def test_sc2_v31_retains_mature_productivity_science_and_dual_soil_no_blend() ->
         "RELEASED_REWETTING_ELIGIBLE_WEIGHT_HA",
     ):
         assert (out[column] >= -1e-12).all()
-        assert (
-            out[column]
-            <= out["GOBLIN_RELEASED_GRASSLAND_HA"] + 1e-9
-        ).all()
+        assert (out[column] <= out["GOBLIN_RELEASED_GRASSLAND_HA"] + 1e-9).all()
 
 
-def test_sc2_requires_baseline_matched_lpis_and_compact_08c() -> None:
-    with pytest.raises(ValueError, match="no 2025 snapshot"):
+def test_sc2_rejects_2025_until_separate_frozen_context_exists() -> None:
+    with pytest.raises(ValueError, match="baseline_year=2020"):
         prepare_sc2_context(
             _sc1(),
-            lpis_profile=_lpis(),
+            land_context=_land_context(),
             baseline_year=2025,
-            physical_soil_context=_physical(),
-        )
-
-    with pytest.raises(ValueError, match="compact 08C physical-soil profile"):
-        prepare_sc2_context(
-            _sc1(),
-            lpis_profile=_lpis(),
-            baseline_year=2020,
-            physical_soil_context=None,
         )
