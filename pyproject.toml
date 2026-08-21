@@ -28,6 +28,10 @@ geo = [
   "pyarrow>=14"
 ]
 
+scenario = [
+  "scipy>=1.10"
+]
+
 goblin = [
   "cattle_lca==0.3.1",
   "sheep_lca==0.3.1",
