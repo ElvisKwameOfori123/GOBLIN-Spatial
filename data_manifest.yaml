@@ -1,6 +1,6 @@
 manifest_version: "1.0.0"
 release: "ireland-2015-2025-v1"
-status: "scenario-finalization"
+status: "verified"
 
 # GOBLIN-Spatial data contract
 # ----------------------------
