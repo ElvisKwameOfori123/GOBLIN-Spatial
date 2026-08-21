@@ -1,0 +1,1 @@
+Runtime data shards are stored as small compressed CSV parts. The storage split has no scientific meaning; the runtime concatenates all parts into one 2,857-row table.
