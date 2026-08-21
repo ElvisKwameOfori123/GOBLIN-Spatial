@@ -1,14 +1,26 @@
-"""One-command runner for the principal GOBLIN-Spatial scenario study.
+"""Stage-aware runner for the principal GOBLIN-Spatial scenario study.
 
-The runner is deliberately stage-aware.  It resolves an editable national
-scenario row against the selected 2020 or 2025 ED baseline, runs SC1 cattle,
-Standard Output and released-land accounting, writes distributional diagnostics,
-and only enters the legacy downstream land allocator when an older fully sourced
-Styles control explicitly provides the required residual accounting.
+Normal scenario runs are intentionally light. They consume the frozen Stage-08
+historical panel plus compact precomputed spatial controls. Heavy 08B, 08C and
+LPIS source processing is never triggered here.
 
-The new SC2/SC3 soil + LPIS pathway remains gated until its scientific eligibility
-rules are frozen.  This prevents the old opportunity weights from being applied
-silently to the new editable scenario controls.
+SC1
+    selected 2020/2025 Stage-08 ED baseline
+    -> principal category-consistent adult allocation
+    -> Stage-09-type 21-cohort propagation
+    -> unchanged sheep
+    -> fixed-2020 Standard Output exposure
+    -> 08B-constrained national released-land spatialisation
+    -> SC1 distributional metrics and reconciliation
+
+SC2
+    frozen SC1 release
+    -> matching 2020/2025 compact LPIS context
+    -> independent compact 08C mapped physical-soil context
+
+SC3 is deliberately not auto-entered here until the six land-use eligibility and
+ranking contracts are frozen. The generic constrained SC3 allocator exists, but
+this runner will not silently substitute the older provisional opportunity score.
 """
 
 from __future__ import annotations
@@ -20,11 +32,7 @@ import pandas as pd
 
 from goblin_spatial.config import load_config
 from goblin_spatial.dynamics.baseline import select_baseline_year
-from goblin_spatial.land.lpis import add_ed_lpis_context
-from goblin_spatial.land.styles_targets import (
-    allocate_styles_released_land_targets,
-    summarise_styles_released_land_targets,
-)
+from goblin_spatial.land.sc2_context import prepare_sc2_context
 from goblin_spatial.pressure import load_pasture_dm_control
 from goblin_spatial.scenario.control_table import (
     active_scenario_ids,
@@ -32,13 +40,16 @@ from goblin_spatial.scenario.control_table import (
 )
 from goblin_spatial.scenario.definition import AllocationRule
 from goblin_spatial.scenario.metrics import (
-    add_sc1_ed_metrics,
     build_sc1_county_summary,
     build_sc1_national_metrics,
 )
+from goblin_spatial.scenario.principal_allocation import (
+    PRINCIPAL_ALLOCATION_POLICIES,
+    PRINCIPAL_PROTECTION_STRENGTH,
+)
 from goblin_spatial.scenario.principal_endpoint import run_principal_goblin_endpoint
 from goblin_spatial.scenario.reconciliation import build_goblin_reconciliation
-from goblin_spatial.soil import add_ed_agricultural_soil
+from goblin_spatial.soil import add_principal_08b_context
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -54,25 +65,26 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--scenario-controls", default=None)
     parser.add_argument(
         "--allocation-rule",
-        choices=tuple(rule.value for rule in AllocationRule),
-        default=AllocationRule.PRORATA.value,
+        choices=PRINCIPAL_ALLOCATION_POLICIES,
+        default="PRORATA",
+        help="Validated principal SC1 incidence policy.",
+    )
+    parser.add_argument(
+        "--protection-strength",
+        type=float,
+        default=PRINCIPAL_PROTECTION_STRENGTH,
+        help="Validated principal protection strength lambda; default 0.50.",
     )
     parser.add_argument("--baseline-master", default=None)
     parser.add_argument("--output-dir", default=None)
-    parser.add_argument("--score-column", default=None)
-    parser.add_argument("--productivity-score-column", default=None)
-    parser.add_argument("--vulnerability-score-column", default=None)
-    parser.add_argument("--protection-strength", type=float, default=0.8)
-    parser.add_argument("--random-seed", type=int, default=42)
-    parser.add_argument("--no-standard-output", action="store_true")
     parser.add_argument(
-        "--skip-land-allocation",
-        action="store_true",
-        help=(
-            "Stop after SC1. New editable controls currently stop here by design; "
-            "the flag is retained for compatibility with older fully sourced Styles runs."
-        ),
+        "--stage",
+        choices=("SC1", "SC2"),
+        default="SC1",
+        help="SC2 adds compact LPIS + 08C context after a completed SC1 run.",
     )
+    parser.add_argument("--lpis-profile", default=None)
+    parser.add_argument("--physical-soil-profile", default=None)
     return parser
 
 
@@ -82,28 +94,56 @@ def _configured_output(cfg, key: str, default: str) -> Path:
     return path if path.is_absolute() else cfg.project_root / path
 
 
-def _required_file(cfg, key: str) -> Path:
+def _configured_path(cfg, key: str, override: str | None = None) -> Path:
+    if override is not None:
+        path = Path(override)
+        return path if path.is_absolute() else cfg.project_root / path
     path = cfg.files.get(key)
     if path is None:
         raise KeyError(f"configuration missing files.{key}")
-    path = Path(path)
+    return Path(path)
+
+
+def _required_file(cfg, key: str, override: str | None = None) -> Path:
+    path = _configured_path(cfg, key, override)
     if not path.exists():
-        raise FileNotFoundError(f"configured file not found for {key}: {path}")
+        raise FileNotFoundError(
+            f"required compact/input file not found for {key}: {path}. "
+            "Scenario runs never auto-download or rebuild heavy spatial inputs."
+        )
     return path
 
 
 def _scenario_control_path(args, cfg) -> Path:
-    if args.scenario_controls is not None:
-        path = Path(args.scenario_controls)
-        return path if path.is_absolute() else cfg.project_root / path
-    return _required_file(cfg, "scenario_controls")
+    return _required_file(cfg, "scenario_controls", args.scenario_controls)
 
 
 def _output_dir(args, cfg) -> Path:
     if args.output_dir is not None:
-        return Path(args.output_dir)
+        path = Path(args.output_dir)
+        return path if path.is_absolute() else cfg.project_root / path
     name = f"{args.scenario}_{int(args.baseline_year)}_{args.allocation_rule}"
     return cfg.processed_dir / "principal" / name
+
+
+def _validate_stage08_baseline(panel: pd.DataFrame, *, baseline_year: int, expected_eds: int) -> pd.DataFrame:
+    baseline = select_baseline_year(panel, baseline_year, expected_eds=expected_eds)
+    required = {
+        "CSOED",
+        "County",
+        "ALL_GRASSLAND",
+        "AGRICULTURAL_HOLDINGS",
+        "AVERAGE_SIZE_OF_HOLDINGS",
+        "MEDIAN_AGE_OF_HOLDER",
+        "SO_LIVESTOCK_2020_EUR",
+    }
+    missing = sorted(required - set(baseline.columns))
+    if missing:
+        raise ValueError(
+            "principal SC1 must start from the Stage-08 Standard Output-enriched "
+            f"baseline; missing columns={missing}"
+        )
+    return baseline
 
 
 def _national_livestock_summary(ed: pd.DataFrame) -> pd.DataFrame:
@@ -112,6 +152,7 @@ def _national_livestock_summary(ed: pd.DataFrame) -> pd.DataFrame:
         "PATHWAY_BASELINE_YEAR": int(ed["PATHWAY_BASELINE_YEAR"].iloc[0]),
         "MILESTONE_YEAR": int(ed["MILESTONE_YEAR"].iloc[0]),
         "PATHWAY_ALLOCATION_RULE": str(ed["PATHWAY_ALLOCATION_RULE"].iloc[0]),
+        "PROTECTION_STRENGTH_LAMBDA": float(ed["PROTECTION_STRENGTH_LAMBDA"].iloc[0]),
         "NATIONAL_COHORT_TARGET_SOURCE": str(ed["NATIONAL_COHORT_TARGET_SOURCE"].iloc[0]),
         "SCENARIO_DAIRY_COW": int(pd.to_numeric(ed["SCENARIO_DAIRY_COW"], errors="raise").sum()),
         "SCENARIO_SUCKLER_COW": int(pd.to_numeric(ed["SCENARIO_OTHER_COW"], errors="raise").sum()),
@@ -128,6 +169,10 @@ def _national_livestock_summary(ed: pd.DataFrame) -> pd.DataFrame:
         row["GOBLIN_RELEASED_GRASSLAND_HA"] = float(
             pd.to_numeric(ed["GOBLIN_RELEASED_GRASSLAND_HA"], errors="raise").sum()
         )
+        for group in (1, 2, 3):
+            column = f"GOBLIN_RELEASED_G{group}_HA"
+            if column in ed.columns:
+                row[column] = float(pd.to_numeric(ed[column], errors="raise").sum())
         for system in ("DAIRY", "BEEF", "SHEEP"):
             column = f"GOBLIN_RELEASED_{system}_LAND_HA"
             if column in ed.columns:
@@ -139,27 +184,37 @@ def main() -> None:
     args = _parser().parse_args()
     cfg = load_config(Path(args.config))
 
+    # Principal protection scores require the Stage-08 SO-enriched baseline.
     baseline_path = (
-        Path(args.baseline_master)
+        _configured_path(cfg, "_override", args.baseline_master)
         if args.baseline_master is not None
         else _configured_output(
             cfg,
-            "enriched_master",
-            "data/processed/goblin_spatial_master_2015_2025.csv",
+            "standard_output_master",
+            "data/processed/08_GOBLIN_Spatial_Standard_Output_2015_2025.csv",
         )
     )
     if not baseline_path.exists():
         raise FileNotFoundError(
-            f"validated historical baseline not found: {baseline_path}. Run the historical build first."
+            f"Stage-08 Standard Output baseline not found: {baseline_path}. "
+            "Run/fetch the validated historical baseline first."
         )
     panel = pd.read_csv(baseline_path, low_memory=False)
+    baseline = _validate_stage08_baseline(
+        panel,
+        baseline_year=int(args.baseline_year),
+        expected_eds=int(cfg.expected_eds),
+    )
+
+    # 08B is a compact precomputed control and is attached before SC1 because
+    # principal released-land spatialisation uses G1/G2/G3 ED capacities.
+    soil_profile = _required_file(cfg, "agricultural_soil_profile")
+    panel = add_principal_08b_context(panel, soil_profile)
     baseline = select_baseline_year(
         panel,
         int(args.baseline_year),
         expected_eds=int(cfg.expected_eds),
     )
-    if "ALL_GRASSLAND" not in baseline.columns:
-        raise ValueError("selected ED baseline is missing ALL_GRASSLAND")
     baseline_grassland_ha = float(
         pd.to_numeric(baseline["ALL_GRASSLAND"], errors="raise").sum()
     )
@@ -185,25 +240,17 @@ def main() -> None:
         pasture_control,
         required_years={int(args.baseline_year), target_year},
     )
-
-    mapping = None
-    coefficients = None
-    if not args.no_standard_output:
-        mapping = str(_required_file(cfg, "standard_output_mapping"))
-        coefficients = str(_required_file(cfg, "standard_output_coefficients"))
+    mapping = str(_required_file(cfg, "standard_output_mapping"))
+    coefficients = str(_required_file(cfg, "standard_output_coefficients"))
 
     rule = AllocationRule(args.allocation_rule)
     ed = run_principal_goblin_endpoint(
         panel,
         controls,
         allocation_rule=rule,
-        random_seed=int(args.random_seed),
-        score_column=args.score_column,
-        productivity_score_column=args.productivity_score_column,
-        vulnerability_score_column=args.vulnerability_score_column,
         protection_strength=float(args.protection_strength),
         expected_eds=int(cfg.expected_eds),
-        include_standard_output=not args.no_standard_output,
+        include_standard_output=True,
         mapping_path=mapping,
         coefficient_path=coefficients,
         cohort_reference_path=str(cohort_reference),
@@ -214,7 +261,6 @@ def main() -> None:
     ed["RUN_BASELINE_GRASSLAND_HA"] = selection.baseline_grassland_ha
     ed["TARGET_LIVESTOCK_LAND_HA"] = selection.target_livestock_land_ha
     ed["RUN_GROSS_RELEASE_HA"] = selection.gross_release_ha
-    ed = add_sc1_ed_metrics(ed)
 
     outdir = _output_dir(args, cfg)
     outdir.mkdir(parents=True, exist_ok=True)
@@ -233,6 +279,8 @@ def main() -> None:
                 "SCENARIO_NAME": selection.scenario_name,
                 "RUN_START_YEAR": selection.baseline_year,
                 "TARGET_YEAR": selection.target_year,
+                "ALLOCATION_POLICY": args.allocation_rule,
+                "PROTECTION_STRENGTH_LAMBDA": float(args.protection_strength),
                 "BASELINE_GRASSLAND_HA": selection.baseline_grassland_ha,
                 "TARGET_LIVESTOCK_LAND_HA": selection.target_livestock_land_ha,
                 "RUN_GROSS_RELEASE_HA": selection.gross_release_ha,
@@ -257,49 +305,31 @@ def main() -> None:
     print(f"SC1 control summary: {controls_summary_path}")
     print(f"SC1 GOBLIN reconciliation: {reconciliation_path}")
 
-    milestone = controls.milestone(target_year)
-    can_allocate_legacy_styles_land = (
-        not args.skip_land_allocation
-        and selection.scenario_id in {"SI_SG", "BE_SG"}
-        and milestone.available_land_residual_ha is not None
-        and milestone.livestock_land_release_ha is not None
-        and bool(milestone.land_use_targets_ha)
-    )
-    if not can_allocate_legacy_styles_land:
-        if not args.skip_land_allocation:
-            print(
-                "SC1 completed and frozen. SC2/SC3 are deliberately gated for the editable "
-                "scenario controls until the 08B + 08C + selected-year LPIS opportunity "
-                "rules and absolute-target allocator are frozen and validated."
-            )
+    if args.stage == "SC1":
+        print("SC1 completed and frozen. Heavy spatial source rebuilds were not invoked.")
         return
 
-    soil_profile = _required_file(cfg, "agricultural_soil_profile")
-    lpis_profile = _required_file(cfg, "lpis_ed_profile")
-    enriched = (
-        ed
-        if "GOBLIN_SOIL_G1_SHARE" in ed.columns
-        else add_ed_agricultural_soil(ed, soil_profile)
+    # SC2 consumes compact controls only. Missing compact files are a deliberate
+    # hard stop so scenario execution can never trigger expensive geospatial work.
+    lpis_profile = _required_file(cfg, "lpis_ed_profile", args.lpis_profile)
+    physical_profile = _required_file(
+        cfg,
+        "physical_soil_profile",
+        args.physical_soil_profile,
     )
-    if "LPIS_GRASS_CONTEXT_AVAILABLE" not in enriched.columns:
-        enriched = add_ed_lpis_context(
-            enriched,
-            lpis_profile,
-            baseline_year=int(args.baseline_year),
-        )
-    allocated = allocate_styles_released_land_targets(
-        enriched,
-        controls,
-        released_column="GOBLIN_RELEASED_GRASSLAND_HA",
-        attach_scores=True,
+    sc2 = prepare_sc2_context(
+        ed,
+        lpis_profile=lpis_profile,
+        baseline_year=int(args.baseline_year),
+        physical_soil_context=physical_profile,
     )
-    land_summary = summarise_styles_released_land_targets(allocated)
-    land_ed_path = outdir / "legacy_styles_land_allocation_ed.csv"
-    land_nat_path = outdir / "legacy_styles_land_allocation_national.csv"
-    allocated.to_csv(land_ed_path, index=False)
-    land_summary.to_csv(land_nat_path, index=False)
-    print(f"Legacy Styles ED land allocation: {land_ed_path}")
-    print(f"Legacy Styles national land allocation: {land_nat_path}")
+    sc2_path = outdir / "sc2_ed_context.csv"
+    sc2.to_csv(sc2_path, index=False)
+    print(f"SC2 ED context: {sc2_path}")
+    print(
+        "SC2 evidence handoff completed. SC3 remains gated until explicit "
+        "land-use capacity/ranking contracts are frozen; no provisional score was used."
+    )
 
 
 if __name__ == "__main__":
