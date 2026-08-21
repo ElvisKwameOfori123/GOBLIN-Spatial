@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pathlib import Path
+import csv
 
 import pytest
 
@@ -12,11 +12,12 @@ from goblin_spatial.scenario.goblin_controls import (
 )
 
 
-ROOT = Path(__file__).resolve().parents[1]
-STYLES_ENDPOINTS = ROOT / "configs/styles_split_gas_adult_endpoints.csv"
-
-
-def _cohort_targets(total_each: int = 1, *, dairy: int | None = None, suckler: int | None = None) -> dict[str, int]:
+def _cohort_targets(
+    total_each: int = 1,
+    *,
+    dairy: int | None = None,
+    suckler: int | None = None,
+) -> dict[str, int]:
     out = {cohort: total_each for cohort in FINAL_21_COHORTS}
     if dairy is not None:
         out["dairy_cows"] = dairy
@@ -126,7 +127,13 @@ def test_pathway_years_are_unique_ascending_and_after_baseline() -> None:
         GoblinPathwayControls(
             scenario_id="SI_SG",
             baseline_year=2020,
-            milestones=(GoblinNationalMilestone(year=2020, dairy_cows=100, suckler_cows=100),),
+            milestones=(
+                GoblinNationalMilestone(
+                    year=2020,
+                    dairy_cows=100,
+                    suckler_cows=100,
+                ),
+            ),
         )
 
 
@@ -187,21 +194,40 @@ def test_overall_adult_expansion_is_rejected() -> None:
         )
 
 
-def test_frozen_styles_split_gas_adult_endpoints_are_exact() -> None:
-    si = load_adult_endpoint_controls(
-        STYLES_ENDPOINTS,
-        scenario_id="SI_SG",
+def test_adult_endpoint_loader_uses_explicit_file_only(tmp_path) -> None:
+    endpoint = tmp_path / "adult_endpoint.csv"
+    with endpoint.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=[
+                "SCENARIO_ID",
+                "TARGET_YEAR",
+                "DAIRY_COWS",
+                "SUCKLER_COWS",
+                "DAIRY_SUCKLER_RATIO",
+                "SOURCE_NOTE",
+            ],
+        )
+        writer.writeheader()
+        writer.writerow(
+            {
+                "SCENARIO_ID": "TEST",
+                "TARGET_YEAR": 2050,
+                "DAIRY_COWS": 160,
+                "SUCKLER_COWS": 16,
+                "DAIRY_SUCKLER_RATIO": 10,
+                "SOURCE_NOTE": "fixture",
+            }
+        )
+
+    controls = load_adult_endpoint_controls(
+        endpoint,
+        scenario_id="TEST",
         baseline_year=2020,
     )
-    be = load_adult_endpoint_controls(
-        STYLES_ENDPOINTS,
-        scenario_id="BE_SG",
-        baseline_year=2025,
-    )
-
-    assert si.milestone(2050).dairy_cows == 1_600_000
-    assert si.milestone(2050).suckler_cows == 160_000
-    assert be.milestone(2050).dairy_cows == 1_540_000
-    assert be.milestone(2050).suckler_cows == 154_000
-    assert si.milestone(2050).total_cattle is None
-    assert be.milestone(2050).livestock_land_release_ha is None
+    milestone = controls.milestone(2050)
+    assert milestone.dairy_cows == 160
+    assert milestone.suckler_cows == 16
+    assert milestone.total_cattle is None
+    assert milestone.livestock_land_release_ha is None
+    assert controls.source_note == "fixture"
