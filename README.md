@@ -127,7 +127,7 @@ Rewetting is handled after the main Stage-A allocation because the organic-soil 
 
 ## Principal commands
 
-Verify the repository-contained inputs without contacting external services:
+Verify every repository-contained model input:
 
 ```bash
 goblin-spatial fetch-data --verify-only
@@ -151,15 +151,9 @@ The active scenario IDs are data-driven from `data/controls/scenario/GOBLIN_Scen
 
 ## Reproducibility boundary
 
-A normal clone is intended to contain all compact inputs required to build the historical model and run the complete 2020 SC1-SC3 chain. It must not require a Zenodo download, raw LPIS parcels, soil packages, ED shapefiles or GIS intersections.
+The production model is fully repository-contained. A normal clone contains the compact inputs required to build the historical baseline and run the complete 2020 SC1-SC3 chain. Runtime verification never downloads model data and there is no external-data fallback.
 
-Heavy first-principles reconstruction remains possible for provenance work. It requires explicit opt-in:
-
-```bash
-goblin-spatial fetch-data --include-reconstruction-sources
-```
-
-The LPIS reconstruction command and heavy GitHub workflow are manual reconstruction tools only. They are not part of normal runtime or normal CI.
+First-principles reconstruction is outside the production runtime. The local reconstruction utilities may be used manually with source files supplied by the researcher, but they cannot modify the frozen runtime controls unless the rebuilt outputs are independently validated and deliberately replaced.
 
 ## Interpretation
 
@@ -169,4 +163,4 @@ Results should therefore be interpreted as transition exposure, opportunity and 
 
 ## Validation gate
 
-The scenario framework is accepted only when the repository-contained 2020 land bundle verifies exactly and the relevant SC1-SC3 tests and one real 2020 integrated scenario run are green. Heavy spatial reconstruction is not part of that acceptance gate.
+The scenario framework is accepted only when the repository-contained 2020 land bundle verifies exactly and the relevant SC1-SC3 tests and one real 2020 integrated scenario run are green. First-principles spatial reconstruction is not part of that acceptance gate.
