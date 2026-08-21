@@ -11,6 +11,18 @@ from goblin_spatial.scenario.goblin_controls import (
     GoblinPathwayControls,
     load_adult_endpoint_controls,
 )
+from goblin_spatial.scenario.control_table import (
+    ScenarioControlSelection,
+    active_scenario_ids,
+    load_scenario_controls,
+    read_scenario_control_table,
+)
+from goblin_spatial.scenario.metrics import (
+    add_sc1_ed_metrics,
+    build_sc1_county_summary,
+    build_sc1_national_metrics,
+    gini,
+)
 from goblin_spatial.scenario.styles_pathway_controls import (
     load_styles_split_gas_pathway_controls,
 )
@@ -69,6 +81,14 @@ __all__ = [
     "GoblinNationalMilestone",
     "GoblinPathwayControls",
     "load_adult_endpoint_controls",
+    "ScenarioControlSelection",
+    "active_scenario_ids",
+    "load_scenario_controls",
+    "read_scenario_control_table",
+    "gini",
+    "add_sc1_ed_metrics",
+    "build_sc1_national_metrics",
+    "build_sc1_county_summary",
     "load_styles_split_gas_pathway_controls",
     "derive_national_cohort_targets",
     "load_goblin_cohort_reference",
