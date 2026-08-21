@@ -28,7 +28,7 @@ Realised transition + unmet opportunity
 
 The historical engine reconstructs cattle, sheep, agricultural land, crops and selected farm-structure characteristics at ED level. Livestock are represented through **21 cattle cohorts and 10 sheep cohorts**, while fixed 2020 Standard Output coefficients provide a measure of agricultural production-value exposure.
 
-The completed baseline then provides the spatial starting point for transition analysis. National livestock pathways are translated into geographically heterogeneous changes while preserving the underlying livestock structure and ED-specific cohort relationships.
+The completed baseline then provides the spatial starting point for transition analysis. National livestock pathways are translated into geographically heterogeneous changes while preserving the underlying livestock structure and ED-specific cohort relationships. Scenario analysis can start from either the **2020 anchor** or the complete reconstructed **2025 baseline state**.
 
 This allows GOBLIN-Spatial to examine:
 
@@ -133,7 +133,7 @@ Realised conversion
 
 GOBLIN-Spatial is being consolidated into a clean **v1 Python package**.
 
-The **historical baseline through Stage 09 has been refactored and regression-verified in draft PR #1**. The downstream scenario architecture is part of the scientific model described above, while the SC1-SC3 implementation will undergo its own refactor and regression verification before the complete v1 release is frozen.
+The **historical baseline through Stage 09 is regression-verified and merged into `main`**. A permanent `baseline-v1-verified` checkpoint records that frozen baseline state. The downstream scenario architecture is part of the scientific model described above and will now be refactored and regression-verified on `scenario-v1-refactor` before the complete v1 release is frozen.
 
 The development principle is simple:
 
