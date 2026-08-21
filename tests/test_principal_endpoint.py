@@ -127,7 +127,7 @@ def test_experimental_allocation_rule_is_rejected_by_principal_endpoint():
         run_principal_goblin_endpoint(
             _panel(),
             _controls(120, 60),
-            allocation_rule=AllocationRule.RANDOMISED,
+            allocation_rule="RANDOMISED",
             expected_eds=2,
             include_standard_output=False,
         )

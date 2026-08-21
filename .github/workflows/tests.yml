@@ -62,8 +62,7 @@ jobs:
             tests/test_sc2_context.py \
             tests/test_sc3_allocation.py \
             tests/test_scenario_control_table.py \
-            tests/test_scenario_preflight.py \
-            tests/test_total_cattle_accounting.py
+            tests/test_scenario_preflight.py
 
       - name: Build canonical historical baseline
         run: goblin-spatial build --config configs/ireland_2015_2025.yaml

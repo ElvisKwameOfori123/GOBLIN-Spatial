@@ -13,11 +13,16 @@ def build_goblin_reconciliation(
     ed: pd.DataFrame,
     controls: GoblinPathwayControls,
 ) -> pd.DataFrame:
-    """Return one tidy audit table for external GOBLIN controls.
+    """Return one tidy audit table for externally supplied GOBLIN controls.
 
-    Livestock and authoritative released-land controls are expected to close
-    exactly. Future land-use targets and residual available land remain marked
+    Livestock and authoritative gross released-land controls are expected to
+    close exactly. Future land-use targets and residual available land remain
     ``PENDING_DOWNSTREAM`` until the land-allocation stage is completed.
+
+    The principal runtime deliberately has no externally supplied dairy/beef/
+    sheep decomposition of released land. System attribution is derived inside
+    the single symmetric pasture-DM spatialisation route and is diagnostic, not
+    a second national control.
     """
 
     rows: list[dict[str, object]] = []
@@ -71,7 +76,9 @@ def build_goblin_reconciliation(
                 add_closed(
                     f"CATTLE_COHORT::{cohort}",
                     milestone.cattle_cohorts[cohort],
-                    pd.to_numeric(block[f"SCENARIO_COHORT_{cohort}"], errors="raise").sum(),
+                    pd.to_numeric(
+                        block[f"SCENARIO_COHORT_{cohort}"], errors="raise"
+                    ).sum(),
                     "LIVESTOCK",
                 )
 
@@ -84,22 +91,10 @@ def build_goblin_reconciliation(
             add_closed(
                 "LIVESTOCK_LAND_RELEASE_HA",
                 milestone.livestock_land_release_ha,
-                pd.to_numeric(block["GOBLIN_RELEASED_GRASSLAND_HA"], errors="raise").sum(),
+                pd.to_numeric(
+                    block["GOBLIN_RELEASED_GRASSLAND_HA"], errors="raise"
+                ).sum(),
                 "LAND_RELEASE",
-            )
-
-        for system, target in milestone.livestock_land_release_by_system_ha.items():
-            column = f"GOBLIN_RELEASED_{str(system).upper()}_LAND_HA"
-            if column not in block.columns:
-                raise ValueError(
-                    "GOBLIN pathway supplies category-resolved livestock land release "
-                    f"but scenario output is missing {column}"
-                )
-            add_closed(
-                f"LIVESTOCK_LAND_RELEASE::{str(system).upper()}",
-                target,
-                pd.to_numeric(block[column], errors="raise").sum(),
-                "LAND_RELEASE_CATEGORY",
             )
 
         for land_use, target in milestone.land_use_targets_ha.items():

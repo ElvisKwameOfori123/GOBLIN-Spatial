@@ -30,7 +30,7 @@ def run_principal_goblin_endpoint(
     panel: pd.DataFrame,
     controls: GoblinPathwayControls,
     *,
-    allocation_rule: AllocationRule = AllocationRule.PRORATA,
+    allocation_rule: AllocationRule | str = AllocationRule.PRORATA,
     protection_strength: float = PRINCIPAL_PROTECTION_STRENGTH,
     expected_eds: int | None = None,
     include_standard_output: bool = True,
@@ -54,6 +54,15 @@ def run_principal_goblin_endpoint(
     Pasture-DM independently calculated spared hectares remain diagnostics and
     do not replace the national land control.
     """
+
+    try:
+        rule = allocation_rule if isinstance(allocation_rule, AllocationRule) else AllocationRule(str(allocation_rule))
+    except (TypeError, ValueError) as exc:
+        supported = tuple(item.value for item in AllocationRule)
+        raise ValueError(
+            f"{allocation_rule!r} is not a validated principal SC1 policy; "
+            f"choose one of {supported}"
+        ) from exc
 
     milestone = controls.milestone(controls.target_year)
 
@@ -83,7 +92,7 @@ def run_principal_goblin_endpoint(
     adult = allocate_adult_endpoint(
         panel,
         controls,
-        allocation_rule=allocation_rule,
+        allocation_rule=rule,
         protection_strength=protection_strength,
         expected_eds=expected_eds,
     )
@@ -96,7 +105,7 @@ def run_principal_goblin_endpoint(
     livestock["PATHWAY_NAME"] = controls.scenario_id
     livestock["PATHWAY_BASELINE_YEAR"] = int(controls.baseline_year)
     livestock["MILESTONE_YEAR"] = int(controls.target_year)
-    livestock["PATHWAY_ALLOCATION_RULE"] = allocation_rule.value
+    livestock["PATHWAY_ALLOCATION_RULE"] = rule.value
     livestock["NATIONAL_COHORT_TARGET_SOURCE"] = cohort_target_source
 
     if include_standard_output:
