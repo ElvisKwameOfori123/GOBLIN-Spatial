@@ -5,16 +5,15 @@ The production framework is deliberately narrow:
 1. read editable national GOBLIN controls;
 2. allocate adult dairy and suckler endpoints across EDs;
 3. propagate the 21 cattle cohorts while preserving ED signatures;
-4. keep sheep fixed unless an explicit national sheep control is supplied;
+4. keep sheep fixed in the current principal cattle transition;
 5. reconcile exactly to national livestock controls;
 6. spatialise authoritative released land through solved livestock pressure and
-   frozen 08B agricultural-capability capacity;
+   frozen agricultural-capability constraints;
 7. pass the frozen SC1 result to SC2/SC3 for land opportunity and allocation.
 
-Older experimental pathway, sequential, generic net-zero and cattle-study
-modules are not part of the supported runtime contract and are intentionally
-not re-exported here. They may be retained temporarily only as migration
-provenance until their references are removed.
+Superseded generic pathway, sequential, net-zero and cattle-study interfaces are
+not part of the supported runtime API. Reconstruction utilities remain separate
+from the principal scenario chain.
 """
 
 from goblin_spatial.scenario.control_table import (
