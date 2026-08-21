@@ -1,13 +1,8 @@
-"""Command-line interface for historical GOBLIN-Spatial data management.
+"""Command-line interface for the validated GOBLIN-Spatial baseline.
 
-The root ``goblin-spatial`` command is deliberately limited to the validated
-historical baseline and explicit data-management operations. Principal scenario
-runs use the separate ``goblin-spatial-principal`` entry point so old scenario
-experiments cannot be mistaken for the production SC1-SC3 workflow.
-
-Normal data management is repository-only. External soil, LPIS and geography
-sources are first-principles reconstruction inputs and are considered only when
-the user explicitly opts in.
+The root command manages repository-contained inputs and the historical build.
+Principal scenario runs use ``goblin-spatial-principal``. No command downloads
+or resolves model data from an external service.
 """
 
 from __future__ import annotations
@@ -23,28 +18,19 @@ from goblin_spatial.pipeline import run_baseline
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="goblin-spatial",
-        description="Build and manage the validated GOBLIN-Spatial historical baseline.",
+        description="Build and verify the validated GOBLIN-Spatial model.",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
     fetch_parser = sub.add_parser(
         "fetch-data",
-        help="Verify repository-contained model inputs; external rebuild sources are opt-in.",
+        help="Verify repository-contained model inputs. No downloads are performed.",
     )
     fetch_parser.add_argument("--manifest", default="data_manifest.yaml")
     fetch_parser.add_argument(
         "--verify-only",
         action="store_true",
-        help="Do not download anything; verify files that are already present.",
-    )
-    fetch_parser.add_argument(
-        "--include-reconstruction-sources",
-        action="store_true",
-        help=(
-            "Explicitly include optional external first-principles reconstruction "
-            "sources. Without this flag, fetch-data is repository-only and does "
-            "not contact Zenodo or any other external source."
-        ),
+        help="Compatibility flag; verification is always local/repository-only.",
     )
 
     build_parser = sub.add_parser(
@@ -63,12 +49,7 @@ def main() -> None:
     args = _parser().parse_args()
 
     if args.command == "fetch-data":
-        include_reconstruction = bool(args.include_reconstruction_sources)
-        fetch_data(
-            Path(args.manifest),
-            verify_only=bool(args.verify_only),
-            tracked_only=not include_reconstruction,
-        )
+        fetch_data(Path(args.manifest), verify_only=True, tracked_only=True)
         return
 
     if args.command == "build":
