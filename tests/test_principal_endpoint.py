@@ -16,7 +16,7 @@ from goblin_spatial.sheep.cohorts import GOBLIN_SHEEP_10
 
 
 ROOT = Path(__file__).resolve().parents[1]
-REFERENCE = ROOT / "data/controls/cohort2012-2020.csv"
+REFERENCE = ROOT / "data/inputs/baseline/05C_Cattle_Cohort_Relationships_2012_2020.csv"
 
 
 def _panel():
