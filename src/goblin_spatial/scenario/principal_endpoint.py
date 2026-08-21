@@ -13,6 +13,7 @@ from goblin_spatial.scenario.definition import AllocationRule
 from goblin_spatial.scenario.endpoint_allocation import allocate_adult_endpoint
 from goblin_spatial.scenario.endpoint_state import add_fixed_sheep_context, build_endpoint_cattle_state
 from goblin_spatial.scenario.goblin_controls import GoblinPathwayControls
+from goblin_spatial.scenario.metrics import add_sc1_ed_metrics
 from goblin_spatial.scenario.national_cohort_targets import (
     derive_national_cohort_targets,
     load_goblin_cohort_reference,
@@ -51,6 +52,10 @@ def run_principal_goblin_endpoint(
     When the pathway supplies category-resolved dairy/beef/sheep land-release
     controls, they take precedence over the older aggregate release spatialiser.
     Both routes retain the same authoritative national gross land total.
+
+    SC1 reporting metrics are attached only after the physical cattle state,
+    Standard Output valuation and any released-land spatialisation are complete.
+    They are diagnostics and never feed back into allocation.
     """
 
     milestone = controls.milestone(controls.target_year)
@@ -134,4 +139,5 @@ def run_principal_goblin_endpoint(
             releases,
             pasture_dm_t_per_head_by_year,
         )
-    return livestock
+
+    return add_sc1_ed_metrics(livestock)
