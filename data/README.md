@@ -1,14 +1,12 @@
 # GOBLIN-Spatial data contract
 
-The repository separates **normal model runtime inputs** from **optional first-principles reconstruction sources**.
+The production model is repository-contained. `data_manifest.yaml` is the machine-readable authority for the inputs required to build the validated historical baseline and run the principal 2020 SC1-SC3 chain.
 
-Normal 2020 scenario execution is designed to be reproducible from compact repository-contained inputs. It must not download LPIS parcels, soil packages or ED geometry and must not rebuild geospatial overlays automatically.
-
-`data_manifest.yaml` is the machine-readable authority for data roles, paths, checksums and external provenance.
+No normal model command downloads LPIS parcels, soil packages, ED geometry or any other model input from an external service.
 
 ## 1. Historical baseline inputs
 
-The validated 2015-2025 historical reconstruction uses the canonical files under `data/inputs/baseline/`:
+The validated 2015-2025 reconstruction uses the canonical files under `data/inputs/baseline/`:
 
 ```text
 data/inputs/baseline/
@@ -25,99 +23,82 @@ data/inputs/baseline/
 
 The 2020 CSO ED agricultural census is the fine-scale spatial anchor. Official annual county or regional controls reconstruct 2015-2025 livestock and land totals. GOBLIN biological relationships provide the 21 cattle and 10 sheep cohorts. IFS-2020 Standard Output coefficients provide fixed-2020 production-value exposure.
 
-The DAFM county sheep file is retained as hold-out validation evidence. It is not a production population control.
+The DAFM county sheep file is retained as hold-out validation evidence and is not a production population control.
 
-The historical pipeline ends at Stage 09:
+## 2. Principal scenario controls
 
-```text
-cattle -> sheep -> merge -> land/farm structure
-       -> clean baseline -> Standard Output
-       -> frozen ED cohort signatures
-```
-
-## 2. Principal national scenario controls
-
-The active national pathway table is:
+National scenario controls are stored in:
 
 ```text
 data/controls/scenario/GOBLIN_Scenario_Controls.csv
 ```
 
-It contains the national adult-cattle endpoints, target livestock land and explicit alternative-land targets used by the principal SC1-SC3 workflow.
-
-The frozen pasture-DM control used for livestock-pressure spatialisation is:
+Pasture dry-matter controls are stored in:
 
 ```text
 data/controls/pasture/GOBLIN_pasture_dm_2020_fixed.csv
 ```
 
-These controls do not replace the historical ED baseline. They define the national future against which that baseline is spatially stressed.
+Fixed Standard Output coefficients are stored in:
+
+```text
+data/controls/standard_output/IFS_SOC2020_IE_model_controls.csv
+```
+
+These controls define the national future and exposure accounting. They do not replace the historical ED baseline.
 
 ## 3. Frozen 2020 ED land context
 
-The normal 2020 spatial runtime uses one neutral compact control:
+The principal 2020 runtime uses:
 
 ```text
 data/controls/land/ED_Land_Context_2020/
+├── ED_Soil_Capability_08B.csv
+├── ED_Physical_Soil_08C.csv
+├── ED_LPIS_Context_2020_RUNTIME.csv
+├── manifest.json
+└── README.md
 ```
 
-The final logical object contains:
+The three CSVs each cover the same 2,857 ED model universe and are verified against their frozen SHA256 values before use. Runtime joins only the required fields in memory to form the validated 40-field land-context object.
 
-- 2,857 EDs;
-- 40 fields;
-- final 08B agricultural-capability evidence;
-- independent 08C mapped physical-soil evidence;
-- LPIS 2020 context;
-- 08B provenance of 2,820 direct ED profiles and 37 county fallbacks.
+The evidence layers retain separate roles:
 
-Its canonical logical SHA256 is:
+- 08B agricultural capability may constrain SC1 released-land geography;
+- LPIS 2020 enters only after SC1 is frozen to describe opportunity and eligibility;
+- 08C mapped physical soil enters only after SC1 as independent physical context;
+- none of the three can alter the historical livestock baseline or national scenario endpoint.
+
+The canonical logical land-context SHA256 is:
 
 ```text
 6a94c125413260ed462c9d5430fe6d39be7df48d282734eea218351829aa6e5d
 ```
 
-The three evidence layers share one storage object but retain separate modelling roles:
+The 08B provenance is fixed at 2,820 direct ED profiles and 37 county-fallback profiles.
 
-- SC1 uses the frozen 08B fields to constrain released-land geography;
-- SC2 attaches LPIS and independent 08C evidence after the SC1 release is frozen;
-- SC3 uses the SC2 opportunity and physical-eligibility outputs to allocate explicit national land-use targets.
+## 4. Reconstruction boundary
 
-The land context never changes the livestock endpoint or adult allocation.
+First-principles GIS reconstruction is not part of the production runtime or CI acceptance gate. Local reconstruction utilities remain available for provenance work when a researcher already possesses the required source files.
 
-## 4. Optional spatial reconstruction sources
-
-Large spatial files are provenance/reconstruction sources, not normal runtime dependencies. They include version-pinned soil, LPIS and ED-geography inputs such as:
-
-```text
-data/inputs/spatial/08B_NFS_Agricultural_Soil_Capability.csv
-data/inputs/spatial/08C_IFS_Mapped_Physical_Soil_Package.zip
-data/inputs/spatial/SC2_LPIS_2020_Frozen.parquet
-data/inputs/spatial/SC2_LPIS_2025_Frozen.parquet
-data/inputs/spatial/SC2_ED_Boundaries_Frozen.gpkg
-```
-
-The frozen external release is documented in `data_manifest.yaml`, including the versioned Zenodo record and checksums.
-
-Reconstruction workflows may use these files to reproduce the compact controls from first principles. Principal scenario execution must not require them to be present.
+A reconstructed control must never silently replace the frozen runtime controls. Replacement requires deliberate validation of ED universe, schema, accounting closures and checksums.
 
 ## 5. 2025 spatial status
 
-The historical data contain a valid 2025 ED livestock state, so SC1 may use 2025 as an updated livestock baseline sensitivity.
-
-A 2025 LPIS-dependent SC2/SC3 run is deliberately unavailable until a separately validated 2025 compact land-context control is created and frozen. The model will not reuse the 2020 LPIS snapshot as if it represented 2025.
+The historical model contains a valid 2025 ED livestock state, so SC1 may use 2025 as a livestock-baseline sensitivity. LPIS-dependent 2025 SC2/SC3 remains disabled until a separately validated compact 2025 land-context bundle is created.
 
 ## 6. Generated outputs
 
-Historical stage outputs and SC1-SC3 scenario results are generated products, not mandatory inputs. Typical outputs are written beneath `data/interim/` and `data/processed/`.
+Historical stage outputs and SC1-SC3 results are generated products, not mandatory inputs. They are written beneath `data/interim/` and `data/processed/`.
 
-The controlling distinction is therefore:
+The controlling distinction is:
 
 ```text
-canonical compact inputs
+repository-contained canonical inputs
         -> reproducible model runtime
 
-optional large provenance sources
-        -> explicit first-principles rebuild only
+local/manual reconstruction sources
+        -> provenance work only
 
 interim / processed files
         -> generated outputs
