@@ -6,19 +6,9 @@ status: "scenario-finalization"
 # ----------------------------
 # A normal clone contains every compact input required to build the validated
 # historical baseline and run the 2020 principal SC1 -> SC2 -> SC3 chain.
-# External spatial sources are optional first-principles reconstruction and
-# provenance inputs only. They are never required by normal runtime.
-
-optional_reconstruction_release:
-  repository: "Zenodo"
-  record_id: 22035538
-  version_doi: "10.5281/zenodo.22035538"
-  concept_doi: "10.5281/zenodo.22035537"
-  title: "GOBLIN-Spatial Frozen Model Inputs for Irish Electoral Division Agricultural and Land-Transition Modelling, Version 1.0.0"
-  publication_date: "2026-08-20"
-  license: "CC-BY-4.0"
-  role: "OPTIONAL_FIRST_PRINCIPLES_RECONSTRUCTION_ONLY"
-
+# The runtime data contract is repository-contained. No external data service is
+# used by the model. First-principles reconstruction, if ever required, is a
+# separate local/manual provenance activity using user-supplied source files.
 
 datasets:
   cso_ed_agricultural_baseline_2020:
@@ -105,6 +95,14 @@ datasets:
     sha256: "73196c3e4f26f31efdb527ded76ca5e016b2e6a128f8531be6260cae9429be88"
     required: true
 
+  standard_output_coefficients:
+    stage: "08"
+    module: [baseline, standard_output, scenario]
+    description: "Fixed 2020 Irish Standard Output coefficient control used for production-value exposure."
+    source: "git"
+    path: "data/controls/standard_output/IFS_SOC2020_IE_model_controls.csv"
+    required: true
+
   goblin_scenario_controls:
     stage: "SC1/SC3"
     module: [scenario, sc1, sc3]
@@ -114,6 +112,14 @@ datasets:
     sha256: "ce0a03982de16213bd81f28e3c94664dd105b604c67365003f1bea5423fcc95d"
     required: true
     note: "Runtime gross release is selected-year sum(ALL_GRASSLAND) minus TARGET_LIVESTOCK_LAND_HA."
+
+  pasture_dm_controls:
+    stage: "SC1"
+    module: [scenario, sc1, land_release]
+    description: "Fixed 2020 GOBLIN 31-cohort pasture dry-matter control used for spatial pressure accounting."
+    source: "git"
+    path: "data/controls/pasture/GOBLIN_pasture_dm_2020_fixed.csv"
+    required: true
 
   ed_land_context_2020:
     stage: "08B/08C/SC2"
@@ -137,61 +143,5 @@ datasets:
         path: "data/controls/land/ED_Land_Context_2020/ED_LPIS_Context_2020_RUNTIME.csv"
         sha256: "c8a6b66c9166ea3da0121def6225698037951d3022af02e5b42f2b54f4f13b2b"
     note: "The runtime loader verifies the three original compact CSVs, joins their identical ED universes in memory and enforces the 40-field scientific contract. SC1 uses only 08B fields; LPIS and 08C enter only after SC1 is frozen."
-
-  # OPTIONAL FIRST-PRINCIPLES REBUILD SOURCES. Never required by normal runtime.
-  nfs_agricultural_soil_capability:
-    stage: "REBUILD_08B"
-    module: [rebuild, agricultural_soil]
-    description: "Cathal/NFS agricultural soil-capability source used only to reproduce the frozen compact control."
-    source: "zenodo"
-    destination: "data/inputs/spatial/08B_NFS_Agricultural_Soil_Capability.csv"
-    url: "https://zenodo.org/records/22035538/files/08B_NFS_Agricultural_Soil_Capability.csv?download=1"
-    sha256: "4af6018a8860380aa0f45ba6acc47e9d894e27ec93975ea29eb2dfb4dc21c1dc"
-    required: false
-    note: "OPTIONAL_REBUILD_SOURCE; not read by normal principal scenario execution."
-
-  ifs_mapped_physical_soil_package:
-    stage: "REBUILD_08C"
-    module: [rebuild, physical_soil]
-    description: "Colm/IFS mapped physical-soil package used only to reproduce the frozen compact control."
-    source: "zenodo"
-    destination: "data/inputs/spatial/08C_IFS_Mapped_Physical_Soil_Package.zip"
-    url: "https://zenodo.org/records/22035538/files/08C_IFS_Mapped_Physical_Soil_Package.zip?download=1"
-    sha256: "8a73fdaa7f8277eafbb38a12cc9f736caff4c265e8617a9fc54c7a8d1c3ddf97"
-    required: false
-    note: "OPTIONAL_REBUILD_SOURCE; not read by normal principal scenario execution."
-
-  lpis_2020_frozen:
-    stage: "REBUILD_SC2"
-    module: [rebuild, sc2]
-    description: "Frozen LPIS 2020 parcel dataset used only to reproduce the compact 2020 LPIS control."
-    source: "zenodo"
-    destination: "data/inputs/spatial/SC2_LPIS_2020_Frozen.parquet"
-    url: "https://zenodo.org/records/22035538/files/SC2_LPIS_2020_Frozen.parquet?download=1"
-    sha256: "33ce7988006d53dc7599eabc300dbdc275b13a567e4ea4a48da16437e9f97247"
-    required: false
-    note: "OPTIONAL_REBUILD_SOURCE; not read by normal principal scenario execution."
-
-  lpis_2025_frozen:
-    stage: "FUTURE_REBUILD_SC2"
-    module: [rebuild, sc2]
-    description: "Frozen LPIS 2025 parcel dataset reserved for a separately validated future 2025 compact context."
-    source: "zenodo"
-    destination: "data/inputs/spatial/SC2_LPIS_2025_Frozen.parquet"
-    url: "https://zenodo.org/records/22035538/files/SC2_LPIS_2025_Frozen.parquet?download=1"
-    sha256: "493a1858f7b213d982ffb8fa99cfe0c1d9c50133596c73faf27079ec9dabb75e"
-    required: false
-    note: "No principal 2025 SC2/SC3 run is allowed until a separate compact 2025 context is validated and frozen."
-
-  ed_boundaries_frozen:
-    stage: "REBUILD_SPATIAL"
-    module: [rebuild, spatial]
-    description: "Frozen Electoral Division boundary layer used only for first-principles spatial reconstruction."
-    source: "zenodo"
-    destination: "data/inputs/spatial/SC2_ED_Boundaries_Frozen.gpkg"
-    url: "https://zenodo.org/records/22035538/files/SC2_ED_Boundaries_Frozen.gpkg?download=1"
-    sha256: "550b2ed967f5c5e7ecb9053586cf431df564d0a990f99f9f82eb8b8be44faca8"
-    required: false
-    note: "OPTIONAL_REBUILD_SOURCE; not read by normal principal scenario execution."
 
 # Generated Stage 01-09 and SC1-SC3 outputs are not mandatory inputs.
