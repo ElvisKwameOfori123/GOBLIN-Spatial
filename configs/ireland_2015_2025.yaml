@@ -71,8 +71,14 @@ files:
   agricultural_soil_profile: data/controls/soil/ED_GOBLIN_soil_profile.csv.xz
   physical_soil_package: data/inputs/spatial/08C_IFS_Mapped_Physical_Soil_Package.zip
 
-  # COMPACT SCENARIO CONTROLS. These are not read by run_baseline().
+  # EDITABLE NATIONAL SCENARIO CONTROLS. The scenario row is independent of the
+  # selected ED baseline. A 2020 or 2025 run derives gross released land from
+  # that year's actual ED ALL_GRASSLAND total minus TARGET_LIVESTOCK_LAND_HA.
+  scenario_controls: data/controls/scenario/GOBLIN_Scenario_Controls.csv
+
+  # Legacy/source-specific controls retained for provenance and regression only.
   scenario_endpoints:
+    - data/controls/scenario/GOBLIN_Scenario_Controls.csv
     - data/inputs/scenario/SC1_Cattle_Scenario_Endpoints_2050.csv
     - configs/styles_split_gas_pathway_controls.csv
   styles_split_gas_pathway_controls: configs/styles_split_gas_pathway_controls.csv
