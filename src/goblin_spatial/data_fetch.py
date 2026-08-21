@@ -86,8 +86,6 @@ def _verify_one(
     if not path.exists():
         return False, f"MISSING  {name}: {path}"
 
-    # Repository-controlled directories such as ED_Land_Context_2020 have an
-    # internal logical-object validator rather than a raw directory checksum.
     if path.is_dir():
         if git_tracked and not expected_hash:
             return True, f"OK       {name}: {path} [Git-tracked directory]"
@@ -106,6 +104,62 @@ def _verify_one(
             f"BAD HASH {name}: expected {algorithm}:{expected}, got {algorithm}:{actual}",
         )
     return True, f"OK       {name}: {path} [{algorithm}]"
+
+
+def _verify_logical_repository_control(
+    name: str,
+    path: Path,
+    info: dict[str, Any],
+) -> tuple[bool, str] | None:
+    """Verify a repository directory whose checksum describes a logical object.
+
+    ``ED_Land_Context_2020`` is stored as transparent text shards but is one
+    scientific CSV object. Merely checking that its directory exists would let
+    an incomplete transfer pass the ordinary repository-data gate, so its
+    reconstructed bytes and full scientific contract are validated here.
+    """
+
+    logical_sha = str(info.get("logical_sha256", "")).strip().lower()
+    if not logical_sha:
+        return None
+    if name != "ed_land_context_2020":
+        return False, f"NO LOGICAL VALIDATOR {name}: logical_sha256 is declared"
+    if not path.exists():
+        return False, f"MISSING  {name}: {path}"
+    if not path.is_dir():
+        return False, f"INVALID  {name}: expected repository directory at {path}"
+
+    try:
+        from goblin_spatial.land.context import (
+            land_context_sha256,
+            read_land_context_table,
+        )
+
+        actual = land_context_sha256(path).lower()
+        if actual != logical_sha:
+            return (
+                False,
+                f"BAD LOGICAL HASH {name}: expected sha256:{logical_sha}, "
+                f"got sha256:{actual}",
+            )
+        frame = read_land_context_table(path, verify_sha256=False)
+    except Exception as exc:
+        return False, f"INVALID  {name}: {exc}"
+
+    expected_rows = info.get("expected_rows")
+    expected_columns = info.get("expected_columns")
+    if expected_rows is not None and len(frame) != int(expected_rows):
+        return False, f"BAD ROW COUNT {name}: expected {expected_rows}, got {len(frame)}"
+    if expected_columns is not None and len(frame.columns) != int(expected_columns):
+        return (
+            False,
+            f"BAD COLUMN COUNT {name}: expected {expected_columns}, got {len(frame.columns)}",
+        )
+    return (
+        True,
+        f"OK       {name}: {path} [logical sha256:{actual}; "
+        f"rows={len(frame):,}; columns={len(frame.columns)}]",
+    )
 
 
 def _project_path(project_root: Path, value: str | Path) -> Path:
@@ -255,12 +309,16 @@ def fetch_data(
         required = bool(info.get("required", True))
         git_tracked = bool(info.get("git_tracked", source == "git"))
 
-        ok, message = _verify_one(
-            name,
-            archive_path,
-            expected,
-            git_tracked=git_tracked,
-        )
+        logical_result = _verify_logical_repository_control(name, archive_path, info)
+        if logical_result is not None:
+            ok, message = logical_result
+        else:
+            ok, message = _verify_one(
+                name,
+                archive_path,
+                expected,
+                git_tracked=git_tracked,
+            )
 
         if not ok and source not in LOCAL_SOURCES and not verify_only:
             url = info.get("url")
