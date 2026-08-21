@@ -1,102 +1,128 @@
 # GOBLIN-Spatial principal scenario architecture
 
-## 1. Model boundary
+## 1. Governing model boundary
 
-GOBLIN-Spatial does not generate an alternative national future. It spatialises a national GOBLIN pathway while preserving the national quantities supplied by that pathway.
-
-The governing contract is:
+GOBLIN-Spatial does not create a competing national future. It spatialises a national GOBLIN pathway while preserving the national quantities supplied by that pathway.
 
 > **GOBLIN establishes the national livestock and land-use transition. GOBLIN-Spatial resolves its geography.**
 
-This separates four questions that should not be conflated:
-
-1. What national livestock endpoint is being studied?
-2. Where does the required livestock adjustment occur?
-3. Where is the associated national released-land total represented spatially?
-4. Which parts of that released-land geography are compatible with explicit alternative land-use targets?
-
-The production sequence is therefore:
+The supported production chain is:
 
 ```text
 Historical Stages 01-09
         -> validated ED baseline
-        -> frozen ED_Land_Context_2020
+        -> repository-contained 2020 land-context bundle
         -> SC1 livestock incidence and released-land geography
         -> SC2 opportunity and physical eligibility
         -> SC3 feasible land-use allocation
 ```
 
-The principal spatial baseline is 2020. A 2025 ED livestock state may be used for SC1 sensitivity analysis, but LPIS-dependent SC2/SC3 are disabled until a separately validated 2025 land-context control is available.
+The principal spatial baseline is 2020. A 2025 livestock state may be used for SC1 sensitivity analysis, but LPIS-dependent 2025 SC2/SC3 are blocked until a separately validated compact 2025 spatial context is frozen.
 
-## 2. Historical state and fixed spatial evidence
+## 2. Repository-contained 2020 spatial evidence
 
-The historical reconstruction contains 2,857 EDs and preserves the livestock, land, farm-structure and Standard Output variables required by the scenario analysis. Stage 09 provides the ED-specific cattle cohort structure used to propagate national endpoints spatially.
+Normal runtime uses:
 
-The principal scenario runtime uses one repository-contained 2020 spatial control:
+`data/controls/land/ED_Land_Context_2020/`
 
-`data/controls/land/ED_Land_Context_2020`
+with three authoritative compact files:
 
-Its final contract is 2,857 EDs by 40 neutral fields. It carries three evidence layers in one reproducible storage object:
+```text
+ED_Soil_Capability_08B.csv
+ED_Physical_Soil_08C.csv
+ED_LPIS_Context_2020_RUNTIME.csv
+```
 
-- **08B agricultural capability**, used in SC1 released-land spatialisation;
-- **08C mapped physical soil**, used downstream as independent physical evidence;
-- **LPIS 2020 context**, used downstream for opportunity and eligibility.
+All three cover the same 2,857 model EDs. The runtime verifies their frozen SHA256 values and joins only the required columns in memory. The result is the validated 40-field logical context used by SC1 and SC2.
 
-These layers are not blended into one soil concept. Shared storage is an engineering decision, not a scientific merger.
+The three layers remain scientifically distinct.
 
-The 08B final model-ED control preserves the validated provenance hierarchy of 2,820 direct ED profiles and 37 county fallbacks. Runtime attachment does not re-run that hierarchy.
+### 2.1 08B agricultural capability
+
+08B contains Class 1-6 shares, G1/G2/G3 shares, forest yield-class context and peat/cutover context. It is the agricultural-capability layer used in the SC1 released-land capacity solve and downstream capability interpretation.
+
+Validated provenance is preserved exactly:
+
+```text
+2,820 direct ED profiles
+37 county-fallback profiles
+```
+
+The required mapping is:
+
+```text
+Class1 + Class2 = G1
+Class3 + Class4 = G2
+Class5 + Class6 = G3
+```
+
+Runtime does not re-run the original source-resolution hierarchy.
+
+### 2.2 08C independent mapped physical soil
+
+08C is independent physical-soil context used only after SC1 is frozen. It does not alter livestock allocation or released-land hectares and is not blended into 08B.
+
+Mapped peat is not automatically farmed peat and is not automatically rewettable land.
+
+### 2.3 LPIS 2020 context
+
+LPIS 2020 is a neutral evidence/context layer used in SC2. It was recovered from mature 2020 SC2 results and cross-validated between SI_SG and BE_SG across all four allocation policies.
+
+LPIS does not replace `ALL_GRASSLAND`, allocate livestock, generate released land or directly choose realised SC3 hectares.
 
 ## 3. SC1: national livestock endpoint to ED livestock geography
 
 ### 3.1 National authority
 
-The editable scenario table supplies absolute national controls for the selected pathway. The production runner does not accept a second generic fractional-reduction scenario definition.
+The editable scenario control supplies the national pathway endpoint. The production runner does not accept a second generic fractional-reduction scenario definition.
 
-Adult dairy and suckler cows are the primary national livestock controls. A pathway may expand one adult category while contracting the other, provided the overall endpoint is internally feasible.
-
-Where national total-cattle or exact 21-cohort targets are supplied, they remain authoritative. Where only adult endpoints are supplied, the frozen GOBLIN/COHORTS relationship reference is used to derive national follower-cohort margins.
+Adult dairy and suckler cows are the primary livestock controls. Where national total-cattle or exact 21-cohort targets are supplied, those margins remain authoritative. Where only adult endpoints are supplied, the frozen GOBLIN/COHORTS reference derives the national follower-cohort margins.
 
 ### 3.2 Adult incidence policies
 
-The supported SC1 incidence policies are:
+The supported incidence policies are:
 
-- `PRORATA`
-- `DAIRY_PROTECTION`
-- `ECONOMIC_CAPACITY_PROTECTION`
-- `SOCIAL_VULNERABILITY_PROTECTION`
+```text
+PRORATA
+DAIRY_PROTECTION
+ECONOMIC_CAPACITY_PROTECTION
+SOCIAL_VULNERABILITY_PROTECTION
+```
 
-The historical identifier `ECONOMIC_CAPACITY_PROTECTION` is retained for reproducibility. Operationally, the score protects EDs with lower economic capacity, meaning greater inferred vulnerability under the fixed-2020 Standard Output exposure indicators.
+Protection redistributes a fixed national contraction. It does not reduce the required national adjustment. Category expansion remains proportional and cannot seed a new adult-category ED footprint.
 
-Protection changes **where** a fixed national contraction lands. It does not reduce the national contraction. Category expansion remains proportional and cannot seed a new ED footprint.
+The historical identifier `ECONOMIC_CAPACITY_PROTECTION` is retained for reproducibility. Operationally, the policy protects EDs with lower inferred economic capacity and therefore greater vulnerability under the fixed-2020 production-value indicators.
 
-### 3.3 ED-specific cattle cohort response
+### 3.3 ED cattle cohort response
 
-The cattle state contains 21 cohorts. Dairy-origin follower cohorts use dairy cows as their parent signal, beef-origin follower cohorts use suckler cows, and bulls use the combined adult-cow signal.
+The cattle state contains 21 cohorts. Dairy-origin followers use dairy cows as their parent signal, beef-origin followers use suckler cows, and bulls use the combined adult-cow signal.
 
-For each follower cohort, the baseline determines its spatial relationship to the relevant parent population. The hierarchy is:
+The baseline determines each follower cohort's dependency class:
 
-1. `LOCAL_ED` when the ED contains both the cohort and its parent adults;
-2. `COUNTY_RECEIVER` when the cohort is present but its parent adults are elsewhere in the county;
-3. `NATIONAL_ORPHAN` only when no relevant parent adults exist in the county;
-4. `NONE` when the cohort is absent.
+```text
+LOCAL_ED
+COUNTY_RECEIVER
+NATIONAL_ORPHAN
+NONE
+```
 
-This preserves ED-specific cohort fingerprints rather than replacing them with a national average coefficient. Receiver relationships are accounting dependencies, not claims about observed animal movements.
+This preserves ED-specific cohort fingerprints rather than replacing them with one national coefficient. Receiver relationships are accounting dependencies, not claims about observed animal movements.
 
-When exact national cohort margins are imposed, reconciliation changes the minimum necessary ED counts while respecting the existing cohort footprint. A positive target cannot create a cohort in an ED where that cohort was absent at baseline.
+Exact national cohort margins are reconciled without creating a cohort in an ED where it was absent at baseline.
 
 ### 3.4 Sheep
 
-The principal transition is cattle focused. Sheep are carried unchanged unless an explicit national sheep control is introduced. A numerical zero in an unrelated scenario table field is not interpreted as a command to remove sheep.
+The principal transition is cattle focused. Sheep are fixed unless an explicit national sheep control is introduced. A numerical zero elsewhere in a pathway table is not interpreted as a sheep-removal instruction.
 
 ### 3.5 Standard Output
 
-Standard Output is appended after the physical livestock state is solved. It is a fixed-2020 livestock production-value exposure measure. It is not farm income, profit, welfare, compensation or a behavioural response variable, and it never changes the national or ED livestock solution.
+Standard Output is appended after the physical livestock state is solved. It is fixed-2020 livestock production-value exposure, not income, profit, welfare or compensation, and it never changes the livestock solution.
 
 ## 4. SC1 released-land geography
 
 ### 4.1 National released land is authoritative
 
-The national gross released-land total comes from GOBLIN land accounting. For a selected baseline run:
+For the selected baseline:
 
 ```text
 Gross livestock-land release
@@ -104,111 +130,124 @@ Gross livestock-land release
     - pathway TARGET_LIVESTOCK_LAND_HA
 ```
 
-GOBLIN-Spatial does not replace that national quantity with an independently calculated pasture-DM spared-land total.
+GOBLIN-Spatial does not replace this national quantity with an independently calculated local pasture-DM spared-land total.
 
 ### 4.2 Role of pasture dry matter
 
-The 31-cohort pasture-DM control remains useful for spatial pressure accounting. Cohort-specific changes in pasture demand identify where livestock pressure falls most strongly. This signal is used to distribute the externally controlled national release across EDs.
+The 31-cohort pasture-DM control provides the spatial livestock-pressure signal and an independent land-requirement diagnostic. It does not become a second national land authority.
 
-The independently implied grassland requirement remains a diagnostic. It can reveal tension between the national land control and the livestock/feed state, but it is not a second national land authority.
+All pathways use the same spatialisation method. Dairy, beef and sheep pressure contributions are derived from the solved livestock states and rescaled to the authoritative national gross release.
 
-### 4.3 Symmetric pathway treatment
+### 4.3 08B capacity constraint
 
-All pathways use the same release-spatialisation method. Dairy, beef and sheep pressure contributions are derived from the solved baseline/scenario pasture-DM states and rescaled to the authoritative national gross release.
+Released land must remain within each ED's `ALL_GRASSLAND` capacity and its frozen G1/G2/G3 agricultural-capability composition.
 
-No SI_SG or BE_SG pathway receives a special hard-coded system-land allocation inside the spatial engine.
-
-### 4.4 08B capacity constraint
-
-Released land is represented within each ED's `ALL_GRASSLAND` capacity and its frozen 08B G1/G2/G3 composition. SC1 cannot allocate more released land to an ED or soil group than the corresponding grassland capacity.
-
-08C physical soil and LPIS do not enter this livestock-release solve.
+08C and LPIS do not enter this SC1 solve.
 
 ## 5. SC2: released land to opportunity and eligibility
 
-SC2 takes the frozen SC1 result as an immutable input. It never recomputes livestock and never changes the ED released-land vector.
+SC2 starts only after SC1 is frozen. It cannot recompute livestock or change any SC1 released-land hectare.
 
-SC2 attaches the 2020 LPIS and independent 08C evidence from the frozen land context, then derives opportunity scores and physical eligibility quantities used by SC3.
+SC2 combines:
 
-The interpretation is:
+```text
+frozen SC1 release
++ 08B capability
++ LPIS 2020 context
++ independent 08C physical soil
+```
+
+The central interpretation rule is:
 
 ```text
 PotentialRelease != Opportunity != RealisedConversion
 ```
 
-`PotentialRelease` is the spatial budget associated with the national livestock pathway. `Opportunity` describes compatibility with alternative uses. Neither quantity is a prediction of actual conversion.
+Potential release is the spatial land budget associated with the national livestock pathway. Opportunity describes compatibility with alternative uses. Neither is a forecast of actual land conversion.
 
 ## 6. SC3: explicit national targets to feasible ED allocations
 
-SC3 receives land-use targets from the same editable national scenario control. The allocator never invents target hectares.
+SC3 receives its land-use targets from the same editable national pathway control. The allocator never invents hectares.
 
-Supported targets are:
+Current uses are:
 
-- AD grass
-- biorefinery grass
-- willow
-- additional tillage
-- additional forest
-- rewetting
+```text
+AD grass
+biorefinery grass
+willow
+additional tillage
+additional forest
+rewetting
+```
 
-The main mineral/bioeconomy uses are allocated jointly subject to ED released-land budgets, use-specific physical eligibility and nested shared physical pools. The first optimisation objective minimises total unmet target hectares. Conditional on that minimum, the second objective favours higher SC2 opportunity scores.
+The main Stage-A uses are allocated jointly subject to ED released-land budgets, use-specific eligibility and shared physical pools. The optimisation first minimises total unmet target hectares and then, conditional on that minimum, favours higher opportunity scores.
 
-If a national target is spatially infeasible, the model reports the unmet hectares rather than forcing conversion into an ineligible ED.
+If a national target is infeasible, the unmet hectares are reported rather than forced into an unsuitable ED.
 
-### Rewetting accounting
+### 6.1 Rewetting accounting
 
-Rewetting is handled sequentially after the main released-land allocation. Its capacity is constrained by the post-allocation residual and an externally anchored drained-organic-grassland stock spatialised using the relevant 08B organic-soil context.
+Rewetting is handled after Stage A. Its capacity is constrained by the post-Stage-A residual and the anchored drained-organic-grassland stock.
 
-Two quantities must remain distinct:
+Two quantities remain distinct:
 
-- **GOBLIN parent Available land**, the gross released land left after the principal new-use targets before the rewetting overlay;
-- **strict residual available land**, what remains after realised rewetting in the exclusive spatial accounting.
+- **GOBLIN parent Available land**: released land left after the principal new-use targets before the rewetting overlay;
+- **strict residual available land**: land remaining after realised rewetting in the exclusive spatial accounting.
 
-This prevents the source pathway's `Available` category from being incorrectly relabelled as gross spared grassland.
+The second quantity must not be presented as if it were the source pathway's original `Available` category.
 
 ## 7. Pathway consistency
 
-A scenario run is a single internally consistent package. The pathway identifier controls its livestock endpoint, livestock-land target, land-use targets and reconciliation outputs.
-
-Components from different pathways must never be mixed. In particular:
+A run is one internally consistent package. Livestock endpoints, livestock-land targets, alternative-use targets and reconciliation outputs must all come from the same pathway identifier.
 
 ```text
-SI_SG livestock + SI_SG land release + SI_SG land-use targets
-BE_SG livestock + BE_SG land release + BE_SG land-use targets
-ALL_GAS_NZ livestock + ALL_GAS_NZ land release + ALL_GAS_NZ land-use targets
+SI_SG       -> SI_SG controls throughout
+BE_SG       -> BE_SG controls throughout
+ALL_GAS_NZ  -> ALL_GAS_NZ controls throughout
 ```
 
-The scenario control CSV is the runtime authority for the active pathways and their current endpoint values.
+The current scenario CSV is the runtime authority.
 
 ## 8. Reproducibility boundary
 
-A normal 2020 scenario run is intentionally lightweight. It requires the validated historical baseline and repository-contained compact controls. It must not automatically:
+A normal 2020 run is repository-contained. It requires no external spatial source and must not automatically:
 
-- download LPIS parcels;
-- fetch ED geometry;
-- download soil packages;
-- rebuild GIS overlays;
-- regenerate the frozen 2020 land context.
+```text
+download LPIS parcels
+download soil packages
+fetch ED geometry
+run GIS intersections
+rebuild the compact 2020 land controls
+```
 
-Those operations belong to explicit first-principles reconstruction workflows. The heavy GitHub Actions are manual-only for the same reason.
+Those operations belong only to explicit first-principles reconstruction workflows. External reconstruction must be deliberately requested and heavy GitHub Actions are manual-only.
 
-## 9. Interpretation for strategic foresight
+## 9. Strategic-foresight interpretation
 
-GOBLIN-Spatial is not a parcel-level land-use forecast and does not predict which individual farms will adopt a particular transition.
+GOBLIN-Spatial is not a parcel-level land-use forecast and does not predict individual farm adoption.
 
-Its analytical purpose is to identify:
+Its purpose is to identify:
 
-- EDs with robust livestock-transition exposure across plausible national pathways;
+- EDs with robust livestock-transition exposure across plausible pathways;
 - EDs whose exposure depends strongly on the incidence rule;
-- locations where released-land geography aligns with alternative land-use opportunity;
-- locations where national land-use targets encounter spatial constraints;
-- areas where earlier policy preparation may be needed because high adjustment exposure coincides with weak transition opportunity.
+- locations where released-land geography aligns with alternative-use opportunity;
+- locations where national land-use targets encounter spatial constraints; and
+- areas where high adjustment exposure and weak opportunity indicate a need for earlier transition preparation.
 
-Protection, opportunity and compatibility should therefore be interpreted as spatial stress-test results, not behavioural predictions.
+## 10. Supported commands
 
-## 10. Supported runtime
+Repository-only input verification:
 
-The principal command is:
+```bash
+goblin-spatial fetch-data --verify-only
+```
+
+Historical baseline:
+
+```bash
+goblin-spatial build --config configs/ireland_2015_2025.yaml
+```
+
+Principal scenarios:
 
 ```bash
 goblin-spatial-principal <SCENARIO_ID> --baseline-year 2020 --stage SC1
@@ -216,4 +255,11 @@ goblin-spatial-principal <SCENARIO_ID> --baseline-year 2020 --stage SC2
 goblin-spatial-principal <SCENARIO_ID> --baseline-year 2020 --stage SC3
 ```
 
-`goblin-spatial` is reserved for the historical baseline and data-management commands. `goblin-spatial-lpis` is retained only as an explicit reconstruction tool and is not invoked by the principal runtime.
+Optional first-principles reconstruction is separate and explicit:
+
+```bash
+goblin-spatial fetch-data --include-reconstruction-sources
+goblin-spatial-lpis ...
+```
+
+These reconstruction commands are not invoked by the principal runtime.
