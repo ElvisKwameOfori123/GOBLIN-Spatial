@@ -1,4 +1,16 @@
-"""Public land API for the validated baseline and principal scenario workflow."""
+"""Supported land API for the validated baseline and principal SC1-SC3 workflow.
+
+The production land framework is intentionally separated into three roles:
+
+* historical land/farm-structure reconstruction;
+* one frozen 2020 ED land context used as neutral spatial evidence;
+* downstream SC2 opportunity/eligibility and SC3 target allocation.
+
+Potential release, opportunity and realised conversion are distinct quantities.
+The frozen land context never changes livestock allocation. Heavy LPIS, soil and
+geometry reconstruction remains an explicit provenance workflow, not a normal
+scenario dependency.
+"""
 
 from .panel import add_land
 from .context import (
