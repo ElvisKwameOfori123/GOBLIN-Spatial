@@ -1,21 +1,14 @@
-"""SC2 evidence handoff after a frozen SC1 cattle/land-release result.
+"""SC2 evidence handoff after a frozen principal SC1 result.
 
-SC2 begins from an immutable ED release row total.  This module attaches the
-validated 08B agricultural-capability profile, the baseline-matched LPIS ED
-profile, and an optional compact 08C physical-soil profile without changing the
-SC1 cattle state or released hectares.
+SC2 never recomputes the land released in SC1. Principal SC1 has already used
+precomputed 08B agricultural capability as a capacity constraint and therefore
+already supplies the soil-resolved release columns ``GOBLIN_RELEASED_G1_HA`` to
+``GOBLIN_RELEASED_G3_HA``. SC2 carries those hectares forward exactly, attaches
+the baseline-matched compact LPIS profile, and optionally attaches the separate
+precomputed 08C mapped physical-soil context.
 
-The only hectare partition performed here is the explicit modelling handoff
-already adopted for 08B:
-
-    released_Gi(ed) = frozen_release(ed) * 08B_Gi_share(ed)
-
-This is a proportional within-ED partition of already released land.  It is not
-an observation of the exact parcels released from livestock production.
-
-08C remains independent physical context.  Its mapped-soil shares are attached
-but are not multiplied by release and are not blended with 08B into a synthetic
-soil score.
+08C is contextual evidence only. It is not multiplied by released hectares and
+is never blended with 08B into a synthetic observed soil-by-release map.
 """
 
 from __future__ import annotations
@@ -26,18 +19,11 @@ import numpy as np
 import pandas as pd
 
 from goblin_spatial.land.lpis import add_ed_lpis_context
-from goblin_spatial.soil import add_ed_agricultural_soil, canonical_csoed
+from goblin_spatial.soil import add_principal_08c_context
 
 
-PHYSICAL_SOIL_SHARE_COLUMNS = (
-    "PHYSICAL_SOIL_DEEP_WELL_DRAINED_SHARE",
-    "PHYSICAL_SOIL_SHALLOW_WELL_DRAINED_SHARE",
-    "PHYSICAL_SOIL_POORLY_DRAINED_SHARE",
-    "PHYSICAL_SOIL_POORLY_DRAINED_PEATY_SHARE",
-    "PHYSICAL_SOIL_ALLUVIUM_SHARE",
-    "PHYSICAL_SOIL_PEAT_SHARE",
-    "PHYSICAL_SOIL_MISCELLANEOUS_SHARE",
-)
+SC1_SOIL_RELEASE_COLUMNS = tuple(f"GOBLIN_RELEASED_G{i}_HA" for i in (1, 2, 3))
+SC2_SOIL_RELEASE_COLUMNS = tuple(f"SC2_RELEASED_G{i}_HA" for i in (1, 2, 3))
 
 
 def _numeric(frame: pd.DataFrame, column: str) -> np.ndarray:
@@ -49,73 +35,9 @@ def _numeric(frame: pd.DataFrame, column: str) -> np.ndarray:
     return values
 
 
-def read_physical_soil_context(
-    source: str | Path | pd.DataFrame,
-) -> pd.DataFrame:
-    """Read the compact 08C ED physical-soil contract.
-
-    The table must contain one row per model ED and the seven canonical physical
-    soil shares.  Shares describe the mapped physical-soil frame only.  They do
-    not claim to be observed grassland-by-soil shares or rewettable hectares.
-    """
-
-    frame = source.copy() if isinstance(source, pd.DataFrame) else pd.read_csv(Path(source), low_memory=False)
-    required = {"CSOED", *PHYSICAL_SOIL_SHARE_COLUMNS}
-    missing = sorted(required - set(frame.columns))
-    if missing:
-        raise ValueError(f"08C physical-soil context missing columns: {missing}")
-
-    out = frame[["CSOED", *PHYSICAL_SOIL_SHARE_COLUMNS]].copy()
-    out["CSOED_CANONICAL"] = out["CSOED"].map(canonical_csoed)
-    if out["CSOED_CANONICAL"].eq("").any() or out["CSOED_CANONICAL"].duplicated().any():
-        raise ValueError("08C physical-soil context must contain one valid row per CSOED")
-
-    values = []
-    for column in PHYSICAL_SOIL_SHARE_COLUMNS:
-        numeric = pd.to_numeric(out[column], errors="raise").to_numpy(dtype=float)
-        if (~np.isfinite(numeric)).any() or ((numeric < -1e-12) | (numeric > 1.0 + 1e-12)).any():
-            raise ValueError(f"{column} must contain finite shares in [0, 1]")
-        numeric = np.clip(numeric, 0.0, 1.0)
-        out[column] = numeric
-        values.append(numeric)
-    share_sum = np.sum(np.column_stack(values), axis=1)
-    if not np.allclose(share_sum, 1.0, atol=1e-8):
-        raise ValueError("08C physical-soil shares must close to one within ED")
-    return out
-
-
-def add_physical_soil_context(
-    frame: pd.DataFrame,
-    source: str | Path | pd.DataFrame,
-) -> pd.DataFrame:
-    """Attach independent 08C physical-soil shares without altering SC1 release."""
-
-    if "CSOED" not in frame.columns:
-        raise ValueError("08C attachment requires CSOED")
-    physical = read_physical_soil_context(source)
-    out = frame.copy()
-    original_csoed = out["CSOED"].copy()
-    out["_SC2_PHYSICAL_KEY"] = out["CSOED"].map(canonical_csoed)
-    attach = physical.drop(columns="CSOED").rename(
-        columns={"CSOED_CANONICAL": "_SC2_PHYSICAL_KEY"}
-    )
-    out = out.merge(
-        attach,
-        on="_SC2_PHYSICAL_KEY",
-        how="left",
-        validate="many_to_one",
-    )
-    if out[list(PHYSICAL_SOIL_SHARE_COLUMNS)].isna().any().any():
-        raise ValueError("08C physical-soil context does not cover every SC2 ED")
-    out["SC2_PHYSICAL_SOIL_CONTEXT_AVAILABLE"] = True
-    out["CSOED"] = original_csoed.to_numpy()
-    return out.drop(columns="_SC2_PHYSICAL_KEY")
-
-
 def prepare_sc2_context(
     sc1_ed: pd.DataFrame,
     *,
-    agricultural_soil_profile: str | Path | pd.DataFrame,
     lpis_profile: str | Path | pd.DataFrame,
     baseline_year: int,
     physical_soil_context: str | Path | pd.DataFrame | None = None,
@@ -123,13 +45,22 @@ def prepare_sc2_context(
 ) -> pd.DataFrame:
     """Build the policy-neutral SC2 evidence frame from one frozen SC1 endpoint.
 
-    The returned table still contains exactly the same release quantity in every
-    ED.  08B partitions that release by G1/G2/G3 agricultural capability.  LPIS
-    adds the matching 2020/2025 parcel-management context.  08C, when supplied,
-    remains independent mapped physical-soil evidence.
+    Required scientific invariants
+    ------------------------------
+    * the SC1 ED release vector is immutable;
+    * G1/G2/G3 released hectares are copied from the soil-constrained SC1 solve,
+      not recreated from ED soil shares;
+    * LPIS 2020 is attached only to a 2020 run and LPIS 2025 only to a 2025 run;
+    * optional 08C remains independent mapped physical-soil context.
     """
 
-    required = {"CSOED", "County", "ALL_GRASSLAND", release_column}
+    required = {
+        "CSOED",
+        "County",
+        "ALL_GRASSLAND",
+        release_column,
+        *SC1_SOIL_RELEASE_COLUMNS,
+    }
     missing = sorted(required - set(sc1_ed.columns))
     if missing:
         raise ValueError(f"SC2 context missing frozen SC1 columns: {missing}")
@@ -144,70 +75,77 @@ def prepare_sc2_context(
         raise ValueError("frozen SC1 release exceeds ED ALL_GRASSLAND capacity")
     release_before = np.maximum(release_before, 0.0)
 
+    sc1_by_soil = np.column_stack(
+        [_numeric(sc1_ed, column) for column in SC1_SOIL_RELEASE_COLUMNS]
+    )
+    if (sc1_by_soil < -1e-9).any():
+        raise ValueError("SC1 soil-resolved release cannot be negative")
+    if not np.allclose(sc1_by_soil.sum(axis=1), release_before, atol=1e-7):
+        raise AssertionError(
+            "SC1 G1/G2/G3 released hectares do not close to frozen ED release"
+        )
+
     out = sc1_ed.copy()
-    if "GOBLIN_SOIL_G1_SHARE" not in out.columns:
-        out = add_ed_agricultural_soil(out, agricultural_soil_profile)
-
-    shares = []
-    for group in (1, 2, 3):
-        column = f"GOBLIN_SOIL_G{group}_SHARE"
-        share = _numeric(out, column)
-        if ((share < -1e-12) | (share > 1.0 + 1e-12)).any():
-            raise ValueError(f"{column} must lie in [0, 1]")
-        share = np.clip(share, 0.0, 1.0)
-        shares.append(share)
-        out[f"SC2_RELEASED_G{group}_HA"] = release_before * share
-    if not np.allclose(np.sum(np.column_stack(shares), axis=1), 1.0, atol=1e-8):
-        raise AssertionError("08B G1/G2/G3 shares do not close before SC2 release partition")
-    if not np.allclose(
-        out[[f"SC2_RELEASED_G{i}_HA" for i in (1, 2, 3)]].sum(axis=1).to_numpy(dtype=float),
-        release_before,
-        atol=1e-7,
-    ):
-        raise AssertionError("SC2 08B released-land partition does not close to frozen SC1 release")
-
     out["SC2_POTENTIAL_RELEASE_HA"] = release_before
-    out["SC2_08B_RELEASE_PARTITION_METHOD"] = "ED_08B_SHARE_PROPORTIONAL"
+    for source, target in zip(
+        SC1_SOIL_RELEASE_COLUMNS,
+        SC2_SOIL_RELEASE_COLUMNS,
+        strict=True,
+    ):
+        out[target] = pd.to_numeric(out[source], errors="raise").to_numpy(dtype=float)
+    out["SC2_08B_RELEASE_PARTITION_METHOD"] = "FROZEN_SC1_08B_CAPACITY_SOLVE"
 
+    # Agricultural organic-soil evidence remains a proxy for interpreting the
+    # released-land envelope. It is not an observed joint parcel distribution.
     if "IFS_PEAT_CUTOVER_UAA_SHARE" in out.columns:
         peat_share = pd.to_numeric(
             out["IFS_PEAT_CUTOVER_UAA_SHARE"], errors="coerce"
         ).to_numpy(dtype=float)
         valid = np.isfinite(peat_share)
         peat_share = np.where(valid, np.clip(peat_share, 0.0, 1.0), np.nan)
-        out["SC2_08B_PEAT_CUTOVER_RELEASE_CONTEXT_HA_PROXY"] = release_before * peat_share
+        out["SC2_08B_PEAT_CUTOVER_RELEASE_CONTEXT_HA_PROXY"] = (
+            release_before * peat_share
+        )
         out["SC2_08B_PEAT_CUTOVER_CONTEXT_AVAILABLE"] = valid
 
-    if "LPIS_GRASS_CONTEXT_AVAILABLE" not in out.columns:
-        out = add_ed_lpis_context(
-            out,
-            lpis_profile,
-            baseline_year=int(baseline_year),
-        )
-    if not (pd.to_numeric(out["LPIS_PROFILE_YEAR"], errors="raise").astype(int) == int(baseline_year)).all():
-        raise AssertionError("SC2 LPIS context does not match the selected run baseline year")
+    out = add_ed_lpis_context(
+        out,
+        lpis_profile,
+        baseline_year=int(baseline_year),
+    )
+    lpis_year = pd.to_numeric(out["LPIS_PROFILE_YEAR"], errors="raise").astype(int)
+    if not lpis_year.eq(int(baseline_year)).all():
+        raise AssertionError("SC2 LPIS context does not match selected run baseline year")
 
+    # LPIS peat-grass is parcel context. Multiplying its share by the ED release
+    # is retained only as an explicitly labelled opportunity proxy, not as an
+    # observed released-peat hectare estimate.
     if "LPIS_PEAT_GRASS_SHARE" in out.columns:
-        peat_grass = pd.to_numeric(out["LPIS_PEAT_GRASS_SHARE"], errors="coerce").to_numpy(dtype=float)
+        peat_grass = pd.to_numeric(
+            out["LPIS_PEAT_GRASS_SHARE"], errors="coerce"
+        ).to_numpy(dtype=float)
         valid = np.isfinite(peat_grass)
         peat_grass = np.where(valid, np.clip(peat_grass, 0.0, 1.0), np.nan)
-        out["SC2_LPIS_PEAT_GRASS_RELEASE_CONTEXT_HA_PROXY"] = release_before * peat_grass
+        out["SC2_LPIS_PEAT_GRASS_RELEASE_CONTEXT_HA_PROXY"] = (
+            release_before * peat_grass
+        )
         out["SC2_LPIS_PEAT_GRASS_CONTEXT_AVAILABLE"] = valid
 
     if physical_soil_context is not None:
-        out = add_physical_soil_context(out, physical_soil_context)
+        out = add_principal_08c_context(out, physical_soil_context)
+        out["SC2_PHYSICAL_SOIL_CONTEXT_AVAILABLE"] = True
     else:
         out["SC2_PHYSICAL_SOIL_CONTEXT_AVAILABLE"] = False
 
     release_after = _numeric(out, release_column)
     if not np.array_equal(release_before, release_after):
-        raise AssertionError("SC2 context attachment changed the frozen SC1 release vector")
+        raise AssertionError("SC2 context attachment changed frozen SC1 release vector")
     if not np.allclose(
-        pd.to_numeric(out["SC2_POTENTIAL_RELEASE_HA"], errors="raise").to_numpy(dtype=float),
+        out[list(SC2_SOIL_RELEASE_COLUMNS)].sum(axis=1).to_numpy(dtype=float),
         release_before,
-        atol=0.0,
+        atol=1e-7,
     ):
-        raise AssertionError("SC2 potential release no longer equals frozen SC1 release")
+        raise AssertionError("SC2 soil release no longer closes to frozen SC1 release")
 
-    out["SC2_CONTEXT_VERSION"] = "1.0"
+    out["SC2_CONTEXT_VERSION"] = "2.0"
     return out
