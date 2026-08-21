@@ -1,42 +1,30 @@
 # GOBLIN-Spatial SC1 -> SC2 -> SC3 pipeline
 
-This note is the current scenario contract for the v1 refactor. It separates the
-validated historical ED baseline from future pathway analysis and preserves the
-rule that national GOBLIN controls quantities while GOBLIN-Spatial resolves
-spatial incidence, opportunity and feasibility.
+This document is the current scientific contract for the v1 scenario refactor. The historical Stage 01-09 baseline is already verified and frozen. Scenario code must preserve the rule that national GOBLIN controls quantities while GOBLIN-Spatial resolves spatial incidence, opportunity and feasibility.
 
 ## Run selection
 
-Every run starts with two independent choices:
+Every run starts with:
 
-1. `SCENARIO_ID` from `data/controls/scenario/GOBLIN_Scenario_Controls.csv`.
-2. `RUN_START_YEAR`, either 2020 or 2025.
+1. a `SCENARIO_ID` from `data/controls/scenario/GOBLIN_Scenario_Controls.csv`;
+2. a `RUN_START_YEAR`, either 2020 or 2025; and
+3. one principal spatial allocation policy.
 
-The scenario table does not contain a fixed baseline-land total. The runner first
-selects the 2,857 ED rows for the requested baseline year and calculates the
-national starting grassland from the actual baseline `ALL_GRASSLAND` values.
-
-For run r:
+The scenario table does not contain a fixed baseline-land total. The selected ED state supplies the starting grassland:
 
 ```text
 BaselineGrassland(r) = sum_ed ALL_GRASSLAND(ed, RUN_START_YEAR)
 RunGrossRelease(r)   = BaselineGrassland(r) - TARGET_LIVESTOCK_LAND_HA(SCENARIO_ID)
 ```
 
-Changing the run start year therefore changes the baseline state and the implied
-run release while leaving the national 2050 endpoint definition unchanged.
+The editable control table remains the authority for current cattle endpoints and future land-use targets. Older standalone scenario scripts are scientific references for mathematics only and must not overwrite the current control CSV.
 
-The control table is data-driven. `SCENARIO_NO`, `SCENARIO_ID`, `SCENARIO_NAME`,
-`ACTIVE` and endpoint values can be edited without hard-coding pathway names in
-the runner. Only `ACTIVE` rows are selectable.
+## SC1: livestock transition, exposure and released land
 
-## SC1: cattle transition, exposure and released land
-
-SC1 is the complete pre-opportunity transition stage. It is not only an adult-cow
-reduction.
+SC1 is the complete pre-opportunity stage:
 
 ```text
-selected 2020/2025 ED baseline
+selected 2020/2025 Stage-08 ED baseline
         +
 selected national scenario endpoint
         |
@@ -44,46 +32,44 @@ selected national scenario endpoint
 adult-cattle spatial allocation
         |
         v
-exact national dairy:suckler composition
+exact national dairy:suckler endpoint
         |
         v
-Stage 09 ED cohort signatures
-LOCAL_ED / COUNTY_RECEIVER / NATIONAL_ORPHAN
+Stage-09 ED cohort signatures
+LOCAL_ED / COUNTY_RECEIVER / NATIONAL_ORPHAN / NONE
         |
         v
-complete 21-cohort cattle endpoint
+complete 21-cattle-cohort endpoint
         |
-        +--> sheep copied unchanged
+        +--> sheep carried unchanged
         |
         v
 fixed-2020 Standard Output exposure
         |
         v
-SC1 distributional diagnostics
+SC1 distributional / foresight diagnostics
         |
         v
-GOBLIN pasture-DM pressure change
+national livestock-land release control
+        +
+solved livestock pasture-DM spatial propensity
+        +
+08B G1/G2/G3 ED capacity
         |
         v
-ED released grassland with exact national closure
+GOBLIN_RELEASED_G1_HA + G2 + G3
         |
         v
-FREEZE SC1
+frozen GOBLIN_RELEASED_GRASSLAND_HA
 ```
 
-### SC1A adult cattle endpoint
+### Adult allocation
 
-The principal endpoint allocates the total adult-cow contraction across the
-existing ED footprint. The requested national dairy and suckler counts are then
-reconciled exactly. Allocation rules change where the contraction falls, not the
-national endpoint.
+Principal policies redistribute a common national endpoint rather than changing it. No category is seeded into an unsupported ED footprint. Where a category expands, expansion remains PRORATA within the existing category footprint.
 
-No adult cattle are silently seeded into an unsupported spatial footprint.
-Protection rules alter relative cut intensity and do not change national totals.
+### Cohort propagation
 
-### SC1B 21-cohort cattle state
-
-The selected baseline-year ED signatures control the follower response:
+The selected baseline-year Stage-09 signatures preserve ED heterogeneity while national GOBLIN/COHORTS margins remain authoritative when supplied.
 
 ```text
 DxD -> DAIRY
@@ -92,113 +78,38 @@ BxB -> SUCKLER
 bulls -> ADULT_COWS
 ```
 
-For each ED x follower relationship the response source is:
+The local/county/national signature hierarchy is an accounting/propagation mechanism, not evidence of observed animal movement.
 
-```text
-LOCAL_ED
-COUNTY_RECEIVER
-NATIONAL_ORPHAN
-NONE
-```
+### Standard Output and distributional metrics
 
-The 18 pre-adult cohorts remain publication-facing audit relationships. Bulls are
-the nineteenth follower and complete the 21-cohort cattle state with dairy and
-suckler adults.
+Standard Output is calculated after the physical cattle state is solved, using fixed-2020 coefficients. It is production-value exposure, not farm income, profit or welfare.
 
-National GOBLIN/COHORTS margins remain authoritative when supplied. ED signatures
-determine geography, not national biology.
+Gini, top-share, ED concentration, county incidence, protection relief, displaced burden, pathway sensitivity, allocation sensitivity and robust-exposure metrics are reporting diagnostics only. They never feed back into livestock or land allocation.
 
-### SC1C Standard Output exposure
+### Released land
 
-Standard Output is applied only after the physical cattle endpoint is solved.
-Fixed 2020 coefficients are used for baseline and scenario states so the result is
-production-value exposure rather than price drift.
+The national gross release is externally/pathway controlled. GOBLIN-Spatial spatialises it. Pasture-DM change supplies a biological/spatial signal. The precomputed 08B capability layer supplies G1/G2/G3 physical capacity cells. The resulting G1/G2/G3 released hectares must close exactly to each ED's frozen total release and may never exceed validated `ALL_GRASSLAND`.
 
-Core outputs include:
+08C mapped physical soil and LPIS do not move SC1 release.
 
-```text
-BASE_SO_LIVESTOCK_2020_EUR
-SCENARIO_SO_LIVESTOCK_2020_EUR
-SO_LIVESTOCK_CHANGE_2020_EUR
-SO_LIVESTOCK_EXPOSURE_2020_EUR
-SO_LIVESTOCK_CHANGE_PCT
-```
+## SC1 freeze boundary
 
-SO is not profit, farm income or welfare.
-
-### SC1D distributional metrics
-
-SC1 reporting now includes a separate distributional module. These quantities are
-diagnostics only and never feed back into livestock allocation.
-
-The national report includes:
-
-```text
-GINI_BASE_SO_LIVESTOCK
-GINI_SCENARIO_SO_LIVESTOCK
-DELTA_GINI_SO_LIVESTOCK
-GINI_SO_LOSS
-GINI_TOTAL_CATTLE_REDUCTION
-GINI_ADULT_CATTLE_REDUCTION
-GINI_RELEASED_GRASSLAND
-TOP_10PCT_ED_SHARE_*
-TOP_20PCT_ED_SHARE_*
-EDS_FOR_50PCT_*
-EDS_FOR_80PCT_*
-```
-
-Because an ED may in principle gain SO after cattle-composition change, signed SO
-exposure is split transparently into positive gross loss and gross gain before a
-loss-distribution Gini is calculated.
-
-ED reporting also includes, where inputs exist:
-
-```text
-SO_LIVESTOCK_GROSS_LOSS_PER_HOLDING_2020_EUR
-TOTAL_CATTLE_REDUCTION_PER_HOLDING
-GOBLIN_RELEASED_GRASSLAND_PCT_OF_BASE
-```
-
-County summaries aggregate the physical and SO incidence and report each county's
-share of national loss, cattle reduction and released grassland.
-
-### SC1E GOBLIN land release
-
-The national gross release used by a run is derived from the selected baseline ED
-land and the scenario endpoint land control. The released hectares are then
-spatialised using cattle pasture-DM pressure change while respecting each ED's
-`ALL_GRASSLAND` capacity.
-
-Soil and LPIS do not alter this solved geography.
-
-The SC1 handoff is therefore:
-
-```text
-ED cattle endpoint
-+ unchanged sheep context
-+ SO exposure
-+ distribution metrics
-+ frozen ED released grassland
-```
-
-## Freeze boundary
-
-Once SC1 closes nationally, the following may not be changed downstream:
+After SC1 national and ED closure, downstream stages may not change:
 
 ```text
 SCENARIO_DAIRY_COW
 SCENARIO_OTHER_COW
 all 21 cattle cohort counts
 SC1 Standard Output exposure
+GOBLIN_RELEASED_G1_HA
+GOBLIN_RELEASED_G2_HA
+GOBLIN_RELEASED_G3_HA
 GOBLIN_RELEASED_GRASSLAND_HA
 ```
 
-Soil and LPIS can interpret or constrain the use of released land. They cannot
-move cattle reductions or released hectares between EDs.
+## 08B: agricultural capability
 
-## 08B: agricultural soil capability
-
-08B is the principal agricultural capability layer.
+08B is the principal agricultural capability representation:
 
 ```text
 C1 + C2 -> G1
@@ -206,19 +117,13 @@ C3 + C4 -> G2
 C5 + C6 -> G3
 ```
 
-`fsizuaa` is a source weighting denominator only. It never replaces
-`ALL_GRASSLAND`.
+`fsizuaa` is a source weighting denominator only. It does not replace `ALL_GRASSLAND`.
 
-After SC1 release is frozen, 08B partitions/interprets the released-land context
-inside each ED. The ED row total must remain exactly the SC1 released hectares.
+The compact 08B profile is prepared once. Normal scenario runs attach it and do not reopen the heavy source. The same compact profile supports SC1 G-group capacity and SC2 Class1-6 reconstruction.
 
-## 08C: physical soil context
+## 08C: independent mapped physical soil
 
-08C is a separate physical-soil evidence layer and must not be blended into 08B
-as if both represented the same denominator.
-
-It retains physical categories such as well-drained, poorly drained, peaty and
-peat context. In particular:
+08C is a second soil representation and is not blended with 08B. It retains mapped physical composition, drainage and peat context.
 
 ```text
 G3 != peat
@@ -226,129 +131,200 @@ mapped peat != farmed peat
 mapped peat != automatically rewettable grassland
 ```
 
-The 08C integration must be frozen before its fields are allowed to affect SC2
-eligibility.
+08C mapped shares are not multiplied by `ALL_GRASSLAND` to manufacture an observed grassland-by-soil map. Their role is physical context and dual-soil robustness evidence.
 
 ## LPIS
 
-LPIS is matched to the selected run baseline:
+LPIS is matched to the observed scenario start year:
 
 ```text
-2020 run -> validated 2020 LPIS control
-2025 run -> validated 2025 LPIS control
+2020 run -> corrected 2020 LPIS v2
+2025 run -> validated 2025 LPIS v1
 ```
 
-LPIS does not replace `ALL_GRASSLAND` and does not identify the exact parcel from
-which cattle were removed. It supplies a parcel-informed opportunity/capacity
-envelope inside the already solved ED release.
+LPIS is parcel-informed context, not the controlling ED grassland total and not identification of the exact parcel from which livestock was removed.
 
-## SC2: policy-neutral opportunity
+Normal runtime consumes the compact dual-year ED profile only. The multi-GB parcel overlay is a one-time preprocessing operation and must never be triggered automatically by SC1-SC3.
 
-SC2 starts only after the SC1 row totals are frozen.
+## SC2: mature v3.1 opportunity and physical eligibility
+
+SC2 begins only after SC1 release is frozen:
 
 ```text
-SC1 released land
-+ 08B agricultural capability
-+ 08C physical soil context
-+ selected-year LPIS
+frozen SC1 release including G1/G2/G3
+        +
+matched-year compact LPIS
+        +
+independent compact 08C
         |
         v
-land-use-specific overlapping opportunity envelopes
+Opportunity-v2 scores
+        |
+        v
+released Class1-6 reconstruction
+        |
+        v
+organic / mineral quantities
+        |
+        v
+SC3 physical eligibility envelopes
 ```
 
-The required land-use opportunities are:
+The package implementation is `src/goblin_spatial/land/sc2_opportunity.py`, wired through `src/goblin_spatial/land/sc2_context.py`.
 
-```text
-AD_GRASS
-BIOREFINERY_GRASS
-WILLOW
-ADDITIONAL_TILLAGE
-FOREST
-REWETTING
-```
-
-SC2 is not a final allocation. The same hectare may initially be eligible for
-multiple uses, so opportunity hectares must never be summed across uses.
-
-The old generic 0.85/0.80/0.70 soil weighting is not to be treated as a frozen
-SC2 allocation rule. Its scientific meaning must be revalidated before the v1
-SC2 screen is frozen.
-
-## SC3: explicit national target allocation
-
-SC3 reads the editable national land-use targets from the same scenario row and
-places them only within SC2 eligible capacity.
-
-Stage A released-land uses are:
-
-```text
-AD_GRASS
-BIOREFINERY_GRASS
-WILLOW
-ADDITIONAL_TILLAGE
-FOREST
-```
+### Required release closure
 
 For every ED:
 
 ```text
-sum(Stage-A realised conversion) <= frozen SC1 released land
+RELEASED_CLASS_1_HA + RELEASED_CLASS_2_HA = GOBLIN_RELEASED_G1_HA
+RELEASED_CLASS_3_HA + RELEASED_CLASS_4_HA = GOBLIN_RELEASED_G2_HA
+RELEASED_CLASS_5_HA + RELEASED_CLASS_6_HA = GOBLIN_RELEASED_G3_HA
+sum(RELEASED_CLASS_1_HA ... RELEASED_CLASS_6_HA)
+    = GOBLIN_RELEASED_GRASSLAND_HA
 ```
 
-A hectare can be eligible for several uses in SC2 but can be realised only once
-in SC3.
+SC2 may append interpretation and capacity fields only. It may not alter any pre-existing SC1 field.
 
-Rewetting remains a separate organic-soil control. It is tested after Stage A
-against remaining eligible organic agricultural land so physical conversion is
-not double counted. The source-model pre-rewetting Available balance and the
-final post-rewetting residual must therefore be reported as distinct quantities.
+### Mature productivity weighting
 
-For each land use k:
+The recovered SC2 v3.1 Opportunity-v2 science uses:
+
+```text
+GOBLIN_SOIL_PRODUCTIVITY_INDEX
+= 0.85*G1 + 0.80*G2 + 0.70*G3
+```
+
+This is retained as an opportunity/productivity indicator. It is not a released-land generator and must never be used to divide already-released hectares.
+
+### Opportunity versus physical capacity
+
+Opportunity scores and physical eligibility remain distinct. The same hectare may appear in several overlapping SC2 eligibility envelopes, so SC2 hectares must not be added across land uses.
+
+Principal SC3-ready envelopes are:
+
+```text
+AD / biorefinery grass : Classes 1-4 mineral
+Willow                  : Classes 1-3 mineral
+Additional tillage      : Classes 1-3 mineral
+Forest                  : Classes 1-5 mineral
+Rewetting signal        : organic released-land context
+```
+
+Strict tillage (Classes 1-2) and wide willow (Classes 1-4) remain explicit sensitivity variants.
+
+## SC3: mature v2.7 explicit target allocation
+
+SC3 reads the same selected scenario row's explicit national land-use targets. The allocator contains no pathway-specific target table.
+
+### Stage A: joint LP
+
+Five released-land uses are solved jointly:
+
+```text
+AD_GRASS
+BIOREFINERY_GRASS
+WILLOW
+ADDITIONAL_TILLAGE
+FOREST
+```
+
+The principal allocator is a lexicographic continuous linear program:
+
+1. minimise total unmet target hectares;
+2. hold the minimum unmet total fixed and maximise opportunity ranking.
+
+Stage-2 scores are target-normalised so a larger national target does not dominate the soft objective merely because it contains more hectares.
+
+Hard individual SC2 capacities are supplemented by shared physical pools. These nested pools prevent overlapping eligibility envelopes from double-using the same released capability. Forest additionally requires finite positive `FOREST_YC_WEIGHTED_MEAN` in the principal specification.
+
+There is no arbitrary sequential Stage-A priority. The old sequential API is explicitly rejected by the v2.7 package allocator.
+
+### Stage B: sequential rewetting
+
+Rewetting occurs only after Stage A.
+
+The principal national drained-organic-grassland stock anchor is 141,000 ha. It is spatialised by:
+
+```text
+ALL_GRASSLAND * IFS_PEAT_CUTOVER_UAA_SHARE
+```
+
+then normalised to the national stock and intersected with the frozen SC1 released-land geography. After Stage A, that capacity is tightened again to the actual remaining ED Available land. Rewetting is then allocated only inside this post-Stage-A feasible capacity.
+
+This ordering prevents physical double assignment.
+
+`RELEASED_ORGANIC_WEIGHT_HA` remains an unscaled SC2 diagnostic/spatial signal. Colm/IFS mapped peat remains independent context and does not manufacture the 141 kha stock.
+
+### SC3 accounting
+
+For every use `k`:
 
 ```text
 RealisedConversion(k) <= NationalTarget(k)
 UnmetTarget(k) = NationalTarget(k) - RealisedConversion(k)
 ```
 
-No unsuitable hectares are forced merely to close a national target.
-
-Final accounting reports at least:
+For every ED:
 
 ```text
-StageAAvailableLand
-RealisedConversion
-UnmetTarget
-ResidualAvailableLand
+StageARealised
++ RewettingRealised
++ ResidualAvailableLand
+= FrozenSC1Release
 ```
 
-and preserves:
+The parent-GOBLIN source `Available` balancing item is retained as source accounting. SC3 separately reports the physically uncommitted residual after rewetting.
+
+No eligibility is silently broadened to force a target to close.
+
+## Principal runtime
+
+`goblin-spatial-principal` now supports:
 
 ```text
-PotentialRelease != Opportunity != RealisedConversion
-GrossRelease != ResidualAvailableLand
+--stage SC1
+--stage SC2
+--stage SC3
 ```
 
-## Current implementation gate
+`SC3` runs the full light-weight chain from the selected Stage-08 baseline through SC1 and mature SC2 before invoking the v2.7 allocator. The runtime uses compact 08B, LPIS and 08C controls only and never initiates heavy source processing.
 
-The editable scenario-control loader and the expanded SC1 distributional outputs
-are now the first v1-refactor implementation step. The generic runner deliberately
-stops after SC1 for these new controls.
+SciPy is an optional `scenario` dependency so the verified historical baseline does not acquire an optimisation dependency merely because SC3 exists.
 
-SC2/SC3 should only be enabled after all of the following are validated together:
+## Validation gate
 
-1. 08B released-land partition closure.
-2. 08C physical-soil attachment and terminology.
-3. selected-year LPIS control closure.
-4. land-use-specific SC2 eligibility/ranking rules.
-5. absolute-target SC3 allocation with mutually exclusive realised hectares,
-   separate rewetting handling, unmet targets and final residual accounting.
+The scenario package has lightweight deterministic contract tests for:
 
-This gate is deliberate. It prevents the older Styles opportunity weights from
-silently becoming the final v1 science.
+- exact adult/category and 21-cohort closure;
+- unchanged sheep context;
+- SC1 release closure and capacity constraints;
+- SC2 G1/G2/G3 and Class1-6 closure;
+- mature 0.85/0.80/0.70 Opportunity-v2 compatibility;
+- dual-soil no-blend behavior;
+- Stage-A shared-pool non-double-use;
+- explicit unmet targets;
+- forest-YC hard eligibility;
+- sequential rewetting constrained to post-Stage-A Available; and
+- final ED/national SC3 closure.
+
+These tests existing in the branch does not mean the integrated scenario refactor is already regression-verified. Full acceptance requires the real compact controls and one deliberate integrated validation run.
 
 ## Compute-budget guardrail
 
-Scenario development should be validated with small unit/contract tests first.
-GitHub Actions should be reserved for a single meaningful checkpoint or PR run,
-not triggered after every small scenario edit. The current main CI remains focused
-on the frozen historical baseline while the scenario branch is developed.
+Compute cost is a hard implementation constraint.
+
+Use this order:
+
+```text
+source/code inspection
+-> tiny deterministic tests
+-> no-download preflight
+-> compact-control validation
+-> one meaningful integrated validation
+-> CI only at a deliberate acceptance checkpoint
+```
+
+The preflight checks compact Stage-08, scenario, 08B, LPIS and 08C inputs without downloading, rebuilding or spatially intersecting anything.
+
+Do not open the scenario PR yet. The LPIS rebuild workflow watches configuration/LPIS-related paths on pull requests and can trigger expensive processing. Recover/reuse existing compact controls before considering any heavy rebuild.
