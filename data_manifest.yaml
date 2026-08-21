@@ -1,19 +1,13 @@
-manifest_version: "0.9.2"
-release: "ireland-2015-2025-dev"
-status: "development"
+manifest_version: "1.0.0"
+release: "ireland-2015-2025-v1"
+status: "scenario-finalization"
 
-# GOBLIN-Spatial v1 data strategy
-# -------------------------------
-# Compact historical-baseline inputs are intended to live directly in GitHub
-# under data/inputs/baseline/. Large soil/LPIS/geography inputs are fetched from
-# the immutable Zenodo version DOI below and verified with SHA256 checksums.
-#
-# Historical baseline boundary:
-# cattle -> sheep -> merge -> land/farm structure/SE -> 08 Standard Output
-# -> 09 frozen ED cohort signatures.
-#
-# 08B and 08C are downstream scenario-preparation soil context, not historical
-# reconstruction stages.
+# GOBLIN-Spatial data contract
+# ----------------------------
+# Historical stages 01-09 reconstruct the validated 2015-2025 ED baseline.
+# Scenario execution then consumes repository-contained compact controls.
+# Heavy soil, LPIS and geography sources remain available only for explicit
+# first-principles reconstruction and provenance checks.
 
 external_releases:
   goblin_spatial_frozen_inputs_v1:
@@ -25,9 +19,6 @@ external_releases:
     publication_date: "2026-08-20"
     license: "CC-BY-4.0"
 
-# Canonical v1 input contract.
-# git_pending means the file is intended to be committed directly to GitHub
-# but the package path migration is not complete yet.
 
 datasets:
   cso_ed_agricultural_baseline_2020:
@@ -63,12 +54,12 @@ datasets:
   dafm_sheep_county_totals_2015_2020_2022_2025:
     stage: "VALIDATION"
     module: [validation, sheep]
-    description: "DAFM county sheep totals retained for independent/hold-out validation; not a production sheep population control."
+    description: "DAFM county sheep totals retained for independent validation; not a production sheep population control."
     source: "git"
     path: "data/inputs/baseline/03_0_DAFM_Sheep_County_Totals_2015_2020_2022_2025.csv"
     sha256: "6d3ce31092328f18587530561ab440d91fa65e94c629ac5ca25e15bb4b042de2"
     required: false
-    note: "Production sheep totals remain controlled by the CSO 2020 ED anchor and raw AAA09 regional hierarchy."
+    note: "Production sheep totals remain controlled by the CSO 2020 ED anchor and AAA09 regional hierarchy."
 
   dafm_sheep_breed_anchors:
     stage: "05A"
@@ -122,86 +113,102 @@ datasets:
   goblin_scenario_controls:
     stage: "SC1/SC3"
     module: [scenario, sc1, sc3]
-    description: "Editable national scenario endpoints and alternative-land targets. Baseline land is selected from the 2020 or 2025 ED master at runtime, not stored in this file."
+    description: "Editable national GOBLIN livestock-land endpoints and alternative land-use targets."
     source: "git"
     path: "data/controls/scenario/GOBLIN_Scenario_Controls.csv"
     sha256: "ce0a03982de16213bd81f28e3c94664dd105b604c67365003f1bea5423fcc95d"
     required: true
-    note: "Runtime gross release is selected-year sum(ALL_GRASSLAND) minus TARGET_LIVESTOCK_LAND_HA. Scenario names, IDs, ordering, ACTIVE status and endpoint targets are data-driven."
+    note: "Runtime gross release is selected-year sum(ALL_GRASSLAND) minus TARGET_LIVESTOCK_LAND_HA."
+
+  ed_land_context_2020:
+    stage: "08B/08C/SC2"
+    module: [scenario, sc1, sc2, sc3]
+    description: "Canonical 2,857-ED frozen 2020 land context combining neutral 08B capability, independent 08C mapped physical soil and LPIS 2020 evidence."
+    source: "git"
+    path: "data/controls/land/ED_Land_Context_2020"
+    required: true
+    expected_rows: 2857
+    expected_columns: 40
+    logical_sha256: "6a94c125413260ed462c9d5430fe6d39be7df48d282734eea218351829aa6e5d"
+    note: "The runtime loader reconstructs the logical CSV, verifies this SHA256 and enforces the scientific closure contract. SC1 uses only 08B fields; SC2/SC3 enter LPIS and 08C only after SC1 is frozen."
 
   sc1_cattle_scenario_endpoints_2050:
-    stage: "SC1"
-    module: [scenario, sc1, legacy]
-    description: "Legacy compact 2050 cattle endpoint control retained for provenance during the scenario refactor."
+    stage: "LEGACY"
+    module: [legacy]
+    description: "Superseded endpoint control retained only for historical provenance."
     source: "git_pending"
     path: "data/inputs/scenario/SC1_Cattle_Scenario_Endpoints_2050.csv"
     sha256: "316708db50f2d3ab2e2aa38b75672ec85e93e9a59222a36b6ce6c87767028227"
     required: false
 
   sc1_ed_rural_mixed_urban_2022:
-    stage: "SC1"
-    module: [scenario, sc1]
-    description: "2022 ED Rural/Mixed/Urban classification used as spatial scenario context."
+    stage: "LEGACY"
+    module: [legacy]
+    description: "Rural/Mixed/Urban classification retained for optional analysis; not required by the principal runtime."
     source: "git_pending"
     path: "data/inputs/scenario/SC1_ED_Rural_Mixed_Urban_2022.xlsx"
     sha256: "d6178bacb2ddeef830a9f0fba4715e183ea53813448fcf54a0d29199a332552f"
-    required: true
+    required: false
 
+  # OPTIONAL FIRST-PRINCIPLES REBUILD SOURCES
   nfs_agricultural_soil_capability:
-    stage: "08B"
-    module: [scenario_preparation, agricultural_soil]
-    description: "Cathal/NFS agricultural soil-capability source used after the historical baseline is complete."
+    stage: "REBUILD_08B"
+    module: [rebuild, agricultural_soil]
+    description: "Cathal/NFS agricultural soil-capability source used to reproduce the frozen land context."
     source: "zenodo"
     release: "goblin_spatial_frozen_inputs_v1"
     destination: "data/inputs/spatial/08B_NFS_Agricultural_Soil_Capability.csv"
     url: "https://zenodo.org/records/22035538/files/08B_NFS_Agricultural_Soil_Capability.csv?download=1"
     sha256: "4af6018a8860380aa0f45ba6acc47e9d894e27ec93975ea29eb2dfb4dc21c1dc"
-    required: true
+    required: false
+    note: "OPTIONAL_REBUILD_SOURCE; not read by normal principal scenario execution."
 
   ifs_mapped_physical_soil_package:
-    stage: "08C"
-    module: [scenario_preparation, physical_soil]
-    description: "Colm/IFS mapped physical-soil package used after the historical baseline is complete and kept independent from 08B."
+    stage: "REBUILD_08C"
+    module: [rebuild, physical_soil]
+    description: "Colm/IFS mapped physical-soil package used to reproduce the frozen land context."
     source: "zenodo"
     release: "goblin_spatial_frozen_inputs_v1"
     destination: "data/inputs/spatial/08C_IFS_Mapped_Physical_Soil_Package.zip"
     url: "https://zenodo.org/records/22035538/files/08C_IFS_Mapped_Physical_Soil_Package.zip?download=1"
     sha256: "8a73fdaa7f8277eafbb38a12cc9f736caff4c265e8617a9fc54c7a8d1c3ddf97"
-    required: true
+    required: false
+    note: "OPTIONAL_REBUILD_SOURCE; not read by normal principal scenario execution."
 
   lpis_2020_frozen:
-    stage: "SC2"
-    module: [scenario, sc2]
-    description: "Frozen LPIS 2020 parcel dataset for the principal common-2020 scenario baseline."
+    stage: "REBUILD_SC2"
+    module: [rebuild, sc2]
+    description: "Frozen LPIS 2020 parcel dataset used only to reproduce the compact 2020 land context."
     source: "zenodo"
     release: "goblin_spatial_frozen_inputs_v1"
     destination: "data/inputs/spatial/SC2_LPIS_2020_Frozen.parquet"
     url: "https://zenodo.org/records/22035538/files/SC2_LPIS_2020_Frozen.parquet?download=1"
     sha256: "33ce7988006d53dc7599eabc300dbdc275b13a567e4ea4a48da16437e9f97247"
-    required: true
+    required: false
+    note: "OPTIONAL_REBUILD_SOURCE; not read by normal principal scenario execution."
 
   lpis_2025_frozen:
-    stage: "SC2"
-    module: [scenario, sc2]
-    description: "Frozen LPIS 2025 parcel dataset retained for optional updated-baseline and sensitivity applications."
+    stage: "FUTURE_REBUILD_SC2"
+    module: [rebuild, sc2]
+    description: "Frozen LPIS 2025 parcel dataset reserved for a separately validated future 2025 land-context control."
     source: "zenodo"
     release: "goblin_spatial_frozen_inputs_v1"
     destination: "data/inputs/spatial/SC2_LPIS_2025_Frozen.parquet"
     url: "https://zenodo.org/records/22035538/files/SC2_LPIS_2025_Frozen.parquet?download=1"
     sha256: "493a1858f7b213d982ffb8fa99cfe0c1d9c50133596c73faf27079ec9dabb75e"
     required: false
+    note: "No principal 2025 SC2/SC3 run is allowed until a separate compact 2025 context is validated and frozen."
 
   ed_boundaries_frozen:
-    stage: "SC2"
-    module: [scenario, sc2, spatial]
-    description: "Frozen Electoral Division boundary layer as a single GeoPackage."
+    stage: "REBUILD_SPATIAL"
+    module: [rebuild, spatial]
+    description: "Frozen Electoral Division boundary layer used only for first-principles spatial reconstruction."
     source: "zenodo"
     release: "goblin_spatial_frozen_inputs_v1"
     destination: "data/inputs/spatial/SC2_ED_Boundaries_Frozen.gpkg"
     url: "https://zenodo.org/records/22035538/files/SC2_ED_Boundaries_Frozen.gpkg?download=1"
     sha256: "550b2ed967f5c5e7ecb9053586cf431df564d0a990f99f9f82eb8b8be44faca8"
-    required: true
+    required: false
+    note: "OPTIONAL_REBUILD_SOURCE; not read by normal principal scenario execution."
 
-# Generated outputs, including all Stage 01-09 results and all future
-# SC1/SC2/SC3 results, are intentionally excluded from the mandatory input
-# contract. Stage 09 is a generated historical-baseline output, not an input.
+# Generated Stage 01-09 and SC1-SC3 outputs are not mandatory inputs.
