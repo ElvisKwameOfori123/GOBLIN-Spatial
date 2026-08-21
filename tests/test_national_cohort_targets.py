@@ -8,7 +8,7 @@ from goblin_spatial.scenario.national_cohort_targets import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
-REFERENCE = ROOT / "data/controls/cohort2012-2020.csv"
+REFERENCE = ROOT / "data/inputs/baseline/05C_Cattle_Cohort_Relationships_2012_2020.csv"
 
 
 def test_reference_loads_complete_2020_cattle_profile():
@@ -29,7 +29,7 @@ def test_si_adult_endpoint_generates_complete_21_cohort_target():
     assert targets["dairy_cows"] == 1_600_000
     assert targets["suckler_cows"] == 160_000
     # COHORTS-implied total from the frozen 2020 biological relationship.
-    # This is not labelled as a directly reported Styles total-cattle endpoint.
+    # This is not labelled as a directly reported national total-cattle endpoint.
     assert sum(targets.values()) == 4_841_014
 
 
