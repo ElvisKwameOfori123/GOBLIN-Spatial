@@ -102,8 +102,37 @@ def _model_map(master: pd.DataFrame) -> pd.DataFrame:
     return model
 
 
+def _component_to_county(model: pd.DataFrame) -> dict[str, str]:
+    """Map ordinary and compound model-ED components to validated counties.
+
+    Mature 08B county fallback is built from source ED components, not only from
+    source keys that happen to equal a complete model key. This matters for model
+    EDs such as ``08045/08046`` whose individual Cathal source components must
+    still contribute to the correct county profile.
+    """
+    rows: list[dict[str, str]] = []
+    for _original, county, key in model[["CSOED", "County", "_KEY"]].itertuples(
+        index=False, name=None
+    ):
+        for component in (part for part in key.split("/") if part):
+            rows.append({"SOURCE_COMPONENT_KEY": component, "County": str(county)})
+    bridge = pd.DataFrame(rows)
+    if bridge.empty:
+        return {}
+    counts = bridge.groupby("SOURCE_COMPONENT_KEY")["County"].nunique()
+    if counts.gt(1).any():
+        bad = counts[counts.gt(1)].index.tolist()[:10]
+        raise ValueError(f"one ED component maps to multiple counties: {bad}")
+    return (
+        bridge.drop_duplicates("SOURCE_COMPONENT_KEY")
+        .set_index("SOURCE_COMPONENT_KEY")["County"]
+        .to_dict()
+    )
+
+
 def _resolve_08b(master: pd.DataFrame, profile: pd.DataFrame) -> pd.DataFrame:
     model = _model_map(master)
+    component_to_county = _component_to_county(model)
     p = profile.copy()
     required = {
         "CSOED",
@@ -139,13 +168,15 @@ def _resolve_08b(master: pd.DataFrame, profile: pd.DataFrame) -> pd.DataFrame:
             continue
         unresolved.append((key, str(county)))
 
-    source_county = p.merge(
-        model[["_KEY", "County"]], on="_KEY", how="left", validate="one_to_one"
-    )
+    # Reproduce the mature 08B county profile exactly: assign each source ED to
+    # its county through the model component bridge, including components of
+    # compound model EDs.
+    source_county = p.copy()
+    source_county["_SOURCE_COUNTY"] = source_county["_KEY"].map(component_to_county)
     county_profiles = {
         str(county): _aggregate_08b(block)
-        for county, block in source_county.dropna(subset=["County"]).groupby(
-            "County", sort=False
+        for county, block in source_county.dropna(subset=["_SOURCE_COUNTY"]).groupby(
+            "_SOURCE_COUNTY", sort=False
         )
         if float(
             pd.to_numeric(block["SOIL_SOURCE_UAA_HA"], errors="coerce")
