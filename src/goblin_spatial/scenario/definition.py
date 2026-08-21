@@ -2,8 +2,12 @@
 
 A scenario never rebuilds the ED livestock population from scratch. GOBLIN (or
 another national pathway source) supplies the national reduction or endpoint;
-GOBLIN-Spatial allocates the implied reduction from the selected 2020 or 2025
-ED baseline.
+GOBLIN-Spatial allocates the implied change from the selected 2020 or 2025 ED
+baseline.
+
+The four principal SC1 policies are preserved explicitly. Additional rules are
+retained for experimental/sensitivity work and are not substituted silently for
+the principal study design.
 """
 
 from __future__ import annotations
@@ -15,11 +19,16 @@ from goblin_spatial.dynamics.baseline import SUPPORTED_SCENARIO_BASE_YEARS
 
 
 class AllocationRule(str, Enum):
-    """Alternative rules for deciding where a fixed national reduction lands."""
+    """Alternative rules for deciding where a fixed national change lands."""
 
+    # Validated principal SC1 policy set.
     PRORATA = "PRORATA"
-    RANDOMISED = "RANDOMISED"
     DAIRY_PROTECTION = "DAIRY_PROTECTION"
+    ECONOMIC_CAPACITY_PROTECTION = "ECONOMIC_CAPACITY_PROTECTION"
+    SOCIAL_VULNERABILITY_PROTECTION = "SOCIAL_VULNERABILITY_PROTECTION"
+
+    # Experimental/sensitivity rules retained for backwards compatibility.
+    RANDOMISED = "RANDOMISED"
     PRODUCTIVITY_PROTECTION = "PRODUCTIVITY_PROTECTION"
     VULNERABILITY_PROTECTION = "VULNERABILITY_PROTECTION"
     HYBRID_BALANCED = "HYBRID_BALANCED"
@@ -28,23 +37,12 @@ class AllocationRule(str, Enum):
 
 @dataclass(frozen=True)
 class ScenarioDefinition:
-    """National livestock reductions to subtract from an ED baseline.
+    """Generic fractional livestock-reduction scenario definition.
 
-    Reduction values are fractions of the selected baseline population, e.g.
-    ``dairy_reduction=0.30`` means that the national dairy-cow population must
-    fall by 30% relative to the chosen baseline year. The allocation rule then
-    decides which existing ED animals comprise that reduction.
-
-    ``RANDOMISED`` keeps the national endpoint unchanged but perturbs where the
-    reduction falls using a deterministic ED-specific pseudo-random weight. The
-    same ``random_seed`` reproduces the same spatial ordering and therefore can
-    be carried consistently through 2030, 2040 and 2050.
-
-    Protection rules interpret a *higher* score as stronger protection (a
-    smaller proportional cut). ``DAIRY_PROTECTION`` derives that score directly
-    from baseline dairy-cow numbers, so EDs with larger dairy herds receive a
-    smaller percentage cut than otherwise comparable EDs with fewer dairy cows.
-    The national GOBLIN reduction is unchanged.
+    This class supports the older generic reduction engine. The principal
+    sourced-endpoint study uses category-consistent absolute endpoints through
+    ``principal_allocation`` and therefore does not reinterpret these generic
+    rules as its scientific allocation design.
     """
 
     name: str
@@ -56,18 +54,11 @@ class ScenarioDefinition:
     allocation_rule: AllocationRule = AllocationRule.PRORATA
     random_seed: int = 42
 
-    # Generic protection score used by SCORE_WEIGHTED.
     score_column: str | None = None
-
-    # Pre-scenario indicators used by named rules. Higher must mean more
-    # productive / more vulnerable, respectively, because higher = protected.
     productivity_score_column: str | None = None
     vulnerability_score_column: str | None = None
 
     protection_strength: float = 0.8
-
-    # Negotiated hybrid weights: proportionality, productivity, dairy-core,
-    # vulnerability. These are scenario assumptions, not estimated parameters.
     hybrid_weights: tuple[float, float, float, float] = (0.40, 0.25, 0.20, 0.15)
 
     def __post_init__(self) -> None:
