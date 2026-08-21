@@ -80,6 +80,29 @@ def test_08b_accepts_direct_and_compound_ed_and_closes_to_grassland() -> None:
     )
 
 
+def test_08b_county_fallback_includes_components_of_compound_model_eds() -> None:
+    # 1999 has no source profile. The mature 08B fallback for County A must be
+    # built from source components 1001 and 1002 of the compound model ED,
+    # rather than dropping those components because "1001/1002" is the model key.
+    master = pd.DataFrame(
+        {
+            "CSOED": ["1001/1002", "1999", "1003"],
+            "County": ["A", "A", "B"],
+            "ALL_GRASSLAND": [250.0, 100.0, 100.0],
+        }
+    )
+    out = add_principal_08b_context(master, _agricultural_profile())
+
+    fallback = out.loc[out["CSOED"].eq("1999")].iloc[0]
+    assert fallback["SOIL_PROFILE_SOURCE"] == "COUNTY_FALLBACK"
+
+    # Equal UAA weights in the fixture mean the County A fallback is the simple
+    # average of source components 1001 and 1002, not the national profile that
+    # would additionally contain County B source ED 1003.
+    expected_g1 = (0.50 + 0.40) / 2.0
+    assert np.isclose(fallback["GOBLIN_SOIL_G1_SHARE"], expected_g1)
+
+
 def test_08c_accepts_direct_and_compound_ed_only() -> None:
     master = _master()
     original_grass = master["ALL_GRASSLAND"].copy()
