@@ -15,8 +15,11 @@ from goblin_spatial.config import SpatialConfig
 from goblin_spatial.land.lpis import read_ed_lpis_profile
 from goblin_spatial.scenario.control_table import read_scenario_control_table
 from goblin_spatial.soil import (
+    CLASS_SHARE_COLUMNS,
     GROUP_SHARE_COLUMNS,
+    MAP_SG_SHARE_COLUMNS,
     PHYSICAL_AREA_COLUMNS,
+    PHYSICAL_SHARE_COLUMNS,
     canonical_csoed,
 )
 
@@ -33,7 +36,13 @@ BASELINE_REQUIRED = {
 }
 
 
-def _status(rows: list[dict[str, object]], item: str, path: Path, ok: bool, detail: str) -> None:
+def _status(
+    rows: list[dict[str, object]],
+    item: str,
+    path: Path,
+    ok: bool,
+    detail: str,
+) -> None:
     rows.append(
         {
             "ITEM": item,
@@ -62,10 +71,12 @@ def preflight_principal_inputs(
 
     baseline_year = int(baseline_year)
     if baseline_year not in (2020, 2025):
-        raise ValueError("principal preflight supports baseline_year 2020 or 2025")
+        raise ValueError(
+            "principal preflight supports baseline_year 2020 or 2025"
+        )
     stage = str(stage).upper()
-    if stage not in {"SC1", "SC2"}:
-        raise ValueError("preflight stage must be SC1 or SC2")
+    if stage not in {"SC1", "SC2", "SC3"}:
+        raise ValueError("preflight stage must be SC1, SC2 or SC3")
 
     rows: list[dict[str, object]] = []
 
@@ -84,25 +95,43 @@ def preflight_principal_inputs(
                 f"missing columns={missing}",
             )
         else:
-            years = pd.read_csv(baseline_path, usecols=["YEAR", "CSOED"])
+            years = pd.read_csv(
+                baseline_path,
+                usecols=["YEAR", "CSOED"],
+            )
             selected = years.loc[
-                pd.to_numeric(years["YEAR"], errors="raise").astype(int).eq(baseline_year)
+                pd.to_numeric(years["YEAR"], errors="raise")
+                .astype(int)
+                .eq(baseline_year)
             ]
-            ok = len(selected) == int(cfg.expected_eds) and not selected["CSOED"].duplicated().any()
+            ok = (
+                len(selected) == int(cfg.expected_eds)
+                and not selected["CSOED"].duplicated().any()
+            )
             _status(
                 rows,
                 "STAGE08_BASELINE",
                 baseline_path,
                 ok,
-                f"{baseline_year} rows={len(selected):,}; expected={cfg.expected_eds:,}",
+                f"{baseline_year} rows={len(selected):,}; "
+                f"expected={cfg.expected_eds:,}",
             )
 
     controls_path = Path(cfg.files["scenario_controls"])
     if not controls_path.exists():
-        _status(rows, "SCENARIO_CONTROLS", controls_path, False, "missing")
+        _status(
+            rows,
+            "SCENARIO_CONTROLS",
+            controls_path,
+            False,
+            "missing",
+        )
     else:
         controls = read_scenario_control_table(controls_path)
-        active = controls.loc[controls["ACTIVE"], "SCENARIO_ID"].astype(str).tolist()
+        active = controls.loc[
+            controls["ACTIVE"],
+            "SCENARIO_ID",
+        ].astype(str).tolist()
         _status(
             rows,
             "SCENARIO_CONTROLS",
@@ -111,31 +140,72 @@ def preflight_principal_inputs(
             f"ACTIVE={active}",
         )
 
+    # The compact 08B source universe must be rich enough for both the SC1
+    # G1/G2/G3 capacity solve and the mature SC2 Class1-6 reconstruction.
     soil_path = Path(cfg.files["agricultural_soil_profile"])
     if not soil_path.exists():
-        _status(rows, "COMPACT_08B", soil_path, False, "missing; build once outside scenario runtime")
+        _status(
+            rows,
+            "COMPACT_08B",
+            soil_path,
+            False,
+            "missing; build/package once outside scenario runtime",
+        )
     else:
         soil = pd.read_csv(soil_path, low_memory=False)
-        required = {"CSOED", *GROUP_SHARE_COLUMNS}
+        required = {
+            "CSOED",
+            "SOIL_SOURCE_UAA_HA",
+            *CLASS_SHARE_COLUMNS,
+            *GROUP_SHARE_COLUMNS,
+        }
+        if stage in {"SC2", "SC3"}:
+            required.update(
+                {
+                    "IFS_PEAT_CUTOVER_UAA_SHARE",
+                    "FOREST_YC_WEIGHTED_MEAN",
+                }
+            )
         missing = sorted(required - set(soil.columns))
-        keys = soil["CSOED"].map(canonical_csoed) if "CSOED" in soil.columns else pd.Series(dtype=str)
-        ok = not missing and not keys.eq("").any() and not keys.duplicated().any()
+        keys = (
+            soil["CSOED"].map(canonical_csoed)
+            if "CSOED" in soil.columns
+            else pd.Series(dtype=str)
+        )
+        ok = (
+            not missing
+            and not keys.eq("").any()
+            and not keys.duplicated().any()
+        )
         _status(
             rows,
             "COMPACT_08B",
             soil_path,
             ok,
-            "valid compact ED source profile" if ok else f"missing={missing}",
+            (
+                "valid compact agricultural-capability source profile"
+                if ok
+                else f"missing={missing}"
+            ),
         )
 
-    if stage == "SC2":
+    if stage in {"SC2", "SC3"}:
         lpis_path = Path(cfg.files["lpis_ed_profile"])
         if not lpis_path.exists():
-            _status(rows, "COMPACT_LPIS", lpis_path, False, "missing; do not trigger heavy rebuild automatically")
+            _status(
+                rows,
+                "COMPACT_LPIS",
+                lpis_path,
+                False,
+                "missing; do not trigger heavy rebuild automatically",
+            )
         else:
             lpis = read_ed_lpis_profile(lpis_path)
             counts = lpis.groupby("LPIS_YEAR").size().to_dict()
-            expected = {2020: int(cfg.expected_eds), 2025: int(cfg.expected_eds)}
+            expected = {
+                2020: int(cfg.expected_eds),
+                2025: int(cfg.expected_eds),
+            }
             _status(
                 rows,
                 "COMPACT_LPIS",
@@ -144,21 +214,47 @@ def preflight_principal_inputs(
                 f"rows by year={counts}",
             )
 
+        # Direct 08C source rows must carry the precomputed physical and mapped
+        # SG shares as well as raw areas. Scenario runtime never reopens the
+        # heavy source package to derive missing fields.
         physical_path = Path(cfg.files["physical_soil_profile"])
         if not physical_path.exists():
-            _status(rows, "COMPACT_08C", physical_path, False, "missing; reduce source package once before SC2")
+            _status(
+                rows,
+                "COMPACT_08C",
+                physical_path,
+                False,
+                "missing; reduce/package source once before SC2",
+            )
         else:
             physical = pd.read_csv(physical_path, low_memory=False)
-            required = {"CSOED", *PHYSICAL_AREA_COLUMNS}
+            required = {
+                "CSOED",
+                *PHYSICAL_AREA_COLUMNS,
+                *PHYSICAL_SHARE_COLUMNS,
+                *MAP_SG_SHARE_COLUMNS,
+            }
             missing = sorted(required - set(physical.columns))
-            keys = physical["CSOED"].map(canonical_csoed) if "CSOED" in physical.columns else pd.Series(dtype=str)
-            ok = not missing and not keys.eq("").any() and not keys.duplicated().any()
+            keys = (
+                physical["CSOED"].map(canonical_csoed)
+                if "CSOED" in physical.columns
+                else pd.Series(dtype=str)
+            )
+            ok = (
+                not missing
+                and not keys.eq("").any()
+                and not keys.duplicated().any()
+            )
             _status(
                 rows,
                 "COMPACT_08C",
                 physical_path,
                 ok,
-                "valid compact mapped physical-soil profile" if ok else f"missing={missing}",
+                (
+                    "valid compact mapped physical-soil source profile"
+                    if ok
+                    else f"missing={missing}"
+                ),
             )
 
     return pd.DataFrame(rows)
