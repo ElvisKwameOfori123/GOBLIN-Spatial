@@ -42,9 +42,9 @@ goblin = [
 
 [project.scripts]
 goblin-spatial = "goblin_spatial.cli:main"
-goblin-spatial-lpis = "goblin_spatial.lpis_cli:main"
-goblin-spatial-opportunity = "goblin_spatial.opportunity_cli:main"
 goblin-spatial-principal = "goblin_spatial.principal_cli:main"
+# Explicit first-principles LPIS reconstruction tool. Not part of normal runtime.
+goblin-spatial-lpis = "goblin_spatial.lpis_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -53,5 +53,5 @@ where = ["src"]
 pythonpath = ["src"]
 testpaths = ["tests"]
 markers = [
-  "full_data: integration tests requiring the external 2020 ED baseline and/or AQA06 full-data inputs",
+  "full_data: integration tests requiring external historical-baseline inputs",
 ]
