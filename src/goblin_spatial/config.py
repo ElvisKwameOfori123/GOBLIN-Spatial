@@ -31,29 +31,8 @@ def _resolve_path(project_root: Path, value: str | Path) -> Path:
     return path if path.is_absolute() else project_root / path
 
 
-def _resolve_file_value(project_root: Path, value: Any) -> Path:
-    """Resolve one configured file, allowing canonical-first fallback paths.
-
-    A scalar path behaves exactly as before. A list/tuple is interpreted in
-    preference order: the first existing candidate is selected; if no candidate
-    exists yet, the first path is returned so error messages point at the
-    intended canonical v1 location.
-    """
-
-    if isinstance(value, (list, tuple)):
-        if not value:
-            raise ValueError("configured file candidate list cannot be empty")
-        candidates = [_resolve_path(project_root, item) for item in value]
-        for candidate in candidates:
-            if candidate.exists():
-                return candidate
-        return candidates[0]
-
-    return _resolve_path(project_root, value)
-
-
 def load_config(path: str | Path) -> SpatialConfig:
-    """Load YAML and resolve all data paths relative to the repository root."""
+    """Load the canonical YAML configuration and resolve repository-relative paths."""
 
     config_path = Path(path).expanduser().resolve()
     with config_path.open("r", encoding="utf-8") as handle:
@@ -69,10 +48,13 @@ def load_config(path: str | Path) -> SpatialConfig:
     processed_dir = project_root / paths.get("processed", "data/processed")
 
     file_config = raw.get("files", {})
-    files = {
-        key: _resolve_file_value(project_root, value)
-        for key, value in file_config.items()
-    }
+    files: dict[str, Path] = {}
+    for key, value in file_config.items():
+        if isinstance(value, (list, tuple, dict)):
+            raise ValueError(
+                f"files.{key} must be one canonical path, not a fallback collection"
+            )
+        files[key] = _resolve_path(project_root, value)
 
     return SpatialConfig(
         project_root=project_root,

@@ -1,0 +1,49 @@
+{
+  "package": "GOBLIN-Spatial Land Context Controls 2020",
+  "version": "runtime-control-v1",
+  "model_ed_universe": 2857,
+  "join_key": "CSOED",
+  "runtime_rule": "Normal SC1/SC2/SC3 runs consume these compact repository controls only. Heavy soil/LPIS geospatial rebuild is optional reproducibility work, not runtime.",
+  "controls": {
+    "08B": {
+      "file": "ED_Soil_Capability_08B.csv",
+      "rows": 2857,
+      "columns": 27,
+      "sha256": "55014e27c872666cffaf2b876eaa856eccbab1e915513a2f91780177b0b0c2c4",
+      "role": "SC1 released-land soil capacity and SC2 capability/eligibility context",
+      "resolution": {
+        "ED": 2820,
+        "COUNTY_FALLBACK": 37
+      }
+    },
+    "08C": {
+      "file": "ED_Physical_Soil_08C.csv",
+      "rows": 2857,
+      "columns": 33,
+      "sha256": "9892059c3f67c92d04427ad48220aa7565325df0251be6d53090388046b6bae4",
+      "role": "Independent mapped physical-soil context for SC2",
+      "resolution": {
+        "ED": 2857
+      }
+    },
+    "LPIS_2020": {
+      "file": "ED_LPIS_Context_2020_RUNTIME.csv",
+      "rows": 2857,
+      "columns": 54,
+      "sha256": "c8a6b66c9166ea3da0121def6225698037951d3022af02e5b42f2b54f4f13b2b",
+      "role": "Neutral 2020 LPIS ED context for SC2",
+      "note": "Recovered from mature SC2 SI_SG 2020 output and cross-validated against BE_SG 2020 across all four allocation policies."
+    }
+  },
+  "validation": {
+    "identical_ed_universe": true,
+    "08B_class_closure_max_abs": 1.0000011929633956e-10,
+    "08B_group_closure_max_abs": 1.0000011929633956e-10,
+    "08B_class_pair_to_G_max_abs": 1.0000011929633956e-10,
+    "08C_physical_area_closure_max_abs_ha": 2.000888343900442e-10,
+    "08C_physical_share_closure_max_abs": 2.000000165480742e-10,
+    "08C_SG_share_closure_max_abs": 1.0000011929633956e-10,
+    "LPIS_grass_partition_closure_max_abs_ha": 2.000888343900442e-10
+  },
+  "previous_canonical_merged_sha256": "6a94c125413260ed462c9d5430fe6d39be7df48d282734eea218351829aa6e5d"
+}

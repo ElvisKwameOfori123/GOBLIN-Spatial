@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  baseline-test:
+  model-test:
     runs-on: ubuntu-latest
 
     steps:
@@ -22,51 +22,74 @@ jobs:
       - name: Install package
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[geo,goblin]"
+          pip install -e ".[geo,goblin,scenario]"
           pip install pytest
 
       - name: Compile Python sources
         run: python -m compileall -q src tests
 
-      - name: Verify Git-tracked and staged inputs
-        run: goblin-spatial fetch-data --verify-only --tracked-only
+      - name: Verify repository-contained runtime inputs
+        run: goblin-spatial fetch-data --verify-only
 
-      - name: Audit packaged baseline inputs against validated legacy inputs
-        run: pytest -q tests/test_packaged_baseline_equivalence.py
+      - name: Validate exact frozen 2020 land-context bundle
+        run: pytest -q tests/test_land_context_bundle.py
 
-      - name: Run historical baseline tests
+      - name: Run historical baseline unit tests
         run: |
           pytest -q \
             tests/test_baseline_contract.py \
             tests/test_cattle.py \
+            tests/test_cli_data_boundary.py \
             tests/test_data_fetch.py \
             tests/test_export_schema.py \
             tests/test_input_data.py \
-            tests/test_standard_output.py \
-            tests/test_v1_baseline_migration.py
-
-      # Scenario, 08B/08C, LPIS and released-land tests are deliberately not
-      # collected in this workflow while the v1 historical baseline is being
-      # migrated. They keep their own source files for the later scenario pass.
-      - name: Detect complete historical baseline bundle
-        id: full_data
-        shell: bash
-        run: |
-          if [[ -f data/inputs/baseline/01_CSO_ED_Agricultural_Baseline_2020.csv \
-             && -f data/inputs/baseline/01_CSO_AAA10_Cattle_County_2015_2025.csv \
-             && -f data/inputs/baseline/03_CSO_AAA09_Sheep_County_Region_2015_2025.xlsx \
-             && -f data/inputs/baseline/05A_DAFM_Sheep_Breed_Anchors_2016_2020_2022_2025.csv \
-             && -f data/inputs/baseline/05C_Cattle_Cohort_Relationships_2012_2020.csv \
-             && -f data/inputs/baseline/06_CSO_AQA06_Agricultural_Land_Use.xlsx \
-             && -f data/inputs/baseline/06_Farm_Structure_Demographic_Controls.csv \
-             && -f data/inputs/baseline/08_IFS2020_Standard_Output_Mapping.xlsx ]]; then
-            echo "available=true" >> "$GITHUB_OUTPUT"
-            echo "Canonical historical baseline inputs detected."
-          else
-            echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "Canonical historical baseline inputs not yet committed; full regression will be skipped."
-          fi
+            tests/test_standard_output.py
 
       - name: Run full 2015-2025 historical regression
-        if: steps.full_data.outputs.available == 'true'
         run: pytest -q -s tests/test_full_baseline_regression.py
+
+      - name: Run principal scenario unit tests
+        run: |
+          pytest -q \
+            tests/test_goblin_controls.py \
+            tests/test_goblin_reconciliation.py \
+            tests/test_national_cohort_targets.py \
+            tests/test_national_release.py \
+            tests/test_principal_endpoint.py \
+            tests/test_principal_soil_context.py \
+            tests/test_sc1_comparison.py \
+            tests/test_sc1_metrics.py \
+            tests/test_sc2_context.py \
+            tests/test_sc3_allocation.py \
+            tests/test_scenario_control_table.py \
+            tests/test_scenario_preflight.py
+
+      - name: Build canonical historical baseline
+        run: goblin-spatial build --config configs/ireland_2015_2025.yaml
+
+      - name: Preflight standalone 2020 principal runtime
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from goblin_spatial.config import load_config
+          from goblin_spatial.scenario.preflight import assert_principal_ready
+
+          cfg = load_config(Path("configs/ireland_2015_2025.yaml"))
+          report = assert_principal_ready(cfg, baseline_year=2020, stage="SC3")
+          print(report.to_string(index=False))
+          PY
+
+      - name: Run end-to-end SC1-SC3 smoke test
+        run: |
+          goblin-spatial-principal SI_SG \
+            --baseline-year 2020 \
+            --allocation-rule PRORATA \
+            --stage SC3 \
+            --output-dir data/processed/ci_principal_si_sg
+
+      - name: Confirm standalone scenario outputs
+        run: |
+          test -f data/processed/ci_principal_si_sg/sc1_ed_results.csv
+          test -f data/processed/ci_principal_si_sg/sc2_ed_context.csv
+          test -f data/processed/ci_principal_si_sg/sc3_ed_results.csv
+          test -f data/processed/ci_principal_si_sg/sc3_national_summary.csv

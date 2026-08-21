@@ -1,42 +1,29 @@
-"""Tests for the external-data registry and archive post-processing contract."""
+"""Tests for the repository-contained data-manifest contract."""
+
 from __future__ import annotations
 
 import hashlib
-import zipfile
 from pathlib import Path
 
+import pytest
 import yaml
 
 from goblin_spatial.data_fetch import fetch_data
 
 
-def _digest(path: Path, algorithm: str) -> str:
-    digest = hashlib.new(algorithm)
-    digest.update(path.read_bytes())
-    return digest.hexdigest()
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def test_fetch_data_verifies_and_extracts_local_zip(tmp_path: Path) -> None:
-    source_dir = tmp_path / "source"
-    source_dir.mkdir()
-    member = source_dir / "example.shp"
-    member.write_bytes(b"fixed spatial fixture")
-
-    archive = tmp_path / "bundle.zip"
-    with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        zf.write(member, arcname="example.shp")
-
+def test_fetch_data_verifies_git_tracked_file(tmp_path: Path) -> None:
+    fixture = tmp_path / "fixture.csv"
+    fixture.write_text("a,b\n1,2\n", encoding="utf-8")
     manifest = {
         "datasets": {
             "fixture": {
-                "source": "local",
-                "path": "bundle.zip",
-                "known_hash": f"md5:{_digest(archive, 'md5')}",
-                "archive": "zip",
-                "extract_to": "external",
-                "primary_path": "external/example.shp",
-                "primary_sha256": _digest(member, "sha256"),
-                "required_members": ["external/example.shp"],
+                "source": "git",
+                "path": "fixture.csv",
+                "sha256": _sha256(fixture),
                 "required": True,
             }
         }
@@ -46,50 +33,18 @@ def test_fetch_data_verifies_and_extracts_local_zip(tmp_path: Path) -> None:
 
     resolved = fetch_data(manifest_path)
 
-    expected = tmp_path / "external" / "example.shp"
-    assert resolved["fixture"] == expected
-    assert expected.read_bytes() == b"fixed spatial fixture"
+    assert resolved["fixture"] == fixture
 
 
-def test_fetch_data_canonicalises_pinned_shapefile_among_multiple_candidates(
-    tmp_path: Path,
-) -> None:
-    source_dir = tmp_path / "source"
-    source_dir.mkdir()
-    source_stem = source_dir / "Electoral_Divisions(1)"
-    payloads = {
-        ".shp": b"shp-bytes",
-        ".shx": b"shx-bytes",
-        ".dbf": b"dbf-bytes",
-        ".prj": b"prj-bytes",
-    }
-    for suffix, payload in payloads.items():
-        source_stem.with_suffix(suffix).write_bytes(payload)
-
-    decoy = source_dir / "Another_Layer.shp"
-    decoy.write_bytes(b"different-shapefile")
-
-    archive = tmp_path / "bundle.zip"
-    with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        for suffix in payloads:
-            member = source_stem.with_suffix(suffix)
-            zf.write(member, arcname=member.name)
-        zf.write(decoy, arcname=decoy.name)
-
-    canonical_stem = Path("external/Electoral_Divisions")
+def test_fetch_data_rejects_bad_hash(tmp_path: Path) -> None:
+    fixture = tmp_path / "fixture.csv"
+    fixture.write_text("a\n1\n", encoding="utf-8")
     manifest = {
         "datasets": {
             "fixture": {
-                "source": "local",
-                "path": "bundle.zip",
-                "known_hash": f"md5:{_digest(archive, 'md5')}",
-                "archive": "zip",
-                "extract_to": "external",
-                "primary_path": str(canonical_stem.with_suffix(".shp")),
-                "primary_sha256": _digest(source_stem.with_suffix(".shp"), "sha256"),
-                "required_members": [
-                    str(canonical_stem.with_suffix(suffix)) for suffix in payloads
-                ],
+                "source": "git",
+                "path": "fixture.csv",
+                "sha256": "0" * 64,
                 "required": True,
             }
         }
@@ -97,31 +52,16 @@ def test_fetch_data_canonicalises_pinned_shapefile_among_multiple_candidates(
     manifest_path = tmp_path / "data_manifest.yaml"
     manifest_path.write_text(yaml.safe_dump(manifest), encoding="utf-8")
 
-    resolved = fetch_data(manifest_path)
-
-    primary = tmp_path / canonical_stem.with_suffix(".shp")
-    assert resolved["fixture"] == primary
-    for suffix, payload in payloads.items():
-        assert (tmp_path / canonical_stem.with_suffix(suffix)).read_bytes() == payload
+    with pytest.raises(RuntimeError, match="BAD HASH"):
+        fetch_data(manifest_path)
 
 
-def test_verify_only_does_not_unpack_missing_archive_members(tmp_path: Path) -> None:
-    member = tmp_path / "member.txt"
-    member.write_text("fixture", encoding="utf-8")
-    archive = tmp_path / "bundle.zip"
-    with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        zf.write(member, arcname="member.txt")
-
+def test_fetch_data_allows_missing_optional_local_file(tmp_path: Path) -> None:
     manifest = {
         "datasets": {
-            "fixture": {
+            "optional": {
                 "source": "local",
-                "path": "bundle.zip",
-                "known_hash": f"sha256:{_digest(archive, 'sha256')}",
-                "archive": "zip",
-                "extract_to": "external",
-                "primary_path": "external/member.txt",
-                "required_members": ["external/member.txt"],
+                "path": "not_present.csv",
                 "required": False,
             }
         }
@@ -129,7 +69,23 @@ def test_verify_only_does_not_unpack_missing_archive_members(tmp_path: Path) -> 
     manifest_path = tmp_path / "data_manifest.yaml"
     manifest_path.write_text(yaml.safe_dump(manifest), encoding="utf-8")
 
-    resolved = fetch_data(manifest_path, verify_only=True)
+    resolved = fetch_data(manifest_path)
 
-    assert "fixture" not in resolved
-    assert not (tmp_path / "external" / "member.txt").exists()
+    assert "optional" not in resolved
+
+
+def test_fetch_data_rejects_external_sources(tmp_path: Path) -> None:
+    manifest = {
+        "datasets": {
+            "external": {
+                "source": "external",
+                "path": "anything.csv",
+                "required": False,
+            }
+        }
+    }
+    manifest_path = tmp_path / "data_manifest.yaml"
+    manifest_path.write_text(yaml.safe_dump(manifest), encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="UNSUPPORTED SOURCE"):
+        fetch_data(manifest_path)

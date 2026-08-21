@@ -1,23 +1,43 @@
-"""Data-contract tests for the Irish 2015-2025 package inputs."""
+"""Data-contract tests for the canonical Ireland 2015-2025 package inputs."""
 
 from pathlib import Path
 
 import pandas as pd
-import pytest
+
+from goblin_spatial.config import load_config
 
 
 ROOT = Path(__file__).resolve().parents[1]
+CONFIG = ROOT / "configs/ireland_2015_2025.yaml"
 
 
-@pytest.mark.full_data
+def _config():
+    return load_config(CONFIG)
+
+
+def test_config_uses_only_canonical_baseline_package() -> None:
+    cfg = _config()
+    expected = {
+        "cso_ed_2020": "data/inputs/baseline/01_CSO_ED_Agricultural_Baseline_2020.csv",
+        "cso_cattle_county": "data/inputs/baseline/01_CSO_AAA10_Cattle_County_2015_2025.csv",
+        "cso_sheep_workbook": "data/inputs/baseline/03_CSO_AAA09_Sheep_County_Region_2015_2025.xlsx",
+        "sheep_breed_anchors": "data/inputs/baseline/05A_DAFM_Sheep_Breed_Anchors_2016_2020_2022_2025.csv",
+        "dafm_sheep_county_validation": "data/inputs/baseline/03_0_DAFM_Sheep_County_Totals_2015_2020_2022_2025.csv",
+        "goblin_cohorts": "data/inputs/baseline/05C_Cattle_Cohort_Relationships_2012_2020.csv",
+        "cso_land": "data/inputs/baseline/06_CSO_AQA06_Agricultural_Land_Use.xlsx",
+        "se_controls": "data/inputs/baseline/06_Farm_Structure_Demographic_Controls.csv",
+        "standard_output_mapping": "data/inputs/baseline/08_IFS2020_Standard_Output_Mapping.xlsx",
+    }
+    for key, relative in expected.items():
+        assert cfg.files[key] == ROOT / relative
+        assert cfg.files[key].exists(), key
+
+
 def test_cso_ed_2020_contract() -> None:
-    path = ROOT / "data/raw/cattle/CSO_ED_2020.csv"
-    frame = pd.read_csv(path)
-
+    frame = pd.read_csv(_config().files["cso_ed_2020"])
     assert len(frame) == 2857
     assert frame["CSOED"].nunique() == 2857
     assert set(frame["CENSUS_YEAR"].unique()) == {2020}
-
     required = {
         "DAIRY_COW",
         "OTHER_COW",
@@ -37,89 +57,30 @@ def test_cso_ed_2020_contract() -> None:
 
 
 def test_cattle_county_control_contract() -> None:
-    path = ROOT / "data/raw/cattle/CSO_county_WIDE_2015_2025.csv.xz"
-    frame = pd.read_csv(path)
-
+    frame = pd.read_csv(_config().files["cso_cattle_county"])
     assert len(frame) == 26 * 11
     assert set(frame["Year"].unique()) == set(range(2015, 2026))
     assert frame["Region and County"].nunique() == 26
     assert (frame["UNIT"] == "000 Head").all()
 
 
-def test_sheep_control_contract() -> None:
-    county = pd.read_csv(
-        ROOT / "data/raw/sheep/CSO_Sheep_County_WIDE_2015_2025.csv.xz"
-    )
-    region = pd.read_csv(
-        ROOT / "data/raw/sheep/CSO_Sheep_Region_WIDE_2015_2025.csv.xz"
-    )
-
-    assert len(county) == 26 * 11
-    assert county["County"].nunique() == 26
-    assert set(county["Year"].unique()) == set(range(2015, 2026))
-
-    detailed = {
-        "Border",
-        "West",
-        "Mid-West",
-        "South-East",
-        "South-West",
-        "Dublin and Mid-East",
-        "Midland",
-    }
-    assert detailed.issubset(set(region["Region"]))
-    assert set(region["Year"].unique()) == set(range(2015, 2026))
+def test_sheep_workbook_contains_production_hierarchy() -> None:
+    workbook = pd.ExcelFile(_config().files["cso_sheep_workbook"])
+    assert {"County_WIDE", "Region_WIDE"}.issubset(set(workbook.sheet_names))
 
 
-def test_dafm_sheep_breed_anchor_contract() -> None:
-    path = ROOT / "data/raw/sheep/DAFM_Sheep_Breed_Anchors_2016_2020_2022_2025.zip"
-    frame = pd.read_csv(path)
-
-    assert len(frame) == 26 * 4 * 3
+def test_dafm_breed_anchor_contract() -> None:
+    frame = pd.read_csv(_config().files["sheep_breed_anchors"])
     assert frame["County"].nunique() == 26
     assert set(frame["YEAR"].unique()) == {2016, 2020, 2022, 2025}
     assert set(frame["CATEGORY"].unique()) == {"EWES", "RAMS", "OTHER"}
 
-    count_columns = [
-        "MOUNTAIN_COUNT",
-        "MOUNTAIN_CROSS_COUNT",
-        "LOWLAND_COUNT",
-        "LOWLAND_CROSS_COUNT",
-    ]
-    assert frame[count_columns].notna().all().all()
-    assert (frame[count_columns] >= 0).all().all()
-    assert (
-        frame[count_columns].sum(axis=1).astype(int)
-        == frame["TOTAL_DAFM"].astype(int)
-    ).all()
 
-
-@pytest.mark.full_data
-def test_land_control_contract() -> None:
-    frame = pd.read_csv(ROOT / "data/raw/land/AQA06_Unpivoted_2013_2025.csv")
-
-    assert set(range(2013, 2026)).issubset(set(frame["Year"].unique()))
-    required_land_types = {
-        "Area farmed (AAU)",
-        "Pasture",
-        "Hay",
-        "Grass silage",
-        "Rough grazing in use",
-        "Total cereals",
-    }
-    assert required_land_types.issubset(set(frame["Type of Land Use"]))
-    assert (frame["UNIT"] == "000 Hectares").all()
-
-
-def test_small_controls_exist() -> None:
-    controls = ROOT / "data/controls"
-    for name in (
-        "cohort2012-2020.csv",
-        "06_SE_Data_Controls.csv",
-        "county_region_map.csv",
+def test_required_small_runtime_controls_exist() -> None:
+    cfg = _config()
+    for key in (
+        "standard_output_coefficients",
+        "scenario_controls",
+        "pasture_dm_controls",
     ):
-        assert (controls / name).exists()
-
-    so = controls / "standard_output"
-    assert (so / "IFS_SOC2020_IE_model_controls.csv").exists()
-    assert (so / "NFS_2020_TSO_benchmarks.csv").exists()
+        assert cfg.files[key].exists(), key

@@ -68,20 +68,12 @@ CEREAL_AREAS_2020_HA = {
     "382": {"wheat": 38909.0, "barley": 153787.0, "oats": 20241.0},
 }
 
+ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_CONTROL_PATH = (
-    Path(__file__).resolve().parents[3]
-    / "data"
-    / "controls"
-    / "standard_output"
-    / "IFS_SOC2020_IE_model_controls.csv"
+    ROOT / "data" / "controls" / "standard_output" / "IFS_SOC2020_IE_model_controls.csv"
 )
-
 DEFAULT_MAPPING_PATH = (
-    Path(__file__).resolve().parents[3]
-    / "data"
-    / "controls"
-    / "standard_output"
-    / "GOBLIN_SO_mapping.csv"
+    ROOT / "data" / "inputs" / "baseline" / "08_IFS2020_Standard_Output_Mapping.xlsx"
 )
 
 
@@ -138,9 +130,7 @@ def load_soc2020_controls(path: str | Path | None = None) -> pd.DataFrame:
     raw["CD_PRODUCT"] = raw["CD_PRODUCT"].astype(str).str.strip()
     raw["SOC_EUR"] = pd.to_numeric(raw["SOC_EUR"], errors="raise")
 
-    controls = raw.loc[
-        (raw["YEAR"] == 2020) & (raw["COUNTRY"] == "IE")
-    ].copy()
+    controls = raw.loc[(raw["YEAR"] == 2020) & (raw["COUNTRY"] == "IE")].copy()
     needed = set(COHORT_PRODUCT_CODE.values()) | set(CEREAL_PRODUCT_CODES.values())
     controls = controls.loc[controls["CD_PRODUCT"].isin(needed)].copy()
 
@@ -149,24 +139,21 @@ def load_soc2020_controls(path: str | Path | None = None) -> pd.DataFrame:
     if controls.duplicated(["CD_PRODUCT", "FADN_REGION"]).any():
         raise AssertionError("duplicate SOC product-region controls")
 
-    expected_pairs = {
-        (code, region) for code in needed for region in ("381", "382")
-    }
+    expected_pairs = {(code, region) for code in needed for region in ("381", "382")}
     actual_pairs = set(zip(controls["CD_PRODUCT"], controls["FADN_REGION"]))
     missing_pairs = sorted(expected_pairs - actual_pairs)
     if missing_pairs:
         raise AssertionError(f"missing SOC product-region pairs: {missing_pairs}")
 
-    return controls.sort_values(
-        ["CD_PRODUCT", "FADN_REGION"], kind="stable"
-    ).reset_index(drop=True)
+    return controls.sort_values(["CD_PRODUCT", "FADN_REGION"], kind="stable").reset_index(drop=True)
 
 
 def load_model_mapping(path: str | Path | None = None) -> pd.DataFrame:
-    """Load the direct GOBLIN variable -> fixed-2020 SO mapping control.
+    """Load the canonical GOBLIN variable -> fixed-2020 SO mapping control.
 
-    The canonical v1 input is the frozen workbook sheet ``SO_Mapping``. CSV
-    controls remain supported during staged migration and for compact tests.
+    The repository authority is the packaged IFS-2020 workbook sheet
+    ``SO_Mapping``. CSV input remains accepted when an explicit path is supplied
+    for compact tests or independent audit copies.
     """
 
     source = Path(path) if path is not None else DEFAULT_MAPPING_PATH
