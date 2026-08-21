@@ -1,4 +1,4 @@
-manifest_version: "0.9.1"
+manifest_version: "0.9.2"
 release: "ireland-2015-2025-dev"
 status: "development"
 
@@ -119,14 +119,24 @@ datasets:
     sha256: "73196c3e4f26f31efdb527ded76ca5e016b2e6a128f8531be6260cae9429be88"
     required: true
 
+  goblin_scenario_controls:
+    stage: "SC1/SC3"
+    module: [scenario, sc1, sc3]
+    description: "Editable national scenario endpoints and alternative-land targets. Baseline land is selected from the 2020 or 2025 ED master at runtime, not stored in this file."
+    source: "git"
+    path: "data/controls/scenario/GOBLIN_Scenario_Controls.csv"
+    sha256: "ce0a03982de16213bd81f28e3c94664dd105b604c67365003f1bea5423fcc95d"
+    required: true
+    note: "Runtime gross release is selected-year sum(ALL_GRASSLAND) minus TARGET_LIVESTOCK_LAND_HA. Scenario names, IDs, ordering, ACTIVE status and endpoint targets are data-driven."
+
   sc1_cattle_scenario_endpoints_2050:
     stage: "SC1"
-    module: [scenario, sc1]
-    description: "Compact national 2050 cattle scenario endpoint controls."
+    module: [scenario, sc1, legacy]
+    description: "Legacy compact 2050 cattle endpoint control retained for provenance during the scenario refactor."
     source: "git_pending"
     path: "data/inputs/scenario/SC1_Cattle_Scenario_Endpoints_2050.csv"
     sha256: "316708db50f2d3ab2e2aa38b75672ec85e93e9a59222a36b6ce6c87767028227"
-    required: true
+    required: false
 
   sc1_ed_rural_mixed_urban_2022:
     stage: "SC1"
