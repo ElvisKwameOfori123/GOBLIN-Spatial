@@ -1,9 +1,20 @@
-"""Public API for the principal GOBLIN-Spatial SC1 scenario workflow.
+"""Supported public scenario API for GOBLIN-Spatial.
 
-Older experimental pathway, sequential and net-zero modules remain internal for
-provenance while the repository is finalised. They are intentionally not part of
-the supported package surface. Production scenario execution starts from the
-editable GOBLIN controls and ``run_principal_goblin_endpoint``.
+The production framework is deliberately narrow:
+
+1. read editable national GOBLIN controls;
+2. allocate adult dairy and suckler endpoints across EDs;
+3. propagate the 21 cattle cohorts while preserving ED signatures;
+4. keep sheep fixed unless an explicit national sheep control is supplied;
+5. reconcile exactly to national livestock controls;
+6. spatialise authoritative released land through solved livestock pressure and
+   frozen 08B agricultural-capability capacity;
+7. pass the frozen SC1 result to SC2/SC3 for land opportunity and allocation.
+
+Older experimental pathway, sequential, generic net-zero and cattle-study
+modules are not part of the supported runtime contract and are intentionally
+not re-exported here. They may be retained temporarily only as migration
+provenance until their references are removed.
 """
 
 from goblin_spatial.scenario.control_table import (
