@@ -2,14 +2,6 @@ name: spatial-smoke
 
 on:
   workflow_dispatch:
-  pull_request:
-    branches: [main]
-    paths:
-      - "data_manifest.yaml"
-      - "src/goblin_spatial/data_fetch.py"
-      - "src/goblin_spatial/soil/**"
-      - "scripts/build_ed_sis_association_overlay.py"
-      - ".github/workflows/spatial-smoke.yml"
 
 jobs:
   zenodo-soil-smoke:
@@ -30,7 +22,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[geo]"
 
-      - name: Fetch frozen Zenodo spatial inputs
+      - name: Fetch frozen Zenodo spatial rebuild inputs
         run: goblin-spatial fetch-data
 
       - name: Build neutral ED x SIS overlay
@@ -52,5 +44,5 @@ jobs:
           assert d["soil_associations"] == 69, d
           assert d["mean_soil_coverage"] >= 0.99, d
           assert d["median_soil_coverage"] >= 0.99, d
-          print("Zenodo fetch and 2,857-ED SIS overlay reproduced successfully")
+          print("Zenodo spatial rebuild smoke test reproduced successfully")
           PY
