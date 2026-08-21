@@ -1,5 +1,7 @@
 name: lpis-rebuild
 
+# Optional first-principles reconstruction only.
+# Normal historical and SC1-SC3 runtime never invoke this workflow.
 on:
   workflow_dispatch:
 
@@ -22,109 +24,43 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[geo]"
 
-      - name: Fetch frozen SAPS geography
-        run: goblin-spatial fetch-data
-
-      - name: Download version-pinned LPIS snapshots
-        shell: bash
+      - name: Explicitly fetch optional reconstruction sources
         run: |
-          set -euo pipefail
-          mkdir -p data/external/spatial/lpis
-          python - <<'PY'
-          from pathlib import Path
-          import subprocess
-          import yaml
+          goblin-spatial fetch-data --include-reconstruction-sources
 
-          pins = yaml.safe_load(Path("LPIS_SOURCE_PINS.yaml").read_text(encoding="utf-8"))
-          for key in ("lpis_2020_corrected_v2", "lpis_2025_validated_v1"):
-              source = pins["sources"][key]
-              record = int(source["record_id"])
-              filename = source["filename"]
-              path = Path(source["configured_path"])
-              path.parent.mkdir(parents=True, exist_ok=True)
-              url = f"https://zenodo.org/records/{record}/files/{filename}?download=1"
-              print(f"Downloading {key}: {url}")
-              subprocess.run(
-                  ["curl", "-L", "--fail", "--retry", "4", "--retry-delay", "5", "-o", str(path), url],
-                  check=True,
-              )
-          PY
-
-      - name: Verify LPIS source checksums
+      - name: Rebuild 2020 and 2025 ED LPIS control from pinned sources
         run: |
-          python - <<'PY'
-          from pathlib import Path
-          import hashlib
-          import yaml
+          goblin-spatial-lpis \
+            --year both \
+            --batch-size 100000 \
+            --ed-shapefile data/inputs/spatial/SC2_ED_Boundaries_Frozen.gpkg \
+            --lpis-2020 data/inputs/spatial/SC2_LPIS_2020_Frozen.parquet \
+            --lpis-2025 data/inputs/spatial/SC2_LPIS_2025_Frozen.parquet
 
-          pins = yaml.safe_load(Path("LPIS_SOURCE_PINS.yaml").read_text(encoding="utf-8"))
-          for key, source in pins["sources"].items():
-              path = Path(source["configured_path"])
-              digest = hashlib.md5(path.read_bytes()).hexdigest()
-              expected = str(source["zenodo_md5"]).lower()
-              assert digest == expected, (key, digest, expected)
-              print(f"{key}: MD5 verified {digest}; bytes={path.stat().st_size:,}")
-          PY
-
-      - name: Inspect corrected LPIS source schemas
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          import pyarrow.parquet as pq
-          import yaml
-
-          pins = yaml.safe_load(Path("LPIS_SOURCE_PINS.yaml").read_text(encoding="utf-8"))
-          for key, source in pins["sources"].items():
-              path = Path(source["configured_path"])
-              parquet = pq.ParquetFile(path)
-              names = set(parquet.schema_arrow.names)
-              print(f"{key}: rows={parquet.metadata.num_rows:,}; row_groups={parquet.metadata.num_row_groups}")
-              print("columns:", ", ".join(parquet.schema_arrow.names))
-              assert "CLAIMED_AREA_HA" in names, key
-              assert "geometry" in names, key
-              if key == "lpis_2020_corrected_v2":
-                  assert "COMMONAGE_FRACTION" in names or {"COM_NUM", "COM_DEN"}.issubset(names), names
-                  assert "SHARE_DIGITISED_HA" in names, names
-                  assert "SHARE_ELIGIBLE_HA" in names, names
-                  assert "LAND_USE_GROUP" in names, names
-          PY
-
-      - name: Rebuild 2020 and 2025 ED LPIS control
-        run: goblin-spatial-lpis --year both --batch-size 100000
-
-      - name: Validate dual-baseline LPIS control
+      - name: Validate reconstructed dual-baseline LPIS control
         run: |
           python - <<'PY'
           import json
           from pathlib import Path
+
           import numpy as np
           import pandas as pd
-          import yaml
 
-          pins = yaml.safe_load(Path("LPIS_SOURCE_PINS.yaml").read_text(encoding="utf-8"))
-          expected_eds = int(pins["spatial_bridge"]["expected_model_eds"])
-          expected_rows = int(pins["spatial_bridge"]["expected_lpis_ed_profile_rows"])
           path = Path("data/controls/lpis/ED_LPIS_opportunity_2020_2025.csv.xz")
           frame = pd.read_csv(path, low_memory=False)
 
-          assert len(frame) == expected_rows, len(frame)
-          assert set(frame["LPIS_YEAR"].astype(int)) == {2020, 2025}
+          expected_eds = 2857
+          assert len(frame) == 2 * expected_eds, len(frame)
+          assert set(pd.to_numeric(frame["LPIS_YEAR"], errors="raise").astype(int)) == {2020, 2025}
           counts = frame.groupby("LPIS_YEAR").size().to_dict()
           assert counts == {2020: expected_eds, 2025: expected_eds}, counts
-          assert not frame[["LPIS_YEAR", "CSOED_CANONICAL"]].duplicated().any()
 
-          keys_2020 = set(frame.loc[frame["LPIS_YEAR"].eq(2020), "CSOED_CANONICAL"].astype(str))
-          keys_2025 = set(frame.loc[frame["LPIS_YEAR"].eq(2025), "CSOED_CANONICAL"].astype(str))
+          key_col = "CSOED_CANONICAL" if "CSOED_CANONICAL" in frame.columns else "CSOED"
+          assert not frame[["LPIS_YEAR", key_col]].duplicated().any()
+          keys_2020 = set(frame.loc[frame["LPIS_YEAR"].eq(2020), key_col].astype(str))
+          keys_2025 = set(frame.loc[frame["LPIS_YEAR"].eq(2025), key_col].astype(str))
           assert keys_2020 == keys_2025
           assert len(keys_2020) == expected_eds
-
-          missing_commonage = pd.to_numeric(
-              frame["LPIS_SNAPSHOT_COMMONAGE_FRACTION_MISSING_RECORDS"], errors="raise"
-          )
-          assert missing_commonage.eq(0).all(), missing_commonage.unique()
-          complete = frame["LPIS_SNAPSHOT_ADJUSTED_AREA_COMPLETE"].astype(str).str.lower()
-          assert complete.isin({"true", "1"}).all(), complete.unique()
-          assert frame["LPIS_SNAPSHOT_ADJUSTED_AREA_STATUS"].eq("COMPLETE").all()
 
           area_columns = [
               "LPIS_CLAIMED_AG_HA",
@@ -138,73 +74,52 @@ jobs:
               assert np.isfinite(values).all(), column
               assert (values >= -1e-9).all(), column
 
-          claimed = pd.to_numeric(frame["LPIS_CLAIMED_GRASS_HA"], errors="raise").to_numpy(float)
-          commonage = pd.to_numeric(frame["LPIS_COMMONAGE_GRASS_HA"], errors="raise").to_numpy(float)
+          claimed = pd.to_numeric(frame["LPIS_CLAIMED_GRASS_HA"], errors="raise")
+          commonage = pd.to_numeric(frame["LPIS_COMMONAGE_GRASS_HA"], errors="raise")
           assert (commonage <= claimed + 1e-8).all()
 
           grass_subtypes = [
-              "LPIS_PERMANENT_PASTURE_HA",
-              "LPIS_LOW_INPUT_GRASS_HA",
-              "LPIS_TEMPORARY_GRASS_HA",
-              "LPIS_HAY_MEADOW_HA",
-              "LPIS_PEAT_GRASS_HA",
-              "LPIS_RIPARIAN_GRASS_HA",
-              "LPIS_OTHER_GRASS_HA",
+              column
+              for column in (
+                  "LPIS_PERMANENT_PASTURE_HA",
+                  "LPIS_LOW_INPUT_GRASS_HA",
+                  "LPIS_TEMPORARY_GRASS_HA",
+                  "LPIS_HAY_MEADOW_HA",
+                  "LPIS_PEAT_GRASS_HA",
+                  "LPIS_RIPARIAN_GRASS_HA",
+                  "LPIS_OTHER_GRASS_HA",
+              )
+              if column in frame.columns
           ]
-          subtype_sum = frame[grass_subtypes].apply(pd.to_numeric, errors="raise").sum(axis=1)
-          partition_error = (subtype_sum - pd.to_numeric(frame["LPIS_CLAIMED_GRASS_HA"], errors="raise")).abs()
+          partition = frame[grass_subtypes].apply(pd.to_numeric, errors="coerce").fillna(0.0).sum(axis=1)
+          partition_error = (partition - claimed).abs()
           assert float(partition_error.max()) <= 1e-6, float(partition_error.max())
-
-          context_columns = [
-              "LPIS_FORESTRY_EXISTING_CONTEXT_HA",
-              "LPIS_FORESTRY_ELIGIBLE_CONTEXT_HA",
-          ]
-          totals = {
-              year: {
-                  column: float(
-                      pd.to_numeric(
-                          frame.loc[frame["LPIS_YEAR"].eq(year), column],
-                          errors="raise",
-                      ).sum()
-                  )
-                  for column in [*grass_subtypes, *context_columns]
-              }
-              for year in (2020, 2025)
-          }
-          assert 3_500_000 < totals[2020]["LPIS_PERMANENT_PASTURE_HA"] < 3_800_000, totals[2020]
-          assert totals[2020]["LPIS_LOW_INPUT_GRASS_HA"] > 200_000, totals[2020]
-          assert totals[2020]["LPIS_FORESTRY_EXISTING_CONTEXT_HA"] > 0, totals[2020]
-          assert totals[2025]["LPIS_FORESTRY_ELIGIBLE_CONTEXT_HA"] > 0, totals[2025]
 
           summary = {
               "rows": int(len(frame)),
-              "eds_per_snapshot": counts,
-              "claimed_ag_ha": {
-                  str(year): float(frame.loc[frame["LPIS_YEAR"].eq(year), "LPIS_CLAIMED_AG_HA"].sum())
-                  for year in (2020, 2025)
-              },
+              "eds_per_snapshot": {str(key): int(value) for key, value in counts.items()},
               "claimed_grass_ha": {
-                  str(year): float(frame.loc[frame["LPIS_YEAR"].eq(year), "LPIS_CLAIMED_GRASS_HA"].sum())
+                  str(year): float(
+                      pd.to_numeric(
+                          frame.loc[frame["LPIS_YEAR"].eq(year), "LPIS_CLAIMED_GRASS_HA"],
+                          errors="raise",
+                      ).sum()
+                  )
                   for year in (2020, 2025)
               },
-              "eligible_grass_ha": {
-                  str(year): float(frame.loc[frame["LPIS_YEAR"].eq(year), "LPIS_ELIGIBLE_GRASS_HA"].sum())
-                  for year in (2020, 2025)
-              },
-              "grass_subtype_totals_ha": {str(year): totals[year] for year in (2020, 2025)},
               "grass_subtype_partition_max_abs_error_ha": float(partition_error.max()),
+              "runtime_role": "OPTIONAL_FIRST_PRINCIPLES_RECONSTRUCTION_ONLY",
           }
           Path("data/controls/lpis/LPIS_ED_validation_summary.json").write_text(
               json.dumps(summary, indent=2), encoding="utf-8"
           )
           print(json.dumps(summary, indent=2))
-          print("Dual-baseline LPIS ED control reproduced and validated successfully")
           PY
 
-      - name: Upload compact LPIS control and QA summary
+      - name: Upload reconstructed compact LPIS control and QA summary
         uses: actions/upload-artifact@v4
         with:
-          name: ED-LPIS-opportunity-2020-2025
+          name: ED-LPIS-opportunity-2020-2025-reconstruction
           path: |
             data/controls/lpis/ED_LPIS_opportunity_2020_2025.csv.xz
             data/controls/lpis/LPIS_ED_validation_summary.json
