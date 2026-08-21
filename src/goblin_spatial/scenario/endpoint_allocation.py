@@ -1,10 +1,9 @@
-"""Allocate exact dairy and suckler endpoints across their existing ED footprints.
+"""Allocate exact dairy and suckler endpoints across existing ED footprints.
 
-This is the principal SC1 allocation used by the mature v2.1 study. Dairy and
-suckler categories are treated separately because a pathway can expand one
-category while contracting the other. Protection policies redistribute only a
-fixed national contraction. Expansion remains PRORATA and no new category
-footprint is seeded.
+Dairy and suckler categories are treated separately because a pathway can
+expand one category while contracting the other. Protection policies
+redistribute only a fixed national contraction. Expansion remains PRORATA and
+no new adult-category footprint is seeded.
 """
 
 from __future__ import annotations
@@ -46,22 +45,10 @@ def allocate_adult_endpoint(
     controls: GoblinPathwayControls,
     *,
     allocation_rule: AllocationRule = AllocationRule.PRORATA,
-    random_seed: int = 42,
-    score_column: str | None = None,
-    productivity_score_column: str | None = None,
-    vulnerability_score_column: str | None = None,
     protection_strength: float = PRINCIPAL_PROTECTION_STRENGTH,
-    hybrid_weights: tuple[float, float, float, float] = (0.40, 0.25, 0.20, 0.15),
     expected_eds: int | None = None,
 ) -> pd.DataFrame:
-    """Allocate exact national adult-category endpoints using principal SC1 rules.
-
-    The unused generic-rule arguments are retained in the function signature for
-    API compatibility. The principal endpoint deliberately accepts only the four
-    validated policies in ``PRINCIPAL_ALLOCATION_POLICIES``.
-    """
-
-    del random_seed, score_column, productivity_score_column, vulnerability_score_column, hybrid_weights
+    """Allocate exact national adult-category endpoints using principal rules."""
 
     policy = allocation_rule.value
     if policy not in PRINCIPAL_ALLOCATION_POLICIES:
@@ -77,14 +64,13 @@ def allocate_adult_endpoint(
     )
     dairy_col, suckler_col = _adult_columns(baseline)
 
-    # Protection scores are frozen from the selected baseline before any scenario
-    # allocation. Stage-08 fixed-2020 SO is part of the economic-capacity score.
+    # Protection scores are frozen from the selected baseline before scenario
+    # allocation. Fixed-2020 Standard Output contributes to the economic score.
     scored = build_principal_baseline_scores(baseline)
     base_dairy = _integer(scored, dairy_col)
     base_suckler = _integer(scored, suckler_col)
     base_adults = base_dairy + base_suckler
 
-    # The aggregate adult fields, when present, must reproduce the cohort adults.
     if "DAIRY_COW" in scored.columns:
         if not np.array_equal(_integer(scored, "DAIRY_COW"), base_dairy):
             raise AssertionError("DAIRY_COW disagrees with dairy_cows in selected baseline")
@@ -97,7 +83,7 @@ def allocate_adult_endpoint(
     target_suckler = int(milestone.suckler_cows)
     score = policy_score_array(scored, policy)
 
-    scenario_dairy, dairy_reduction_signed, dairy_burden, dairy_mode = allocate_category_endpoint(
+    scenario_dairy, _, dairy_burden, dairy_mode = allocate_category_endpoint(
         base_dairy,
         target_dairy,
         score,
@@ -105,7 +91,7 @@ def allocate_adult_endpoint(
         "DAIRY",
         protection_strength=float(protection_strength),
     )
-    scenario_suckler, suckler_reduction_signed, suckler_burden, suckler_mode = allocate_category_endpoint(
+    scenario_suckler, _, suckler_burden, suckler_mode = allocate_category_endpoint(
         base_suckler,
         target_suckler,
         score,
