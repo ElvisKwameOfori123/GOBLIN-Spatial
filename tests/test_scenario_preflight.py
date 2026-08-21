@@ -1,3 +1,5 @@
+"""Tests for the no-download principal scenario preflight contract."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -5,20 +7,23 @@ from pathlib import Path
 import pandas as pd
 
 from goblin_spatial.config import SpatialConfig
-from goblin_spatial.scenario.preflight import preflight_principal_inputs
-from goblin_spatial.soil import CLASS_SHARE_COLUMNS, GROUP_SHARE_COLUMNS, PHYSICAL_AREA_COLUMNS
+from goblin_spatial.land.context import (
+    LAND_CONTEXT_CANONICAL_SHA256,
+    LAND_CONTEXT_EXPECTED_COLUMNS,
+    LAND_CONTEXT_EXPECTED_EDS,
+)
+import goblin_spatial.scenario.preflight as preflight
 
 
 def _cfg(tmp_path: Path) -> SpatialConfig:
     processed = tmp_path / "processed"
     controls = tmp_path / "controls"
+    land_context = controls / "land" / "ED_Land_Context_2020"
     processed.mkdir()
     controls.mkdir()
     files = {
         "scenario_controls": controls / "scenarios.csv",
-        "agricultural_soil_profile": controls / "08b.csv",
-        "lpis_ed_profile": controls / "lpis.csv",
-        "physical_soil_profile": controls / "08c.csv",
+        "land_context_2020": land_context,
     }
     return SpatialConfig(
         project_root=tmp_path,
@@ -77,91 +82,68 @@ def _write_controls(cfg: SpatialConfig) -> None:
     ).to_csv(cfg.files["scenario_controls"], index=False)
 
 
-def _write_08b(cfg: SpatialConfig, *, complete: bool = True) -> None:
-    rows = []
-    for ed in ("1001", "1002", "1003"):
-        row = {"CSOED": ed, "SOIL_SOURCE_UAA_HA": 100.0}
-        classes = (0.20, 0.20, 0.20, 0.20, 0.10, 0.10)
-        row.update(dict(zip(CLASS_SHARE_COLUMNS, classes, strict=True)))
-        row[GROUP_SHARE_COLUMNS[0]] = 0.40
-        row[GROUP_SHARE_COLUMNS[1]] = 0.40
-        row[GROUP_SHARE_COLUMNS[2]] = 0.20
-        if complete:
-            row["FOREST_YC_WEIGHTED_MEAN"] = 18.0
-            row["IFS_PEAT_CUTOVER_UAA_SHARE"] = 0.10
-        rows.append(row)
-    pd.DataFrame(rows).to_csv(cfg.files["agricultural_soil_profile"], index=False)
+def _mock_valid_land_context(monkeypatch, cfg: SpatialConfig) -> None:
+    cfg.files["land_context_2020"].mkdir(parents=True)
+    frame = pd.DataFrame(
+        0.0,
+        index=range(LAND_CONTEXT_EXPECTED_EDS),
+        columns=[f"C{i}" for i in range(LAND_CONTEXT_EXPECTED_COLUMNS)],
+    )
+    monkeypatch.setattr(preflight, "read_land_context_table", lambda path: frame)
+    monkeypatch.setattr(
+        preflight,
+        "land_context_sha256",
+        lambda path: LAND_CONTEXT_CANONICAL_SHA256,
+    )
 
 
-def _write_lpis(cfg: SpatialConfig) -> None:
-    rows = []
-    for year in (2020, 2025):
-        for ed in ("1001", "1002"):
-            rows.append(
-                {
-                    "LPIS_YEAR": year,
-                    "CSOED": ed,
-                    "LPIS_CLAIMED_GRASS_HA": 90.0,
-                    "LPIS_ELIGIBLE_GRASS_HA": 80.0,
-                }
-            )
-    pd.DataFrame(rows).to_csv(cfg.files["lpis_ed_profile"], index=False)
-
-
-def _write_minimal_08c(cfg: SpatialConfig) -> None:
-    rows = []
-    for ed in ("1001", "1002", "1003"):
-        row = {"CSOED": ed}
-        row.update(
-            dict(
-                zip(
-                    PHYSICAL_AREA_COLUMNS,
-                    (30.0, 20.0, 20.0, 10.0, 5.0, 10.0, 5.0),
-                    strict=True,
-                )
-            )
-        )
-        rows.append(row)
-    pd.DataFrame(rows).to_csv(cfg.files["physical_soil_profile"], index=False)
-
-
-def _write_all(cfg: SpatialConfig, *, complete_08b: bool = True) -> None:
+def _write_runtime_prerequisites(cfg: SpatialConfig) -> None:
     _write_stage08(cfg)
     _write_controls(cfg)
-    _write_08b(cfg, complete=complete_08b)
-    _write_lpis(cfg)
-    _write_minimal_08c(cfg)
 
 
-def test_sc3_preflight_accepts_source_universes_and_minimal_08c(tmp_path: Path) -> None:
+def test_sc3_preflight_accepts_frozen_2020_runtime_contract(tmp_path: Path, monkeypatch) -> None:
     cfg = _cfg(tmp_path)
-    _write_all(cfg)
+    _write_runtime_prerequisites(cfg)
+    _mock_valid_land_context(monkeypatch, cfg)
 
-    report = preflight_principal_inputs(cfg, baseline_year=2020, stage="SC3")
+    report = preflight.preflight_principal_inputs(cfg, baseline_year=2020, stage="SC3")
 
     assert report["OK"].all(), report.to_dict("records")
-    assert report.set_index("ITEM").loc["COMPACT_08B", "DETAIL"].endswith("rows=3")
-    assert report.set_index("ITEM").loc["COMPACT_08C", "DETAIL"].endswith("rows=3")
+    context = report.set_index("ITEM").loc["FROZEN_LAND_CONTEXT_2020"]
+    assert f"rows={LAND_CONTEXT_EXPECTED_EDS:,}" in context["DETAIL"]
+    assert f"columns={LAND_CONTEXT_EXPECTED_COLUMNS}" in context["DETAIL"]
+    assert LAND_CONTEXT_CANONICAL_SHA256 in context["DETAIL"]
 
 
-def test_sc1_preflight_does_not_require_sc3_yc_or_peat_fields(tmp_path: Path) -> None:
+def test_missing_land_context_fails_without_rebuild(tmp_path: Path) -> None:
     cfg = _cfg(tmp_path)
-    _write_stage08(cfg)
-    _write_controls(cfg)
-    _write_08b(cfg, complete=False)
+    _write_runtime_prerequisites(cfg)
 
-    report = preflight_principal_inputs(cfg, baseline_year=2020, stage="SC1")
+    report = preflight.preflight_principal_inputs(cfg, baseline_year=2020, stage="SC1")
+    context = report.set_index("ITEM").loc["FROZEN_LAND_CONTEXT_2020"]
+
+    assert not bool(context["OK"])
+    assert "missing repository-contained runtime control" in context["DETAIL"]
+
+
+def test_2025_sc1_may_use_frozen_08b_reference(tmp_path: Path, monkeypatch) -> None:
+    cfg = _cfg(tmp_path)
+    _write_runtime_prerequisites(cfg)
+    _mock_valid_land_context(monkeypatch, cfg)
+
+    report = preflight.preflight_principal_inputs(cfg, baseline_year=2025, stage="SC1")
 
     assert report["OK"].all(), report.to_dict("records")
 
 
-def test_sc3_preflight_fails_cheaply_when_mature_08b_fields_are_missing(tmp_path: Path) -> None:
+def test_2025_sc2_sc3_are_blocked_until_separate_context_exists(tmp_path: Path, monkeypatch) -> None:
     cfg = _cfg(tmp_path)
-    _write_all(cfg, complete_08b=False)
+    _write_runtime_prerequisites(cfg)
+    _mock_valid_land_context(monkeypatch, cfg)
 
-    report = preflight_principal_inputs(cfg, baseline_year=2020, stage="SC3")
-    soil = report.set_index("ITEM").loc["COMPACT_08B"]
+    report = preflight.preflight_principal_inputs(cfg, baseline_year=2025, stage="SC3")
+    support = report.set_index("ITEM").loc["SPATIAL_BASELINE_SUPPORT"]
 
-    assert not bool(soil["OK"])
-    assert "FOREST_YC_WEIGHTED_MEAN" in soil["DETAIL"]
-    assert "IFS_PEAT_CUTOVER_UAA_SHARE" in soil["DETAIL"]
+    assert not bool(support["OK"])
+    assert "2020 land context only" in support["DETAIL"]
