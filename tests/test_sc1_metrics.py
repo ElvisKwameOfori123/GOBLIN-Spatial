@@ -48,8 +48,27 @@ def test_sc1_ed_metrics_split_losses_and_gains() -> None:
     assert out["SO_LIVESTOCK_GROSS_LOSS_2020_EUR"].tolist() == [1000.0, 0.0, 500.0, 100.0]
     assert out["SO_LIVESTOCK_GAIN_2020_EUR"].tolist() == [0.0, 100.0, 0.0, 0.0]
     assert out["TOTAL_CATTLE_REDUCTION_HEAD"].sum() == 200.0
+    assert out["TOTAL_CATTLE_EXPANSION_HEAD"].sum() == 0.0
     assert np.isclose(out["GOBLIN_RELEASED_GRASSLAND_PCT_OF_BASE"].iloc[0], 20.0)
     assert np.isclose(out["SO_GROSS_LOSS_SHARE_NATIONAL"].sum(), 1.0)
+
+
+def test_sc1_metrics_allow_local_cattle_expansion_under_national_contraction() -> None:
+    frame = _frame()
+    frame.loc[1, "SCENARIO_TOTAL_CATTLE"] = 320
+    frame.loc[1, "CUMULATIVE_REDUCTION_TOTAL_CATTLE"] = -20
+
+    out = add_sc1_ed_metrics(frame)
+    assert out["TOTAL_CATTLE_REDUCTION_HEAD"].tolist() == [100.0, 0.0, 50.0, 10.0]
+    assert out["TOTAL_CATTLE_EXPANSION_HEAD"].tolist() == [0.0, 20.0, 0.0, 0.0]
+
+    metrics = build_sc1_national_metrics(frame).iloc[0]
+    assert metrics["TOTAL_CATTLE_REDUCTION_HEAD"] == 140.0
+    assert metrics["NET_TOTAL_CATTLE_REDUCTION_HEAD"] == 140.0
+    assert metrics["GROSS_TOTAL_CATTLE_REDUCTION_HEAD"] == 160.0
+    assert metrics["GROSS_TOTAL_CATTLE_EXPANSION_HEAD"] == 20.0
+    assert metrics["EDS_WITH_POSITIVE_TOTAL_CATTLE_REDUCTION"] == 3
+    assert metrics["EDS_WITH_POSITIVE_TOTAL_CATTLE_EXPANSION"] == 1
 
 
 def test_sc1_national_metrics_report_distribution_and_net_exposure() -> None:
@@ -67,5 +86,6 @@ def test_sc1_national_metrics_report_distribution_and_net_exposure() -> None:
 def test_sc1_county_summary_closes_to_national_values() -> None:
     county = build_sc1_county_summary(_frame())
     assert county["TOTAL_CATTLE_REDUCTION_HEAD"].sum() == 200.0
+    assert county["TOTAL_CATTLE_EXPANSION_HEAD"].sum() == 0.0
     assert county["SO_LIVESTOCK_GROSS_LOSS_2020_EUR"].sum() == 1600.0
     assert np.isclose(county["COUNTY_SHARE_NATIONAL_SO_GROSS_LOSS"].sum(), 1.0)

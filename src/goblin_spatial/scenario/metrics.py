@@ -1,13 +1,14 @@
 """SC1 transition, exposure and distributional diagnostics.
 
-These metrics are reporting outputs only.  They never feed back into cattle
+These metrics are reporting outputs only. They never feed back into cattle
 allocation, cohort propagation or released-land spatialisation.
 
 Standard Output (SO) remains a fixed-2020 production-value exposure measure,
-not profit, income or welfare.  Some EDs can in principle gain SO when endpoint
-composition shifts even while national cattle numbers contract.  Distributional
-loss metrics therefore use the positive part of baseline-minus-scenario SO and
-report gains separately rather than forcing signed values into a Gini formula.
+not profit, income or welfare. Some EDs can gain SO or cattle locally when
+endpoint composition shifts even while the national pathway contracts.
+Distributional loss/reduction metrics therefore use positive-part quantities
+and report gains/expansion separately rather than forcing signed values into
+non-negative concentration statistics.
 """
 
 from __future__ import annotations
@@ -80,10 +81,13 @@ def add_sc1_ed_metrics(frame: pd.DataFrame) -> pd.DataFrame:
         out["SO_LIVESTOCK_GAIN_2020_EUR"] = np.maximum(-exposure, 0.0)
 
     if "CUMULATIVE_REDUCTION_TOTAL_CATTLE" in out.columns:
-        cattle_reduction = _numeric(out, "CUMULATIVE_REDUCTION_TOTAL_CATTLE")
-        if (cattle_reduction < -1e-9).any():
-            raise ValueError("SC1 total-cattle reduction cannot be negative")
-        out["TOTAL_CATTLE_REDUCTION_HEAD"] = np.maximum(cattle_reduction, 0.0)
+        # Endpoint state defines this signed quantity as baseline minus scenario.
+        # A negative value is therefore a legitimate local expansion, not an
+        # invalid national-pathway result. Keep reduction and expansion as
+        # separate non-negative reporting quantities.
+        signed_reduction = _numeric(out, "CUMULATIVE_REDUCTION_TOTAL_CATTLE")
+        out["TOTAL_CATTLE_REDUCTION_HEAD"] = np.maximum(signed_reduction, 0.0)
+        out["TOTAL_CATTLE_EXPANSION_HEAD"] = np.maximum(-signed_reduction, 0.0)
 
     if "AGRICULTURAL_HOLDINGS" in out.columns:
         holdings = pd.to_numeric(out["AGRICULTURAL_HOLDINGS"], errors="coerce").to_numpy(dtype=float)
@@ -99,6 +103,14 @@ def add_sc1_ed_metrics(frame: pd.DataFrame) -> pd.DataFrame:
         if "TOTAL_CATTLE_REDUCTION_HEAD" in out.columns:
             cattle = out["TOTAL_CATTLE_REDUCTION_HEAD"].to_numpy(dtype=float)
             out["TOTAL_CATTLE_REDUCTION_PER_HOLDING"] = np.divide(
+                cattle,
+                holdings,
+                out=np.full(len(out), np.nan, dtype=float),
+                where=valid_holdings,
+            )
+        if "TOTAL_CATTLE_EXPANSION_HEAD" in out.columns:
+            cattle = out["TOTAL_CATTLE_EXPANSION_HEAD"].to_numpy(dtype=float)
+            out["TOTAL_CATTLE_EXPANSION_PER_HOLDING"] = np.divide(
                 cattle,
                 holdings,
                 out=np.full(len(out), np.nan, dtype=float),
@@ -124,6 +136,7 @@ def add_sc1_ed_metrics(frame: pd.DataFrame) -> pd.DataFrame:
     share_columns = {
         "SO_LIVESTOCK_GROSS_LOSS_2020_EUR": "SO_GROSS_LOSS_SHARE_NATIONAL",
         "TOTAL_CATTLE_REDUCTION_HEAD": "TOTAL_CATTLE_REDUCTION_SHARE_NATIONAL",
+        "TOTAL_CATTLE_EXPANSION_HEAD": "TOTAL_CATTLE_EXPANSION_SHARE_NATIONAL",
         "GOBLIN_RELEASED_GRASSLAND_HA": "RELEASED_GRASSLAND_SHARE_NATIONAL",
     }
     for source, destination in share_columns.items():
@@ -165,7 +178,11 @@ def build_sc1_national_metrics(frame: pd.DataFrame) -> pd.DataFrame:
         "SCENARIO_OTHER_COW": "SCENARIO_SUCKLER_COWS",
         "BASE_TOTAL_CATTLE": "BASE_TOTAL_CATTLE",
         "SCENARIO_TOTAL_CATTLE": "SCENARIO_TOTAL_CATTLE",
+        # Preserve the historical national field as the signed/net national
+        # reduction while adding explicit gross spatial-incidence quantities.
         "CUMULATIVE_REDUCTION_TOTAL_CATTLE": "TOTAL_CATTLE_REDUCTION_HEAD",
+        "TOTAL_CATTLE_REDUCTION_HEAD": "GROSS_TOTAL_CATTLE_REDUCTION_HEAD",
+        "TOTAL_CATTLE_EXPANSION_HEAD": "GROSS_TOTAL_CATTLE_EXPANSION_HEAD",
         "BASE_SO_LIVESTOCK_2020_EUR": "BASE_SO_LIVESTOCK_2020_EUR",
         "SCENARIO_SO_LIVESTOCK_2020_EUR": "SCENARIO_SO_LIVESTOCK_2020_EUR",
         "SO_LIVESTOCK_EXPOSURE_2020_EUR": "NET_SO_LIVESTOCK_EXPOSURE_2020_EUR",
@@ -176,6 +193,10 @@ def build_sc1_national_metrics(frame: pd.DataFrame) -> pd.DataFrame:
     for column, name in sum_columns.items():
         if column in out.columns:
             row[name] = float(pd.to_numeric(out[column], errors="raise").sum())
+    if "CUMULATIVE_REDUCTION_TOTAL_CATTLE" in out.columns:
+        row["NET_TOTAL_CATTLE_REDUCTION_HEAD"] = float(
+            pd.to_numeric(out["CUMULATIVE_REDUCTION_TOTAL_CATTLE"], errors="raise").sum()
+        )
 
     if "BASE_SO_LIVESTOCK_2020_EUR" in out.columns:
         base_so = np.maximum(_numeric(out, "BASE_SO_LIVESTOCK_2020_EUR"), 0.0)
@@ -187,6 +208,7 @@ def build_sc1_national_metrics(frame: pd.DataFrame) -> pd.DataFrame:
     diagnostic_vectors = {
         "SO_LOSS": "SO_LIVESTOCK_GROSS_LOSS_2020_EUR",
         "TOTAL_CATTLE_REDUCTION": "TOTAL_CATTLE_REDUCTION_HEAD",
+        "TOTAL_CATTLE_EXPANSION": "TOTAL_CATTLE_EXPANSION_HEAD",
         "ADULT_CATTLE_REDUCTION": "REDUCTION_ADULT_COWS",
         "RELEASED_GRASSLAND": "GOBLIN_RELEASED_GRASSLAND_HA",
     }
@@ -229,6 +251,7 @@ def build_sc1_county_summary(frame: pd.DataFrame) -> pd.DataFrame:
             "BASE_TOTAL_CATTLE",
             "SCENARIO_TOTAL_CATTLE",
             "TOTAL_CATTLE_REDUCTION_HEAD",
+            "TOTAL_CATTLE_EXPANSION_HEAD",
             "BASE_SO_LIVESTOCK_2020_EUR",
             "SCENARIO_SO_LIVESTOCK_2020_EUR",
             "SO_LIVESTOCK_EXPOSURE_2020_EUR",
@@ -242,10 +265,15 @@ def build_sc1_county_summary(frame: pd.DataFrame) -> pd.DataFrame:
     ]
     summary = out.groupby("County", as_index=False)[value_columns].sum(numeric_only=True)
     summary["ED_COUNT"] = out.groupby("County")["CSOED"].nunique().reindex(summary["County"]).to_numpy()
+    if {"BASE_TOTAL_CATTLE", "SCENARIO_TOTAL_CATTLE"}.issubset(summary.columns):
+        summary["NET_TOTAL_CATTLE_REDUCTION_HEAD"] = (
+            summary["BASE_TOTAL_CATTLE"] - summary["SCENARIO_TOTAL_CATTLE"]
+        )
 
     for source, destination in (
         ("SO_LIVESTOCK_GROSS_LOSS_2020_EUR", "COUNTY_SHARE_NATIONAL_SO_GROSS_LOSS"),
         ("TOTAL_CATTLE_REDUCTION_HEAD", "COUNTY_SHARE_NATIONAL_CATTLE_REDUCTION"),
+        ("TOTAL_CATTLE_EXPANSION_HEAD", "COUNTY_SHARE_NATIONAL_CATTLE_EXPANSION"),
         ("GOBLIN_RELEASED_GRASSLAND_HA", "COUNTY_SHARE_NATIONAL_RELEASED_GRASSLAND"),
     ):
         if source not in summary.columns:
