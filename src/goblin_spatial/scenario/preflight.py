@@ -17,9 +17,7 @@ from goblin_spatial.scenario.control_table import read_scenario_control_table
 from goblin_spatial.soil import (
     CLASS_SHARE_COLUMNS,
     GROUP_SHARE_COLUMNS,
-    MAP_SG_SHARE_COLUMNS,
     PHYSICAL_AREA_COLUMNS,
-    PHYSICAL_SHARE_COLUMNS,
     canonical_csoed,
 )
 
@@ -34,6 +32,27 @@ BASELINE_REQUIRED = {
     "MEDIAN_AGE_OF_HOLDER",
     "SO_LIVESTOCK_2020_EUR",
 }
+
+SC1_08B_REQUIRED = {
+    "CSOED",
+    "SOIL_SOURCE_UAA_HA",
+    *CLASS_SHARE_COLUMNS,
+    *GROUP_SHARE_COLUMNS,
+}
+
+# The mature SC2/SC3 principal science needs these two additional 08B fields:
+# Yield Class is a hard forest eligibility control in SC3, while the continuous
+# peat/cutover share spatialises the externally anchored drained-organic stock.
+SC2_SC3_08B_REQUIRED = {
+    "FOREST_YC_WEIGHTED_MEAN",
+    "IFS_PEAT_CUTOVER_UAA_SHARE",
+}
+
+# A compact 08C control only needs the mapped physical-area fields. The runtime
+# reproduces Colm's documented physical shares and SG1/SG2/SG3 crosswalk from
+# these seven areas, so storing all derived columns is optional rather than a
+# preflight requirement.
+SC2_08C_REQUIRED = {"CSOED", *PHYSICAL_AREA_COLUMNS}
 
 
 def _status(
@@ -59,6 +78,12 @@ def _configured_output(cfg: SpatialConfig, key: str) -> Path:
         raise KeyError(f"configuration missing outputs.{key}")
     path = Path(value)
     return path if path.is_absolute() else cfg.project_root / path
+
+
+def _compact_keys(frame: pd.DataFrame) -> pd.Series:
+    if "CSOED" not in frame.columns:
+        return pd.Series(dtype="string")
+    return frame["CSOED"].map(canonical_csoed).astype("string")
 
 
 def preflight_principal_inputs(
@@ -103,10 +128,12 @@ def preflight_principal_inputs(
                 pd.to_numeric(years["YEAR"], errors="raise")
                 .astype(int)
                 .eq(baseline_year)
-            ]
+            ].copy()
+            selected_keys = selected["CSOED"].map(canonical_csoed)
             ok = (
                 len(selected) == int(cfg.expected_eds)
-                and not selected["CSOED"].duplicated().any()
+                and not selected_keys.eq("").any()
+                and not selected_keys.duplicated().any()
             )
             _status(
                 rows,
@@ -140,8 +167,10 @@ def preflight_principal_inputs(
             f"ACTIVE={active}",
         )
 
-    # The compact 08B source universe must be rich enough for both the SC1
-    # G1/G2/G3 capacity solve and the mature SC2 Class1-6 reconstruction.
+    # The compact 08B source universe is intentionally not required to contain
+    # exactly 2,857 rows. Mature 08B can contain a larger source-ED universe and
+    # the runtime resolves it to the model EDs by direct match, compound
+    # components, then the validated 08B fallback hierarchy.
     soil_path = Path(cfg.files["agricultural_soil_profile"])
     if not soil_path.exists():
         _status(
@@ -153,27 +182,14 @@ def preflight_principal_inputs(
         )
     else:
         soil = pd.read_csv(soil_path, low_memory=False)
-        required = {
-            "CSOED",
-            "SOIL_SOURCE_UAA_HA",
-            *CLASS_SHARE_COLUMNS,
-            *GROUP_SHARE_COLUMNS,
-        }
+        required = set(SC1_08B_REQUIRED)
         if stage in {"SC2", "SC3"}:
-            required.update(
-                {
-                    "IFS_PEAT_CUTOVER_UAA_SHARE",
-                    "FOREST_YC_WEIGHTED_MEAN",
-                }
-            )
+            required.update(SC2_SC3_08B_REQUIRED)
         missing = sorted(required - set(soil.columns))
-        keys = (
-            soil["CSOED"].map(canonical_csoed)
-            if "CSOED" in soil.columns
-            else pd.Series(dtype=str)
-        )
+        keys = _compact_keys(soil)
         ok = (
             not missing
+            and len(keys) == len(soil)
             and not keys.eq("").any()
             and not keys.duplicated().any()
         )
@@ -183,9 +199,9 @@ def preflight_principal_inputs(
             soil_path,
             ok,
             (
-                "valid compact agricultural-capability source profile"
+                f"valid compact agricultural-capability source profile; rows={len(soil):,}"
                 if ok
-                else f"missing={missing}"
+                else f"rows={len(soil):,}; missing={missing}"
             ),
         )
 
@@ -197,7 +213,7 @@ def preflight_principal_inputs(
                 "COMPACT_LPIS",
                 lpis_path,
                 False,
-                "missing; do not trigger heavy rebuild automatically",
+                "missing; recover/reuse compact ED control before any heavy rebuild",
             )
         else:
             lpis = read_ed_lpis_profile(lpis_path)
@@ -206,17 +222,26 @@ def preflight_principal_inputs(
                 2020: int(cfg.expected_eds),
                 2025: int(cfg.expected_eds),
             }
+            snapshot_keys_ok = True
+            for year in (2020, 2025):
+                block = lpis.loc[lpis["LPIS_YEAR"].eq(year)]
+                keys = block["CSOED_CANONICAL"].astype("string")
+                snapshot_keys_ok &= (
+                    len(block) == int(cfg.expected_eds)
+                    and not keys.eq("").any()
+                    and not keys.duplicated().any()
+                )
             _status(
                 rows,
                 "COMPACT_LPIS",
                 lpis_path,
-                counts == expected,
+                counts == expected and snapshot_keys_ok,
                 f"rows by year={counts}",
             )
 
-        # Direct 08C source rows must carry the precomputed physical and mapped
-        # SG shares as well as raw areas. Scenario runtime never reopens the
-        # heavy source package to derive missing fields.
+        # Colm's compact 08C source may contain more than 2,857 mapped ED rows.
+        # Runtime accepts direct mapped EDs and complete compound components only;
+        # it deliberately refuses synthetic county/national physical-soil fallback.
         physical_path = Path(cfg.files["physical_soil_profile"])
         if not physical_path.exists():
             _status(
@@ -224,24 +249,15 @@ def preflight_principal_inputs(
                 "COMPACT_08C",
                 physical_path,
                 False,
-                "missing; reduce/package source once before SC2",
+                "missing; recover/package compact mapped-soil profile before SC2",
             )
         else:
             physical = pd.read_csv(physical_path, low_memory=False)
-            required = {
-                "CSOED",
-                *PHYSICAL_AREA_COLUMNS,
-                *PHYSICAL_SHARE_COLUMNS,
-                *MAP_SG_SHARE_COLUMNS,
-            }
-            missing = sorted(required - set(physical.columns))
-            keys = (
-                physical["CSOED"].map(canonical_csoed)
-                if "CSOED" in physical.columns
-                else pd.Series(dtype=str)
-            )
+            missing = sorted(SC2_08C_REQUIRED - set(physical.columns))
+            keys = _compact_keys(physical)
             ok = (
                 not missing
+                and len(keys) == len(physical)
                 and not keys.eq("").any()
                 and not keys.duplicated().any()
             )
@@ -251,9 +267,9 @@ def preflight_principal_inputs(
                 physical_path,
                 ok,
                 (
-                    "valid compact mapped physical-soil source profile"
+                    f"valid compact mapped physical-soil source profile; rows={len(physical):,}"
                     if ok
-                    else f"missing={missing}"
+                    else f"rows={len(physical):,}; missing={missing}"
                 ),
             )
 
