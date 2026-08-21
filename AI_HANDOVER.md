@@ -1,233 +1,367 @@
 # GOBLIN-Spatial collaborator / AI handover
 
-Last updated: 2026-08-13
-Working branch: `agent/ed-dynamics-foundation`
-Pull request: keep the current PR in draft unless Elvis Kwame Ofori explicitly asks to merge or mark it ready.
+Last updated: 2026-08-21
+Working branch: `scenario-v1-refactor`
 
-This file is a continuity note for a future collaborator or AI agent. Read it before changing model architecture, LPIS, soil, scenario or land-opportunity code.
+This is the continuity note for the current v1 scenario refactor. Read it before changing scenario, soil, LPIS, released-land or alternative-land allocation code.
 
-## 1. Historical baseline boundary is fixed
+## 1. Historical baseline is frozen
 
-The validated historical build ends here:
-
-```text
-Cattle
--> Sheep
--> 21 cattle + 10 sheep cohorts
--> Land
--> SE
--> VALIDATE / EXPORT
-```
-
-Do not insert soil, LPIS, Standard Output, future scenarios, potential grassland release or alternative-land allocation into the historical reconstruction.
-
-The Ireland implementation contains 2,857 agricultural EDs for 2015-2025, giving 31,427 ED-year rows.
-
-## 2. Scenario architecture
-
-Downstream only:
+The verified historical reconstruction is already merged into `main` and has a permanent `baseline-v1-verified` checkpoint. Do not redesign it to make scenario code easier.
 
 ```text
-select 2020 or 2025 baseline
--> cattle scenario
--> 18 distinct pre-adult cattle cohort ripple + adult cohorts
--> sheep unchanged
--> Standard Output exposure
--> GOBLIN pasture-DM demand
--> POTENTIAL_SPARED_GRASSLAND_HA
--> LPIS + soil opportunity context
--> explicit alternative-land allocation only when real targets/shares are supplied
+CATTLE
+01 -> 02 -> 05C
+          \
+           04 MERGE
+          /
+SHEEP
+03A -> 03B -> 05A -> 05B -> 05D
+          |
+          v
+31 livestock cohorts
+          |
+          v
+06 Land + crops + farm structure / SE
+          |
+          v
+07 Clean validated export
+          |
+          v
+08 Fixed-2020 Standard Output
+          |
+          v
+09 ED cohort signatures
+          |
+          v
+HISTORICAL BASELINE COMPLETE
 ```
 
-`ALL_GRASSLAND` remains the authoritative ED land-accounting total. LPIS does not replace it.
+Historical controls are 2,857 agricultural EDs, 2015-2025, 31,427 ED-year rows, 21 cattle cohorts and 10 sheep cohorts. Stage 08 Standard Output is production-value exposure, not income, profit or welfare. Stage 09 is the final historical boundary because it freezes the ED-specific biological relationships used by future cattle transitions.
 
-## 3. LPIS frozen source pins
+08B, 08C, LPIS and SC1-SC3 are downstream of the historical baseline.
 
-LPIS version family parent record: Zenodo parent `21918923`.
+## 2. Governing scenario rule
 
-### 2020 — USE THIS FILE
+> National GOBLIN controls quantities. GOBLIN-Spatial resolves spatial incidence, opportunity and feasibility.
 
-Corrected Zenodo v2 record:
-
-- record: `21922002`
-- DOI: `10.5281/zenodo.21922002`
-- file: `LPIS_2020_GOBLIN_reduced_v2.parquet`
-- Zenodo MD5: `ef6ff159320a13d7059770d20d1a0c3a`
-- configured destination: `data/external/spatial/lpis/LPIS_2020_GOBLIN_reduced_v2.parquet`
-
-The corrected 2020 publication derivative was rebuilt from the local QA parquet because the original v1 reduced file predated the final commonage-share fields.
-
-Frozen 2020 QA controls passed:
-
-- records: 1,362,738
-- unique parcel IDs: 1,311,162
-- rows belonging to repeated parcel IDs: 65,660
-- commonage records: 48,132
-- claimed area: 4,428,557.86 ha
-- share-adjusted digitised area: 5,000,253.25 ha
-- share-adjusted eligible area: 4,293,825.24 ha
-- share-adjusted geometry area: 4,998,435.39 ha
-- commonage claimed area: 337,500.60 ha
-- commonage share-adjusted eligible area: 360,121.64 ha
-
-Commonage rule:
+The principal chain is:
 
 ```text
-COMMONAGE_FRACTION = COM_NUM / COM_DEN
-SHARE_DIGITISED_HA = PARCEL_AREA_HA * COMMONAGE_FRACTION
-SHARE_ELIGIBLE_HA  = ELIGIBLE_AREA_HA * COMMONAGE_FRACTION
-SHARE_GEOMETRY_HA  = GEOMETRY_AREA_HA * COMMONAGE_FRACTION
+select 2020 or 2025 Stage-08 baseline
+        +
+editable national scenario row
+        |
+        v
+SC1 cattle transition + exposure + released land
+        |
+        v
+freeze SC1
+        |
+        v
+SC2 08B + matched LPIS + independent 08C
+        |
+        v
+mature opportunity / physical eligibility
+        |
+        v
+SC3 explicit national targets
+        |
+        v
+joint Stage-A allocation
+        |
+        v
+sequential rewetting on remaining feasible land
+        |
+        v
+realised conversion + unmet target + residual land
 ```
-
-Do NOT multiply `CLAIMED_AREA_HA` by the commonage fraction again.
-
-Repeated parcel IDs are preserved; never blindly `drop_duplicates(PARCEL_ID)`.
-
-Applicant/herd identifiers are QA-only and must not be distributed or used as model controls.
-
-### 2025 — KEEP USING THE VALIDATED v1 FILE
-
-Zenodo v1 record:
-
-- record: `21918924`
-- DOI: `10.5281/zenodo.21918924`
-- file: `LPIS_2025_GOBLIN_reduced.parquet`
-- Zenodo MD5: `8c10e49514997b9bedec77bebd5d52ed`
-- configured destination: `data/external/spatial/lpis/LPIS_2025_GOBLIN_reduced.parquet`
-
-Why 2025 is still pinned to v1: Zenodo v2 was created to correct 2020 and currently does not contain the unchanged 2025 parquet. This split-version pin is deliberate, not an error. Do not switch 2020 back to v1 for symmetry.
-
-2025 source QA already established:
-
-- populated LPIS records: 1,543,817
-- attribute-empty geometry records excluded from the modelling derivative: 3,378,257
-- claimed area: 4,779,815.50 ha
-- share-adjusted eligible area: 4,935,728.64 ha
-- share-adjusted reference area: 4,798,195.68 ha
-- commonage fraction missing records: 0
-
-The DAFM `grasslnd` flag is the primary 2025 grassland authority. `perm_ind` is not permanent pasture and must not be interpreted as such.
-
-## 4. LPIS grass / scheme semantics
-
-2020 core grassland classification is deliberately conservative:
-
-- Permanent Pasture
-- Low Input Permanent Pasture
-- Traditional Hay Meadow
-- Grass Year 1-5
-
-Keep forestry, bog/peat, habitat, energy crops and other agriculture separate.
-
-2020 scheme flags:
-
-```text
-GLAS_IND   -> IS_GLAS / IS_AGRI_ENVIRONMENT
-ANC_IND    -> IS_ANC
-ORG_STATUS -> IS_ORGANIC
-```
-
-Validated 2020 record counts:
-
-- GLAS: 265,179
-- ANC: 1,084,424
-- organic: 24,690
-
-The 2025 QA derivative exposes binary `IS_ACRES`, `IS_ANC` and `IS_ORGANIC` fields. Preserve source semantics; do not invent interpretations for raw/missing codes.
-
-## 5. ED spatial bridge
-
-Frozen SAPS ED geography:
-
-- Zenodo record: `21906755`
-- DOI: `10.5281/zenodo.21906755`
-- full SAPS geography: 3,409 geometries
-- model agricultural ED universe: 2,857 EDs
-
-`CSOED` is the spatial/model join authority. ED names and county names are QA labels only.
-
-The SAPS geography already contains compound model identifiers such as `08045/08046`, so do not perform fuzzy name matching.
-
-For every parcel/ED intersection:
-
-```text
-intersection_fraction = intersection_geometry_area / source_record_geometry_area
-```
-
-Allocate record-level claimed/eligible/context values by this spatial fraction. Do not apply the commonage fraction to claimed area again.
-
-The compact control must contain exactly:
-
-```text
-2,857 EDs x 2 observed LPIS snapshots = 5,714 rows
-```
-
-Build command:
-
-```bash
-goblin-spatial-lpis --year both
-```
-
-Output:
-
-```text
-data/controls/lpis/ED_LPIS_opportunity_2020_2025.csv.xz
-```
-
-Rebuild this compact control after placing the corrected 2020 v2 parquet and validated 2025 v1 parquet at their configured paths. Do not treat an older 2020 ED control generated from the v1 parcel file as final.
-
-## 6. Soil v2 scientific role
-
-Agricultural soil is a downstream opportunity screen, not an animal-allocation driver.
-
-Cathal/NFS agricultural soil mapping:
-
-```text
-soil_code_nfs 1-2 -> G1
-soil_code_nfs 3-4 -> G2
-soil_code_nfs 5-6 -> G3
-```
-
-`fsizuaa` weights source soil shares only. It is not authoritative land area.
-
-Validated `ALL_GRASSLAND` is partitioned by G1/G2/G3 after the livestock baseline is solved.
-
-Soil v2 also retains forestry context and a continuous source-UAA-weighted peat/cutover share for downstream screening. Compound model `CSOED` identifiers must be resolved from component profiles before county/national fallback where possible.
-
-The national SIS soil map remains geographic context/validation and should not be blindly blended with holding-weighted agricultural soil shares as if both represented the same denominator.
-
-## 7. Opportunity v2 interpretation
-
-LPIS and soil inform opportunity, not realised conversion.
 
 Always preserve:
 
 ```text
 PotentialRelease != Opportunity != RealisedConversion
+GrossRelease != ResidualAvailableLand
 ```
 
-Current opportunity screens include forestry, rewetting, AD grass, willow, energy grass and nature/restoration. They are overlapping screening scores and are not hectare allocations.
+## 3. Editable pathway authority
 
-LPIS low-input, peat and riparian grass context should constrain conversion-oriented opportunity and strengthen restoration/rewetting evidence where appropriate.
+Current national scenario endpoints and land-use targets come from:
 
-Alternative-land allocation occurs only when explicit national targets/shares are supplied. Never invent policy targets to make the allocator run.
+```text
+data/controls/scenario/GOBLIN_Scenario_Controls.csv
+```
 
-## 8. What to do next
+Do not copy obsolete values from older standalone SC3 scripts into the package. The standalone scripts are used to recover scientific mathematics, not to override the editable control table.
 
-1. Keep the corrected 2020 v2 and validated 2025 v1 source pins.
-2. Rebuild the 5,714-row ED LPIS control using the same frozen SAPS geography for both years.
-3. Confirm both snapshots report complete commonage-adjusted diagnostics; 2020 should no longer carry the old `CLAIMED_AREA_VALID_ADJUSTED_AREA_INCOMPLETE` warning when using v2.
-4. Validate ED/national closure and compare LPIS composition against, but do not replace, `ALL_GRASSLAND`.
-5. Feed the selected baseline-year LPIS ED profile into soil/opportunity v2 after `POTENTIAL_SPARED_GRASSLAND_HA` is calculated.
-6. Freeze the LPIS/soil opportunity layer only after the corrected 2020 ED profile is regenerated and reviewed.
-7. Continue to Standard Output/scenario reporting only after this control is stable.
+Current active pathways are `SI_SG`, `BE_SG` and `ALL_GAS_NZ`.
 
-## 9. Repository / change-management guardrails
+The control table does not store a fixed baseline grassland total. A run selects 2020 or 2025 and calculates:
 
-- Current development work belongs on `agent/ed-dynamics-foundation`.
-- Do not merge the draft PR or mark it ready without explicit owner instruction.
-- Do not modify the validated historical cattle/sheep/cohort/land/SE accounting merely to accommodate LPIS or soil.
-- Large parcel GeoParquets remain external; normal model/CI runs should consume the compact ED control rather than reprocessing millions of parcels.
-- Record exact Zenodo version IDs and checksums whenever changing a frozen external source.
+```text
+BaselineGrassland = sum(ALL_GRASSLAND in selected baseline)
+GrossRelease      = BaselineGrassland - TARGET_LIVESTOCK_LAND_HA
+```
 
-For LPIS-specific implementation details also read `docs/lpis_v2.md` and `data_manifest.yaml`.
+## 4. SC1 scientific contract
+
+SC1 is the complete pre-opportunity transition stage.
+
+It:
+
+- solves the dairy and suckler endpoint across the existing ED livestock footprint;
+- propagates the validated 21-cattle-cohort structure using Stage-09 ED signatures;
+- keeps sheep unchanged in the principal cattle-transition study;
+- calculates fixed-2020 Standard Output exposure after the physical livestock state is solved;
+- reports Gini, concentration, county incidence, protection relief, displaced burden and pathway/allocation sensitivity as diagnostics only;
+- spatialises the externally controlled national livestock-land release; and
+- freezes the ED released-land vector for all downstream work.
+
+Principal allocation policies currently include `PRORATA`, `DAIRY_PROTECTION`, `ECONOMIC_CAPACITY_PROTECTION` and `SOCIAL_VULNERABILITY_PROTECTION`. Protection changes where contraction falls, not the national endpoint. Expansion, where an endpoint requires it, remains within the existing category footprint rather than seeding new ED livestock activity.
+
+Stage-09 follower relationships remain `LOCAL_ED`, `COUNTY_RECEIVER`, `NATIONAL_ORPHAN` and `NONE`. These are accounting/propagation relationships, not observed animal movements.
+
+### SC1 land release and 08B
+
+08B agricultural capability is attached before the principal released-land spatialisation because its G1/G2/G3 grassland cells provide physical capacity for the fixed national release. This does not make soil the national land-release authority.
+
+The correct hierarchy is:
+
+```text
+external/pathway national gross release
+        +
+solved livestock / pasture-DM spatial propensity
+        +
+08B G1/G2/G3 ED capacity
+        |
+        v
+GOBLIN_RELEASED_G1_HA
+GOBLIN_RELEASED_G2_HA
+GOBLIN_RELEASED_G3_HA
+        |
+        v
+GOBLIN_RELEASED_GRASSLAND_HA
+```
+
+The G1+G2+G3 released hectares must close exactly to the frozen ED release. 08C never moves SC1 release. LPIS never moves SC1 release.
+
+The parent-GOBLIN pasture-DM calculation remains a spatial/biological signal and diagnostic. It does not independently invent the national released hectares.
+
+## 5. Two soil representations are deliberately separate
+
+### 08B agricultural capability
+
+Cathal/NFS capability retains Classes 1-6 and G groups:
+
+```text
+C1 + C2 -> G1
+C3 + C4 -> G2
+C5 + C6 -> G3
+```
+
+`fsizuaa` is a source weighting denominator only. `ALL_GRASSLAND` remains the authoritative ED grassland quantity.
+
+The compact 08B source universe is resolved to the 2,857 model EDs using direct ED records, compound components and the validated fallback hierarchy. It must contain the six class shares, G1/G2/G3 shares, peat/cutover context and forest Yield Class information needed by SC2/SC3.
+
+### 08C mapped physical soil
+
+Colm/IFS mapped soil remains independent physical context. It carries categories such as deep/shallow well drained, poorly drained, peaty, alluvium, peat and miscellaneous, together with mapped SG summaries.
+
+Do not blend 08C with 08B. Do not multiply 08C mapped soil shares by `ALL_GRASSLAND` and call the result observed grassland-by-soil hectares. In particular:
+
+```text
+G3 != peat
+mapped peat != farmed peat
+mapped peat != automatically rewettable grassland
+```
+
+## 6. Mature SC2 v3.1 has been recovered and ported
+
+The recovered scientific source is `SC2_GOBLIN_Spatial_Dual_Soil_Land_Opportunity_v3_1_20260820.py`. Its package implementation is:
+
+```text
+src/goblin_spatial/land/sc2_opportunity.py
+```
+
+and it is wired through:
+
+```text
+src/goblin_spatial/land/sc2_context.py
+```
+
+SC2 sequence is now:
+
+```text
+frozen SC1 release including G1/G2/G3
+        -> matched-year compact LPIS
+        -> independent compact 08C
+        -> mature Opportunity-v2 scores
+        -> released Class 1-6 reconstruction
+        -> organic/mineral indicators
+        -> SC3 physical eligibility quantities
+```
+
+Required closure:
+
+```text
+C1 + C2 = frozen released G1
+C3 + C4 = frozen released G2
+C5 + C6 = frozen released G3
+C1+...+C6 = frozen ED release
+```
+
+The mature `0.85*G1 + 0.80*G2 + 0.70*G3` expression is retained as SC2 Opportunity-v2 productivity science. It is not used to generate or divide SC1 released hectares.
+
+SC2 opportunity scores include forestry, rewetting, AD grass, willow, energy grass and nature/restoration. They rank/describe overlapping opportunity and are not realised conversion hectares.
+
+SC3-ready physical quantities include the Class 1-6 release, tillage, strict tillage, forest, AD/biorefinery grass, willow, wide-willow and organic/rewetting envelopes.
+
+## 7. LPIS rule and cost guardrail
+
+LPIS is an observed baseline-year context layer:
+
+```text
+2020 scenario start -> corrected 2020 LPIS v2
+2025 scenario start -> validated 2025 LPIS v1
+```
+
+Source pins remain:
+
+- 2020: Zenodo record `21922002`, `LPIS_2020_GOBLIN_reduced_v2.parquet`;
+- 2025: Zenodo record `21918924`, `LPIS_2025_GOBLIN_reduced.parquet`.
+
+The compact runtime target is exactly:
+
+```text
+2,857 EDs x 2 LPIS snapshots = 5,714 rows
+```
+
+Normal SC1-SC3 runs must consume the compact ED profile only. They must never automatically download the multi-GB parcel sources or rerun the parcel/ED spatial overlay.
+
+`CLAIMED_AREA_HA` remains the principal LPIS agricultural accounting quantity. Do not apply commonage fraction to claimed area a second time. Repeated parcel IDs are not blindly dropped. Applicant/herd identifiers are QA-only and must not enter publication controls.
+
+Previous local runs prove that compact LPIS caches existed and were reused without repeating the parcel overlay. Before any expensive rebuild, search local/File Library history for the existing corrected compact control or the cached 2020/2025 ED profiles.
+
+## 8. Mature SC3 v2.7 has been recovered and ported
+
+The recovered scientific source is `SC3_GOBLIN_Spatial_Final_Transition_Appraisal_v2_7_SEQUENTIAL_REWETTING_20260820.py`. Package implementation:
+
+```text
+src/goblin_spatial/land/sc3_allocation.py
+```
+
+The old simple sequential Stage-A allocator is no longer the principal design.
+
+### Stage A
+
+Five uses are solved jointly by continuous linear programming:
+
+```text
+AD_GRASS
+BIOREFINERY_GRASS
+WILLOW
+ADDITIONAL_TILLAGE
+FOREST
+```
+
+The LP is lexicographic:
+
+1. minimise total unmet national target hectares;
+2. hold that minimum unmet total fixed and maximise opportunity ranking, with target-normalised soft scores.
+
+Hard SC2 capacities and shared physical pools prevent the same released hectare from satisfying overlapping uses twice. Principal individual envelopes are Classes 1-4 for AD/biorefinery, Classes 1-3 for willow, Classes 1-3 for tillage, and Classes 1-5 for forest. Forest also requires finite positive Yield Class context. Strict-tillage and wide-willow remain explicit sensitivity switches.
+
+### Stage B rewetting
+
+Rewetting is handled only after Stage A. Principal physical capacity uses the externally anchored 141,000 ha national drained-organic-grassland stock, spatialised by:
+
+```text
+ALL_GRASSLAND * IFS_PEAT_CUTOVER_UAA_SHARE
+```
+
+and normalized to the national stock. That ED stock is intersected with released land and then tightened to the actual post-Stage-A Available residual. This prevents physical double assignment.
+
+`RELEASED_ORGANIC_WEIGHT_HA` remains an unscaled SC2 diagnostic/spatial signal. Colm/IFS mapped peat remains independent context and does not manufacture the 141 kha stock.
+
+The parent-GOBLIN Available balancing item is not rewritten. SC3 additionally reports the physically uncommitted residual after the rewetting overlay.
+
+For every use:
+
+```text
+Realised <= Target
+Unmet = Target - Realised
+```
+
+and at ED level:
+
+```text
+Stage-A realised + rewetting realised + final residual = frozen SC1 release
+```
+
+The allocator must report unmet targets rather than broaden eligibility silently.
+
+## 9. Current package wiring
+
+The principal CLI now supports:
+
+```text
+--stage SC1
+--stage SC2
+--stage SC3
+```
+
+`SC3` first completes SC1, then mature SC2, then sends the exact `land_use_targets_ha` from the selected editable scenario row into the v2.7 allocator. No SC3 national target is hard-coded in the allocator.
+
+`scipy` is deliberately an optional `scenario` dependency rather than a historical-baseline dependency. The SC3 module lazy-loads the optimizer so baseline users do not need SciPy.
+
+Tiny deterministic contract tests have been added for SC2 closure and SC3 joint-pool/rewetting/forest-YC accounting. They are intended to catch mathematical errors cheaply before any integrated run.
+
+## 10. Compute and Actions budget is a hard implementation constraint
+
+Do not use GitHub Actions as an iterative debugger.
+
+Development order is:
+
+```text
+static code/source comparison
+        -> tiny deterministic unit/contract tests
+        -> no-download preflight
+        -> compact-control QA
+        -> one meaningful integrated SC1->SC2->SC3 validation
+        -> one deliberate CI checkpoint only when justified
+```
+
+The no-download preflight lives at:
+
+```text
+src/goblin_spatial/scenario/preflight.py
+```
+
+It checks Stage 08, scenario controls, compact 08B and, for SC2/SC3, compact LPIS and 08C. Missing compact controls are a hard stop. Preflight must never rebuild heavy sources.
+
+Do not open a scenario PR yet. The heavy LPIS workflow watches the main configuration on pull requests and can trigger expensive work. Keep development on `scenario-v1-refactor` until compact controls and lightweight validation are settled.
+
+## 11. Immediate next work
+
+1. Recover or physically provide the compact runtime controls before considering heavy rebuilds:
+   - compact 08B agricultural capability profile;
+   - compact 08C mapped physical-soil profile;
+   - corrected dual-year 5,714-row LPIS ED control, or the two validated per-year caches from which it can be assembled safely.
+2. Validate those files locally/cheaply against the existing preflight schemas and known source universes.
+3. Only after compact inputs are available, run one meaningful integrated 2020 scenario first, preferably `SI_SG` + `PRORATA`, and verify SC1, SC2 and SC3 national/ED closure before expanding to other pathways/rules.
+4. Then run the full pathway/allocation comparison set and generate the foresight metrics.
+5. Update `data_manifest.yaml` only after the exact compact files and checksums are known. Never invent checksums or mark a control frozen before it physically exists in the repository/runtime location.
+6. Update public README/status wording after the integrated scenario validation. Do not describe SC1-SC3 as regression-verified before that acceptance run.
+
+## 12. Change-management guardrails
+
+- Work on `scenario-v1-refactor` until explicit approval to merge/open the scenario PR.
+- Do not alter the verified Stage 01-09 historical mathematics to accommodate scenario code.
+- Do not replace current editable scenario targets with values embedded in older standalone scripts.
+- Do not let 08C or LPIS change livestock allocation or move the frozen SC1 release vector.
+- Do not let opportunity scores define physical eligibility; SC2 physical capacities come first, scores rank within them.
+- Do not force national targets into infeasible land. Report `UnmetTarget`.
+- Do not rerun multi-GB LPIS processing when a validated compact control can be recovered/reused.
+- Record exact source version IDs and checksums whenever a compact/frozen input is finally packaged.
+
+For deeper detail also read `docs/sc1_sc2_sc3_pipeline.md`, `docs/lpis_v2.md`, `LPIS_SOURCE_PINS.yaml`, `data_manifest.yaml`, and the current editable scenario-control CSV.
