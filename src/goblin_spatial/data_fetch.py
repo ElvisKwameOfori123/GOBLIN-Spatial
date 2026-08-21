@@ -1,10 +1,9 @@
-"""Locate, fetch, verify and unpack datasets required by GOBLIN-Spatial.
+"""Locate, fetch, verify and unpack declared GOBLIN-Spatial datasets.
 
-Compact working inputs can be tracked directly in Git. Large spatial inputs
-are stored externally (for example in a versioned Zenodo record), downloaded
-on demand, checksum-verified, and unpacked into gitignored data directories.
-The scientific modules consume verified local paths and remain independent of
-where the files were hosted.
+Compact runtime inputs are tracked directly in Git. Large first-principles
+spatial reconstruction sources may be stored in a versioned external release,
+downloaded only when explicitly requested, checksum-verified and unpacked into
+gitignored data directories.
 """
 
 from __future__ import annotations
@@ -19,12 +18,14 @@ import pooch
 import yaml
 
 
-LOCAL_SOURCES = {"git", "local", "git_pending"}
+LOCAL_SOURCES = {"git", "local"}
 
 
 def file_hash(path: Path, algorithm: str = "sha256", chunk_size: int = 1024 * 1024) -> str:
-    """Return a hexadecimal checksum for *path* using *algorithm*."""
+    """Return a hexadecimal checksum for one file using *algorithm*."""
 
+    if not path.is_file():
+        raise ValueError(f"checksum target must be a file: {path}")
     digest = hashlib.new(algorithm)
     with path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(chunk_size), b""):
@@ -33,8 +34,6 @@ def file_hash(path: Path, algorithm: str = "sha256", chunk_size: int = 1024 * 10
 
 
 def sha256_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
-    """Backward-compatible SHA256 helper."""
-
     return file_hash(path, "sha256", chunk_size)
 
 
@@ -44,16 +43,13 @@ def load_manifest(path: str | Path = "data_manifest.yaml") -> tuple[Path, dict[s
     manifest_path = Path(path).expanduser().resolve()
     with manifest_path.open("r", encoding="utf-8") as handle:
         manifest = yaml.safe_load(handle) or {}
-
     if "datasets" not in manifest:
         raise ValueError("data manifest must contain a 'datasets' mapping")
-
     return manifest_path.parent, manifest
 
 
 def _resolved_path(project_root: Path, info: dict[str, Any]) -> Path:
     source = str(info.get("source", "local")).lower()
-
     if source in LOCAL_SOURCES:
         value = info.get("path")
         if not value:
@@ -62,7 +58,6 @@ def _resolved_path(project_root: Path, info: dict[str, Any]) -> Path:
         value = info.get("destination")
         if not value:
             raise ValueError("external dataset entry is missing 'destination'")
-
     path = Path(value)
     return path if path.is_absolute() else project_root / path
 
@@ -74,7 +69,6 @@ def _known_hash(info: dict[str, Any]) -> str | None:
     if known:
         text = str(known).strip()
         return text if ":" in text else f"sha256:{text}"
-
     if info.get("sha256"):
         return f"sha256:{info['sha256']}"
     if info.get("md5"):
@@ -92,6 +86,13 @@ def _verify_one(
     if not path.exists():
         return False, f"MISSING  {name}: {path}"
 
+    # Repository-controlled directories such as ED_Land_Context_2020 have an
+    # internal logical-object validator rather than a raw directory checksum.
+    if path.is_dir():
+        if git_tracked and not expected_hash:
+            return True, f"OK       {name}: {path} [Git-tracked directory]"
+        return False, f"NO FILE HASH {name}: directory requires its dedicated validator"
+
     if not expected_hash:
         if git_tracked:
             return True, f"OK       {name}: {path} [Git-tracked]"
@@ -104,7 +105,6 @@ def _verify_one(
             False,
             f"BAD HASH {name}: expected {algorithm}:{expected}, got {algorithm}:{actual}",
         )
-
     return True, f"OK       {name}: {path} [{algorithm}]"
 
 
@@ -118,7 +118,6 @@ def _safe_extract_zip(archive_path: Path, extract_dir: Path) -> None:
 
     extract_dir.mkdir(parents=True, exist_ok=True)
     root = extract_dir.resolve()
-
     with zipfile.ZipFile(archive_path) as archive:
         for member in archive.infolist():
             candidate = (extract_dir / member.filename).resolve()
@@ -135,20 +134,10 @@ def _canonicalise_shapefile_bundle(
     *,
     expected_sha256: str | None = None,
 ) -> bool:
-    """Copy the pinned extracted shapefile bundle to the canonical local stem.
-
-    Research archives can preserve browser-added suffixes, nested directories,
-    or several shapefiles. The manifest therefore identifies the scientific
-    primary by its SHA256 whenever available. If the expected primary is absent,
-    candidates are selected by that pinned hash; only when no hash is supplied
-    is a unique `.shp` candidate accepted.
-
-    The original extracted members are retained alongside the canonical copy.
-    """
+    """Copy a pinned extracted shapefile bundle to its canonical local stem."""
 
     if primary.suffix.lower() != ".shp" or primary.exists():
         return False
-
     candidates = [
         path
         for path in extract_dir.rglob("*")
@@ -158,14 +147,11 @@ def _canonicalise_shapefile_bundle(
     selected: Path | None = None
     if expected_sha256:
         expected = str(expected_sha256).lower()
-        matches = [
-            path for path in candidates if sha256_file(path).lower() == expected
-        ]
+        matches = [path for path in candidates if sha256_file(path).lower() == expected]
         if len(matches) == 1:
             selected = matches[0]
     elif len(candidates) == 1:
         selected = candidates[0]
-
     if selected is None:
         return False
 
@@ -192,11 +178,7 @@ def _postprocess_archive(
 
     archive_type = str(info.get("archive", "")).lower()
     primary_value = info.get("primary_path")
-    primary = (
-        _project_path(project_root, primary_value)
-        if primary_value
-        else archive_path
-    )
+    primary = _project_path(project_root, primary_value) if primary_value else archive_path
 
     if not archive_type:
         return True, "", primary
@@ -207,7 +189,6 @@ def _postprocess_archive(
     if not extract_value:
         return False, f"NO EXTRACT PATH {name}: manifest is missing extract_to", primary
     extract_dir = _project_path(project_root, extract_value)
-
     required_values = info.get("required_members", []) or []
     required = [_project_path(project_root, value) for value in required_values]
     missing = [path for path in required if not path.exists()]
@@ -221,7 +202,6 @@ def _postprocess_archive(
             expected_sha256=info.get("primary_sha256"),
         )
         missing = [path for path in required if not path.exists()]
-
     if missing:
         return (
             False,
@@ -235,8 +215,7 @@ def _postprocess_archive(
         if actual.lower() != str(primary_sha256).lower():
             return (
                 False,
-                f"BAD PRIMARY HASH {name}: expected sha256:{primary_sha256}, "
-                f"got sha256:{actual}",
+                f"BAD PRIMARY HASH {name}: expected sha256:{primary_sha256}, got sha256:{actual}",
                 primary,
             )
 
@@ -250,16 +229,11 @@ def fetch_data(
     verify_only: bool = False,
     tracked_only: bool = False,
 ) -> dict[str, Path]:
-    """Locate, download where necessary, verify and unpack declared datasets.
+    """Locate, optionally download, verify and unpack declared datasets.
 
-    External datasets are fetched to their manifest ``destination``. Versioned
-    repository URLs (for example Zenodo record-specific file URLs) should be
-    used when scientific reproducibility requires an immutable research input.
-
-    During the v1 path migration, entries declared as ``git_pending`` are
-    documented canonical targets but are intentionally skipped until the exact
-    file has been committed and regression-tested. This prevents a path-only
-    refactor from breaking the still-working baseline.
+    External datasets are downloaded only when explicitly included by the call.
+    ``tracked_only=True`` limits verification to Git/local inputs and is the
+    appropriate mode for routine repository CI.
     """
 
     project_root, manifest = load_manifest(manifest_path)
@@ -269,13 +243,11 @@ def fetch_data(
 
     for name, info in datasets.items():
         source = str(info.get("source", "local")).lower()
-
-        if source == "git_pending":
-            print(f"PENDING  {name}: canonical Git path not activated yet")
-            continue
+        if source not in LOCAL_SOURCES and not info.get("url"):
+            raise ValueError(f"unsupported or incomplete source for {name}: {source}")
 
         if tracked_only and source not in LOCAL_SOURCES:
-            print(f"SKIP     {name}: external input")
+            print(f"SKIP     {name}: optional external reconstruction source")
             continue
 
         archive_path = _resolved_path(project_root, info)
@@ -292,35 +264,28 @@ def fetch_data(
 
         if not ok and source not in LOCAL_SOURCES and not verify_only:
             url = info.get("url")
-            if url:
-                archive_path.parent.mkdir(parents=True, exist_ok=True)
-                print(f"DOWNLOAD {name}: {url}")
-                try:
-                    pooch.retrieve(
-                        url=str(url),
-                        known_hash=expected,
-                        path=archive_path.parent,
-                        fname=archive_path.name,
-                        progressbar=False,
-                    )
-                except Exception as exc:  # network/remote errors are reported cleanly
-                    message = f"DOWNLOAD FAILED {name}: {exc}"
-                    print(message)
-                    if required:
-                        failures.append(message)
-                    continue
-
-                ok, message = _verify_one(
-                    name,
-                    archive_path,
-                    expected,
-                    git_tracked=False,
+            archive_path.parent.mkdir(parents=True, exist_ok=True)
+            print(f"DOWNLOAD {name}: {url}")
+            try:
+                pooch.retrieve(
+                    url=str(url),
+                    known_hash=expected,
+                    path=archive_path.parent,
+                    fname=archive_path.name,
+                    progressbar=False,
                 )
-            else:
-                message = (
-                    f"NO URL   {name}: place the canonical file at {archive_path} or "
-                    "populate its external URL in data_manifest.yaml"
-                )
+            except Exception as exc:
+                message = f"DOWNLOAD FAILED {name}: {exc}"
+                print(message)
+                if required:
+                    failures.append(message)
+                continue
+            ok, message = _verify_one(
+                name,
+                archive_path,
+                expected,
+                git_tracked=False,
+            )
 
         print(message)
         if not ok:
@@ -341,14 +306,11 @@ def fetch_data(
             if required:
                 failures.append(archive_message)
             continue
-
         resolved[name] = primary
 
     if failures:
         joined = "\n".join(f"  - {item}" for item in failures)
         raise RuntimeError(
-            "GOBLIN-Spatial data verification failed for required inputs:\n"
-            f"{joined}"
+            "GOBLIN-Spatial data verification failed for required inputs:\n" + joined
         )
-
     return resolved
