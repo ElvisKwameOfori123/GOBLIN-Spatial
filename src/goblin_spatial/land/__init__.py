@@ -11,6 +11,7 @@ from .context import (
     reconstruct_land_context_bytes,
     validate_land_context,
 )
+from .context_attach import add_frozen_08b_context
 from .lpis import add_ed_lpis_context, read_ed_lpis_profile
 from .lpis_spatial import build_ed_lpis_profile
 from .sc2_context import (
@@ -44,6 +45,7 @@ __all__ = [
     "SC3_USES",
     "STAGE_A_USES",
     "add_ed_lpis_context",
+    "add_frozen_08b_context",
     "add_land",
     "allocate_sc3_targets",
     "build_ed_lpis_profile",
