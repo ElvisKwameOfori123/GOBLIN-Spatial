@@ -121,8 +121,9 @@ def _resolve_08b(master: pd.DataFrame, profile: pd.DataFrame) -> pd.DataFrame:
 
     direct: list[dict[str, object]] = []
     unresolved: list[tuple[str, str]] = []
-    for r in model.itertuples(index=False):
-        key = r._KEY
+    for _original, county, key in model[["CSOED", "County", "_KEY"]].itertuples(
+        index=False, name=None
+    ):
         if key in by.index:
             rec = by.loc[key].to_dict()
             rec["_MODEL_KEY"] = key
@@ -136,7 +137,7 @@ def _resolve_08b(master: pd.DataFrame, profile: pd.DataFrame) -> pd.DataFrame:
             rec["SOIL_PROFILE_SOURCE"] = "COMPOUND_COMPONENTS"
             direct.append(rec)
             continue
-        unresolved.append((key, str(r.County)))
+        unresolved.append((key, str(county)))
 
     source_county = p.merge(
         model[["_KEY", "County"]], on="_KEY", how="left", validate="one_to_one"
@@ -338,8 +339,9 @@ def add_principal_08c_context(master, profile):
 
     resolved_rows: list[dict[str, object]] = []
     unresolved: list[tuple[object, str]] = []
-    for r in model.itertuples(index=False):
-        key = r._KEY
+    for original, _county, key in model[["CSOED", "County", "_KEY"]].itertuples(
+        index=False, name=None
+    ):
         if key in by.index:
             record = by.loc[key].to_dict()
             record["_MODEL_KEY"] = key
@@ -354,7 +356,7 @@ def add_principal_08c_context(master, profile):
                 record["_MODEL_KEY"] = key
                 record["IFS_MAP_PROFILE_SOURCE"] = "COMPOUND_COMPONENTS"
             else:
-                unresolved.append((r.CSOED, key))
+                unresolved.append((original, key))
                 continue
         resolved_rows.append(record)
 
