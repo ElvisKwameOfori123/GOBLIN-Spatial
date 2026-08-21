@@ -46,7 +46,9 @@ def _sc1() -> pd.DataFrame:
     )
     for idx, column in enumerate(CLASS_SHARE_COLUMNS):
         frame[column] = classes[:, idx]
-        frame[f"SOIL_USE_CLASS_{idx + 1}_GRASSLAND_HA"] = classes[:, idx] * grass
+        frame[f"SOIL_USE_CLASS_{idx + 1}_GRASSLAND_HA"] = (
+            classes[:, idx] * grass
+        )
     return frame
 
 
@@ -79,6 +81,19 @@ def _physical() -> pd.DataFrame:
     for ed, areas in zip((1001, 1002), values, strict=True):
         row = {"CSOED": ed}
         row.update(dict(zip(PHYSICAL_AREA_COLUMNS, areas, strict=True)))
+        total = float(sum(areas))
+        for column, area in zip(PHYSICAL_AREA_COLUMNS, areas, strict=True):
+            row[column.replace("_HA", "_SHARE")] = area / total
+
+        deep, shallow, poor, poor_peaty, alluvium, peat, misc = areas
+        effective_peat = 0.10 * peat
+        sg1 = deep + 0.5 * shallow
+        sg2 = 0.5 * shallow + poor + 0.5 * poor_peaty + alluvium
+        sg3 = 0.5 * poor_peaty + effective_peat + misc
+        denom = sg1 + sg2 + sg3
+        row["IFS_MAP_SG1_SHARE"] = sg1 / denom
+        row["IFS_MAP_SG2_SHARE"] = sg2 / denom
+        row["IFS_MAP_SG3_SHARE"] = sg3 / denom
         rows.append(row)
     return pd.DataFrame(rows)
 
@@ -93,9 +108,18 @@ def test_sc2_v31_preserves_sc1_release_and_class_group_closure() -> None:
         physical_soil_context=_physical(),
     )
 
-    assert np.array_equal(out["GOBLIN_RELEASED_GRASSLAND_HA"], original_release)
+    assert np.array_equal(
+        out["GOBLIN_RELEASED_GRASSLAND_HA"],
+        original_release,
+    )
     assert np.allclose(
-        out[["SC2_RELEASED_G1_HA", "SC2_RELEASED_G2_HA", "SC2_RELEASED_G3_HA"]].sum(axis=1),
+        out[
+            [
+                "SC2_RELEASED_G1_HA",
+                "SC2_RELEASED_G2_HA",
+                "SC2_RELEASED_G3_HA",
+            ]
+        ].sum(axis=1),
         original_release,
     )
     assert np.allclose(
@@ -127,7 +151,11 @@ def test_sc2_v31_retains_mature_productivity_science_and_dual_soil_no_blend() ->
         physical_soil_context=_physical(),
     )
 
-    expected = 0.85 * out["GOBLIN_SOIL_G1_SHARE"] + 0.80 * out["GOBLIN_SOIL_G2_SHARE"] + 0.70 * out["GOBLIN_SOIL_G3_SHARE"]
+    expected = (
+        0.85 * out["GOBLIN_SOIL_G1_SHARE"]
+        + 0.80 * out["GOBLIN_SOIL_G2_SHARE"]
+        + 0.70 * out["GOBLIN_SOIL_G3_SHARE"]
+    )
     assert np.allclose(out["GOBLIN_SOIL_PRODUCTIVITY_INDEX"], expected)
     assert out["SC2_DUAL_SOIL_PRINCIPAL_SCORES_CHANGED"].eq(False).all()
     assert out["SC2_DUAL_SOIL_METHOD"].eq(
@@ -144,7 +172,10 @@ def test_sc2_v31_retains_mature_productivity_science_and_dual_soil_no_blend() ->
         "RELEASED_REWETTING_ELIGIBLE_WEIGHT_HA",
     ):
         assert (out[column] >= -1e-12).all()
-        assert (out[column] <= out["GOBLIN_RELEASED_GRASSLAND_HA"] + 1e-9).all()
+        assert (
+            out[column]
+            <= out["GOBLIN_RELEASED_GRASSLAND_HA"] + 1e-9
+        ).all()
 
 
 def test_sc2_requires_baseline_matched_lpis_and_compact_08c() -> None:
