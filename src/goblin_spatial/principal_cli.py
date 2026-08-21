@@ -7,6 +7,7 @@ Heavy source processing is never triggered by this runner.
 
 SC1
     selected 2020/2025 Stage-08 baseline
+    -> frozen model-ED 08B capability attachment
     -> adult dairy/suckler endpoint allocation
     -> Stage-09 21-cohort propagation
     -> unchanged sheep
@@ -34,6 +35,7 @@ import pandas as pd
 from goblin_spatial.config import load_config
 from goblin_spatial.dynamics.baseline import select_baseline_year
 from goblin_spatial.land.context import read_land_context_table
+from goblin_spatial.land.context_attach import add_frozen_08b_context
 from goblin_spatial.land.sc2_context import prepare_sc2_context
 from goblin_spatial.land.sc3_allocation import allocate_sc3_targets, summarise_sc3_allocation
 from goblin_spatial.pressure import load_pasture_dm_control
@@ -46,7 +48,6 @@ from goblin_spatial.scenario.principal_allocation import (
 )
 from goblin_spatial.scenario.principal_endpoint import run_principal_goblin_endpoint
 from goblin_spatial.scenario.reconciliation import build_goblin_reconciliation
-from goblin_spatial.soil import add_principal_08b_context
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -194,9 +195,11 @@ def main() -> None:
     land_context_path = _required_path(cfg, "land_context_2020", args.land_context)
     land_context = read_land_context_table(land_context_path)
 
-    # The 08B subset is a fixed capability reference and is valid for either
-    # selectable livestock baseline year. LPIS/08C are not entered until SC2.
-    panel = add_principal_08b_context(panel, land_context)
+    # The frozen 08B model-ED control is a fixed agricultural-capability reference
+    # and can be attached to either selectable livestock baseline year. Its 2,820
+    # direct and 37 county-fallback provenance labels are preserved exactly.
+    # LPIS and 08C fields remain outside the livestock state until SC2.
+    panel = add_frozen_08b_context(panel, land_context)
     baseline = select_baseline_year(
         panel,
         int(args.baseline_year),
