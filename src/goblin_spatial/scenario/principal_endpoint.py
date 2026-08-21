@@ -18,6 +18,7 @@ from goblin_spatial.scenario.national_cohort_targets import (
     derive_national_cohort_targets,
     load_goblin_cohort_reference,
 )
+from goblin_spatial.scenario.principal_allocation import PRINCIPAL_PROTECTION_STRENGTH
 from goblin_spatial.standard_output import add_pathway_standard_output
 
 
@@ -30,7 +31,7 @@ def run_principal_goblin_endpoint(
     score_column: str | None = None,
     productivity_score_column: str | None = None,
     vulnerability_score_column: str | None = None,
-    protection_strength: float = 0.8,
+    protection_strength: float = PRINCIPAL_PROTECTION_STRENGTH,
     hybrid_weights: tuple[float, float, float, float] = (0.40, 0.25, 0.20, 0.15),
     expected_eds: int | None = None,
     include_standard_output: bool = True,
@@ -42,6 +43,12 @@ def run_principal_goblin_endpoint(
 ) -> pd.DataFrame:
     """Run one absolute GOBLIN endpoint while preserving ED cohort signatures.
 
+    The input panel must already contain the selected Stage-08 fixed-2020
+    Standard Output fields used by the principal protection scores. When a
+    national released-land control is present it must also carry the precomputed
+    08B G1/G2/G3 agricultural-capability context before the release spatialiser
+    is entered.
+
     National livestock biology and spatial livestock geography are deliberately
     separated. Exact 21-cohort controls are used directly when supplied. If
     only adult endpoints are supplied, an optional national GOBLIN/COHORTS
@@ -50,11 +57,11 @@ def run_principal_goblin_endpoint(
     local, county-receiver and national-orphan relationships.
 
     When the pathway supplies category-resolved dairy/beef/sheep land-release
-    controls, they take precedence over the older aggregate release spatialiser.
-    Both routes retain the same authoritative national gross land total.
+    controls, they take precedence over the aggregate release spatialiser. Both
+    routes retain the authoritative national gross land total.
 
     SC1 reporting metrics are attached only after the physical cattle state,
-    Standard Output valuation and any released-land spatialisation are complete.
+    Standard Output valuation and released-land spatialisation are complete.
     They are diagnostics and never feed back into allocation.
     """
 
