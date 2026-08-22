@@ -51,6 +51,7 @@ jobs:
       - name: Run principal scenario unit tests
         run: |
           pytest -q \
+            tests/test_cli_study.py \
             tests/test_goblin_controls.py \
             tests/test_goblin_reconciliation.py \
             tests/test_national_cohort_targets.py \
