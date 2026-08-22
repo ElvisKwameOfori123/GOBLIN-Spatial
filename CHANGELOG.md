@@ -12,6 +12,25 @@ For current scientific assumptions and interpretation boundaries, see [`docs/SCI
 
 ---
 
+## 2026-08-22 — Clarify historical CSO control hierarchy
+
+**Type:** DOCUMENTATION / SCIENTIFIC GOVERNANCE
+
+**Principal commits:**
+- `0878a65a629818ccc875fe97b72d2bdf67fbd01f` — clarify annual CSO controls in the README
+- `1dc55b6bdd2ae027feab6e6cf3e251fffa30850e` — record the historical evidence hierarchy in the assumptions register
+
+### Changed
+- Clarified that the 2020 Census of Agriculture is the principal **ED-level spatial benchmark**, not the sole temporal data source.
+- Recorded that annual CSO county cattle series constrain the 2015–2025 cattle reconstruction.
+- Recorded that annual sheep controls are spatially coarser and are reconciled from region through county to ED.
+- Explicitly stated that surrounding years are a hierarchically constrained reconstruction against annual official totals rather than a simple extrapolation from 2020.
+
+### Scientific effect
+- None. The documentation now describes the existing historical reconstruction more accurately; no baseline values or scenario calculations were changed.
+
+---
+
 ## 2026-08-22 — Add scientific assumptions register
 
 **Type:** DOCUMENTATION / SCIENTIFIC GOVERNANCE
