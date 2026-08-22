@@ -24,12 +24,42 @@ A change to any item marked **Core**, **Assumption**, **Normative**, **Temporary
 
 ---
 
+## Historical reconstruction evidence hierarchy
+
+The 2015–2025 historical baseline is **not a simple forward or backward extrapolation from the 2020 Census of Agriculture**.
+
+The evidence hierarchy is:
+
+```text
+2020 CSO Census of Agriculture
+        ↓
+principal ED-level spatial benchmark
+
+Annual CSO county cattle series, 2015–2025
+        ↓
+observed temporal controls for cattle
+        ↓
+county totals distributed through validated ED structure
+
+Annual regional sheep series, 2015–2025
+        ↓
+observed temporal controls for sheep
+        ↓
+region → county → ED reconciliation
+```
+
+The reconstruction therefore combines **detailed 2020 ED geography with repeated annual official higher-level observations**. The surrounding years inherit spatial structure where direct ED observations are unavailable, but their higher-level livestock totals are constrained by the corresponding annual CSO series.
+
+This distinction should be preserved in publications and documentation. The phrase **2020 spatial benchmark** or **2020 ED spatial anchor** does not mean that 2015–2025 values are projected from a single 2020 observation without annual controls.
+
+---
+
 ## Current assumptions and modelling choices
 
 | ID | Component | Type / status | Current treatment | Scientific meaning |
 |---|---|---|---|---|
 | **A01** | National pathway boundary | **Core** | National livestock and land-use quantities are supplied by GOBLIN and remain authoritative. | GOBLIN-Spatial resolves geography; it does not redefine the national pathway. |
-| **A02** | Principal scenario baseline | **Core** | The complete SC1 to SC3 workflow uses the frozen 2020 spatial land context. | 2020 is the principal spatial scenario anchor. |
+| **A02** | Principal full scenario baseline | **Core** | The complete SC1 to SC3 workflow uses the frozen 2020 spatial land context. | 2020 is the principal spatial scenario baseline for the full scenario chain; this is separate from the annual controls used to reconstruct the 2015–2025 historical livestock panel. |
 | **A03** | 2025 scenario use | **Temporary** | The reconstructed 2025 livestock state may be used for SC1 sensitivity only. SC2 and SC3 remain disabled for 2025 until a separately validated 2025 land-context bundle is frozen. | The model does not silently apply 2020 land evidence to a 2025 land state. |
 | **A04** | Adult livestock controls | **Core** | Adult dairy and suckler populations are the principal spatial endpoint controls. | These categories anchor the spatial livestock transition. |
 | **A05** | Follower cattle cohorts | **Assumption** | Remaining cattle cohorts respond using the livestock structure associated with each ED and are reconciled to national cohort controls. | Local livestock signatures are retained while national totals remain authoritative. |
