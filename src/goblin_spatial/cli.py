@@ -157,6 +157,13 @@ def _run_study(
     stage = str(through).lower()
     if stage not in THROUGH_STAGES:
         raise ValueError(f"through must be one of {THROUGH_STAGES}")
+    if stage != "baseline" and not scenario:
+        raise ValueError("--scenario is required when --through is SC1, SC2 or SC3")
+    if stage in {"sc2", "sc3"} and int(baseline_year) != 2020:
+        raise ValueError(
+            "SC2/SC3 currently require the frozen 2020 spatial baseline; "
+            "2025 is supported for SC1 sensitivity only."
+        )
 
     cfg = load_config(Path(config_path))
     print("Building validated historical baseline through Stage 09...")
@@ -165,14 +172,6 @@ def _run_study(
     if stage == "baseline":
         print("Baseline completed. Study stopped at the requested baseline stage.")
         return
-
-    if not scenario:
-        raise ValueError("--scenario is required when --through is SC1, SC2 or SC3")
-    if stage in {"sc2", "sc3"} and int(baseline_year) != 2020:
-        raise ValueError(
-            "SC2/SC3 currently require the frozen 2020 spatial baseline; "
-            "2025 is supported for SC1 sensitivity only."
-        )
 
     command = [
         sys.executable,
