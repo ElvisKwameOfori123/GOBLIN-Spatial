@@ -97,6 +97,21 @@ SC3 — ALLOCATION
             └── Residual available land
 ```
 
+A useful way to read the scenario chain is:
+
+```text
+SC1 asks:
+Where is livestock pressure released?
+
+SC2 asks:
+What is that released land like,
+and what could it potentially support?
+
+SC3 asks:
+Given those opportunities and shared land constraints,
+how much of each national land-use target can actually be accommodated?
+```
+
 ---
 
 ## Historical spatial baseline
@@ -169,6 +184,20 @@ These rules alter the **geography of adjustment**, not the nationally specified 
 
 Some EDs may therefore experience livestock expansion even where the **national pathway contracts overall**.
 
+### How a scenario is spatialised
+
+GOBLIN-Spatial does not generate the future national livestock pathway. National livestock quantities are supplied by GOBLIN and retained as hard national controls.
+
+For each pathway, adult dairy and suckler endpoints are first allocated across EDs. The `PRORATA` rule distributes the national change proportionally, while the three protection rules modify the spatial incidence of contraction without changing the national endpoint.
+
+The protection approaches therefore represent **alternative spatial incidence assumptions**, not alternative national livestock scenarios.
+
+After adult dairy and suckler populations are allocated, the remaining cattle cohorts respond through the livestock structure associated with each ED. National cohort totals are then reconciled so that local cohort signatures are retained while the national pathway remains authoritative.
+
+Category expansion is permitted where required by the national pathway. Consequently, an ED may gain cattle even when total national cattle numbers decline. The model does not impose an artificial requirement that every ED must contract.
+
+Sheep remain fixed in the current principal cattle-transition workflow unless an explicit sheep pathway is supplied.
+
 ---
 
 # Released land, opportunity and conversion are different quantities
@@ -184,6 +213,8 @@ PotentialRelease ≠ Opportunity ≠ RealisedConversion
 Land released from livestock pressure under the national pathway.
 
 It is a **spatial land budget**, not an assumed land-use change.
+
+The **national quantity of livestock land released is supplied by the GOBLIN pathway**. GOBLIN-Spatial does not infer a new national release total from local livestock reductions. Instead, it uses the spatial livestock-pressure structure, pasture demand and land capability to determine where that authoritative national release is located across EDs.
 
 ### Opportunity
 
@@ -255,6 +286,8 @@ LPIS contributes parcel and land-use context, including grassland composition an
 
 LPIS does **not** replace the historical `ALL_GRASSLAND` accounting quantity and does not independently create released land.
 
+SC2 therefore identifies **potential compatibility and opportunity**, not assumed adoption. A high opportunity score does not mean that a land-use change will occur; it means that the released land is relatively more compatible with that use under the stated evidence and rules.
+
 ---
 
 # SC3: Alternative land-use allocation
@@ -280,6 +313,8 @@ SC3 respects:
 - land-use-specific eligibility;
 - shared land-capacity constraints; and
 - national target ceilings.
+
+Competing land uses are allocated **jointly rather than independently**. Several alternatives may be eligible for the same released hectares, so shared physical land pools are constrained to prevent the same hectare from being allocated more than once. Where the combination of national targets exceeds feasible spatial capacity, the model reports the remaining unmet target rather than forcing an infeasible allocation.
 
 For each land use the model can therefore distinguish:
 
@@ -380,6 +415,8 @@ GOBLIN supplies the national pathway quantities.
 
 GOBLIN-Spatial spatialises those quantities under a common, transparent set of spatial rules.
 
+The scenario ID is therefore a selectable input rather than a hard-coded pathway. The same spatial workflow can be applied to any active pathway contained in the scenario control table.
+
 ---
 
 # Reproducibility
@@ -449,36 +486,97 @@ while 08C remains an independent physical-soil layer.
 
 # Running the model
 
-## Verify repository inputs
+GOBLIN-Spatial can be run either through a guided interface or with explicit commands for reproducible research.
+
+## Guided mode
+
+Run:
+
+```bash
+goblin-spatial
+```
+
+When launched in an interactive terminal, the model asks how far the study should run:
+
+```text
+1. Baseline only
+2. Baseline + SC1 livestock transition
+3. Baseline + SC1 + SC2 opportunity analysis
+4. Full study: Baseline + SC1 + SC2 + SC3
+```
+
+Choosing **Baseline only** builds the validated historical baseline and stops without asking for a scenario. For SC1, SC2 or SC3, the user then chooses an active national pathway and a spatial incidence rule. SC1 can use the reconstructed 2020 or 2025 livestock baseline, while SC2 and SC3 remain restricted to the validated frozen 2020 land context.
+
+## Explicit staged runs
+
+The same stopping points are available without prompts.
+
+### Baseline only
+
+```bash
+goblin-spatial study --through baseline
+```
+
+### Stop after SC1
+
+```bash
+goblin-spatial study \
+  --through sc1 \
+  --scenario SI_SG \
+  --baseline-year 2020 \
+  --allocation-rule PRORATA
+```
+
+### Stop after SC2
+
+```bash
+goblin-spatial study \
+  --through sc2 \
+  --scenario BE_SG \
+  --baseline-year 2020 \
+  --allocation-rule PRORATA
+```
+
+### Full study through SC3
+
+```bash
+goblin-spatial study \
+  --through sc3 \
+  --scenario ALL_GAS_NZ \
+  --baseline-year 2020 \
+  --allocation-rule PRORATA
+```
+
+The examples deliberately use different scenario IDs to show that the staged runner is not restricted to one pathway. Any active `SCENARIO_ID` in `GOBLIN_Scenario_Controls.csv` can be selected.
+
+Conceptually, the runtime allows the researcher to choose:
+
+```text
+national pathway
+      ×
+spatial incidence rule
+      ×
+stopping stage
+```
+
+## Existing low-level commands
+
+The original direct commands remain available for users who want to manage the baseline and scenario stages separately.
+
+Verify repository inputs:
 
 ```bash
 goblin-spatial fetch-data --verify-only
 ```
 
-## Build the historical baseline
+Build the historical baseline:
 
 ```bash
 goblin-spatial build \
   --config configs/ireland_2015_2025.yaml
 ```
 
-## Run SC1
-
-```bash
-goblin-spatial-principal SI_SG \
-  --baseline-year 2020 \
-  --stage SC1
-```
-
-## Run SC2
-
-```bash
-goblin-spatial-principal SI_SG \
-  --baseline-year 2020 \
-  --stage SC2
-```
-
-## Run the complete SC1–SC3 chain
+Run the principal scenario engine directly:
 
 ```bash
 goblin-spatial-principal SI_SG \
@@ -487,7 +585,7 @@ goblin-spatial-principal SI_SG \
   --stage SC3
 ```
 
-Equivalent runs can be made for the other active scenario IDs.
+Equivalent direct runs can be made for the other active scenario IDs and supported stopping stages.
 
 ---
 
