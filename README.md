@@ -187,8 +187,6 @@ A fixed national transition can be distributed spatially under alternative incid
 
 These rules alter the **geography of adjustment**, not the nationally specified pathway.
 
-Some EDs may therefore experience livestock expansion even where the **national pathway contracts overall**.
-
 ### How a scenario is spatialised
 
 GOBLIN-Spatial does not generate the future national livestock pathway. National livestock quantities are supplied by GOBLIN and retained as hard national controls.
