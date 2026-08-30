@@ -87,33 +87,36 @@ The diagnostic graph suite remains in `final_results/figures/`; the compact manu
 
 ## 7. Maps
 
-Maps are deliberately last. They consume `GOBLIN_Spatial_Map_Data.csv`, which already contains the frozen numerical ED results selected for cartography.
+Maps are deliberately last. They consume `GOBLIN_Spatial_Map_Data.csv`, which already contains the frozen numerical ED results selected for cartography. A normal repository clone now also contains the frozen ED geometry at `data/inputs/spatial/SC2_ED_Boundaries_Frozen.gpkg`, so no external Shapefile is required for the standard mapping workflow.
 
 ```bash
-goblin-spatial-maps data/processed/final_results \
-  --geometry /path/to/Electoral_Divisions.shp
+pip install -e '.[geo]'
+goblin-spatial maps data/processed/final_results
 ```
 
-A GeoPackage can be supplied instead of an ESRI Shapefile.
+An alternative Shapefile or GeoPackage can still be supplied explicitly with `--geometry` for robustness or sensitivity work.
 
-### Why the model does not require a Shapefile
+### Why geometry remains outside the scientific runtime
 
-Geometry is not needed to calculate SC1, SC2 or SC3. The scientific join key is `CSOED`. Keeping geometry outside the scenario runtime avoids making a large, multi-file cartographic dataset a prerequisite for numerical reproducibility.
+Geometry is not needed to calculate the historical baseline, SC1, SC2 or SC3. Numerical result identifiers remain the authoritative scientific `CSOED` values. The map layer applies a separate deterministic cartographic normalisation only at join time, including first-code handling for composite source geographies and removal of leading zeroes. Original result and geometry identifiers are retained for audit.
 
-### What happens when a Shapefile is supplied
+Keeping geometry downstream preserves the scientific boundary: the model can complete without cartography, while the repository-contained GeoPackage makes the published maps reproducible from a normal clone.
+
+### What the map renderer does
 
 The map renderer:
 
 1. reads `GOBLIN_Spatial_Map_Data.csv`;
-2. reads the ED Shapefile/GeoPackage;
-3. identifies the geometry attribute matching the model's `CSOED` values, or uses `--geometry-key` when supplied;
-4. verifies that every model ED has exactly one geometry;
-5. filters away non-model EDs if the national boundary source contains additional EDs;
-6. writes `GOBLIN_Spatial_Model_ED_Geometry.gpkg`, a single-file frozen geometry package;
-7. writes `GOBLIN_Spatial_Map_Layer.gpkg`, containing geometry joined to all ED × pathway × rule map-ready results;
-8. creates high-resolution PNG and vector SVG maps.
+2. resolves the repository-contained frozen ED GeoPackage, unless another geometry source is supplied explicitly;
+3. identifies the geometry attribute matching the model's ED identifiers, or uses `--geometry-key` when supplied;
+4. applies the deterministic cartographic ED-key normalisation without modifying the scientific result identifiers;
+5. verifies that every model ED has exactly one geometry;
+6. filters away non-model EDs because the national geometry contains more ED features than the 2,857 agricultural model EDs;
+7. writes `GOBLIN_Spatial_Model_ED_Geometry.gpkg`, containing only the model ED universe;
+8. writes `GOBLIN_Spatial_Map_Layer.gpkg`, containing geometry joined to all ED × pathway × rule map-ready results;
+9. creates high-resolution PNG and vector SVG reference maps plus a map manifest.
 
-Thus the original Shapefile is needed only as a geometry source. After the first successful map build, the compact GeoPackage can be archived with the final result bundle and used for later QGIS, ArcGIS or Python mapping.
+Repository CI validates the frozen GeoPackage checksum, CRS, geometry validity and the exact 2,857-ED join against the 2020 agricultural baseline.
 
 ### Geometry resolution order
 
@@ -122,7 +125,7 @@ If `--geometry` is not supplied, mapping tries:
 1. `files.ed_boundaries_frozen` from the study configuration;
 2. `files.saps_ed_geography` from the study configuration.
 
-If neither file exists, the numerical study still remains complete; only the optional mapping stage is unavailable until geometry is supplied.
+The first configured source is now repository-contained. If geometry is deliberately removed, the numerical study still remains complete; only the optional mapping stage is unavailable until geometry is restored or supplied.
 
 ## 8. Re-running only what changed
 
@@ -132,6 +135,6 @@ This separation is intentional:
 - change a scenario endpoint/rule → rerun the affected scenario stages and final reporting;
 - change workbook formatting → rerun reporting only;
 - change figure styling → rerun `goblin-spatial-paper-figures` only;
-- change map styling or geometry presentation → rerun `goblin-spatial-maps` only.
+- change map styling or geometry presentation → rerun `goblin-spatial maps` only.
 
 Publication code therefore never becomes part of the scientific model state.
