@@ -100,7 +100,7 @@ jobs:
                   mapping_rows.extend(mappings)
                   safe_fig.to_sql("figure_data", connection, if_exists="replace", index=False)
                   pd.DataFrame(mapping_rows, columns=["TABLE_NAME", "ORIGINAL_COLUMN", "SQLITE_COLUMN", "REASON"]).to_sql(
-                      "sqlite_column_mapping", connection, if_exists="replace", index=False
+                      "report_column_mapping", connection, if_exists="replace", index=False
                   )
                   pd.DataFrame(
                       [{"reporting_version": base_reporting.STUDY_REPORTING_VERSION, "table_count": len(tables) + 2}]
