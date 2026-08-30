@@ -5,15 +5,15 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from goblin_spatial.study_reporting import export_study_results
+from goblin_spatial.final_study_reporting import export_study_results
 
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="goblin-spatial-study-report",
         description=(
-            "Combine completed principal SC1-SC3 runs into a final scientific "
-            "workbook, SQLite database and high-resolution graph package."
+            "Combine completed principal SC1-SC3 runs into the final integrated "
+            "scientific workbook, SQLite database, map-ready tables and high-resolution graph package."
         ),
     )
     parser.add_argument(
