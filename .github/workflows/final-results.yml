@@ -2,6 +2,10 @@ name: final principal results
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/final-results.yml"
 
 jobs:
   final-results:
@@ -60,6 +64,12 @@ jobs:
             "$PWD/data/processed/final_results/GOBLIN_Spatial_Final_Results.sqlite" \
             --output-dir "$PWD/data/processed/final_results/paper_figures"
 
+      - name: Build final spatial map package
+        run: |
+          goblin-spatial maps \
+            "$PWD/data/processed/final_results" \
+            --output-dir "$PWD/data/processed/final_results/maps"
+
       - name: Confirm final package
         run: |
           test -f data/processed/final_results/GOBLIN_Spatial_Final_Results_Master.xlsx
@@ -89,6 +99,15 @@ jobs:
           test -f data/processed/final_results/paper_figures/paper_fig07_target_delivery.png
           test -f data/processed/final_results/paper_figures/paper_fig08_opportunity_constraints.svg
           test -f data/processed/final_results/paper_figures/GOBLIN_Spatial_Paper_Figure_Manifest.csv
+          test -f data/processed/final_results/maps/GOBLIN_Spatial_Model_ED_Geometry.gpkg
+          test -f data/processed/final_results/maps/GOBLIN_Spatial_Map_Layer.gpkg
+          test -f data/processed/final_results/maps/GOBLIN_Spatial_Map_Manifest.csv
+          test -f data/processed/final_results/maps/map01_persistent_exposure.png
+          test -f data/processed/final_results/maps/map02_standard_output_exposure.png
+          test -f data/processed/final_results/maps/map03_protection_redistribution.png
+          test -f data/processed/final_results/maps/map04_exposure_opportunity.png
+          test -f data/processed/final_results/maps/map05_alternative_use_uptake.png
+          test -f data/processed/final_results/maps/map06_final_unallocated_land.png
 
       - name: Upload final scientific results
         uses: actions/upload-artifact@v4
