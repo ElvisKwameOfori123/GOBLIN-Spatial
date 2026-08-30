@@ -9,6 +9,8 @@ status: "verified"
 # The runtime data contract is repository-contained. No external data service is
 # used by the model. First-principles reconstruction, if ever required, is a
 # separate local/manual provenance activity using user-supplied source files.
+# Frozen cartographic geometry is also repository-contained, but remains
+# downstream presentation infrastructure and is never required by SC1-SC3.
 
 datasets:
   cso_ed_agricultural_baseline_2020:
@@ -143,5 +145,15 @@ datasets:
         path: "data/controls/land/ED_Land_Context_2020/ED_LPIS_Context_2020_RUNTIME.csv"
         sha256: "c8a6b66c9166ea3da0121def6225698037951d3022af02e5b42f2b54f4f13b2b"
     note: "The runtime loader verifies the three original compact CSVs, joins their identical ED universes in memory and enforces the 40-field scientific contract. SC1 uses only 08B fields; LPIS and 08C enter only after SC1 is frozen."
+
+  ed_boundaries_frozen:
+    stage: "MAPS"
+    module: [cartography, maps]
+    description: "Frozen Electoral Division polygon geometry used only by downstream reproducible cartography."
+    source: "git"
+    path: "data/inputs/spatial/SC2_ED_Boundaries_Frozen.gpkg"
+    sha256: "550b2ed967f5c5e7ecb9053586cf431df564d0a990f99f9f82eb8b8be44faca8"
+    required: false
+    note: "Presentation infrastructure only. The numerical baseline and SC1-SC3 remain complete without geometry; repository CI separately validates the exact 2,857 model-ED join."
 
 # Generated Stage 01-09 and SC1-SC3 outputs are not mandatory inputs.
