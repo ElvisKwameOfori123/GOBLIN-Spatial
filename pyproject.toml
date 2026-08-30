@@ -46,6 +46,7 @@ goblin-spatial-principal = "goblin_spatial.principal_cli:main"
 goblin-spatial-report = "goblin_spatial.reporting_cli:main"
 goblin-spatial-study-report = "goblin_spatial.study_reporting_cli:main"
 goblin-spatial-paper-figures = "goblin_spatial.paper_figures_cli:main"
+goblin-spatial-maps = "goblin_spatial.map_reporting_cli:main"
 # Local/manual first-principles LPIS reconstruction tool. Not part of normal runtime.
 goblin-spatial-lpis = "goblin_spatial.lpis_cli:main"
 
