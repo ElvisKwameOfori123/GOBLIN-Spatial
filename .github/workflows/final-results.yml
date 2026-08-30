@@ -54,9 +54,74 @@ jobs:
 
       - name: Build final workbook database and diagnostic figures
         run: |
-          goblin-spatial-study-report \
-            "$PWD/data/processed/final_principal" \
-            --output-dir "$PWD/data/processed/final_results"
+          python - <<'PY'
+          from pathlib import Path
+          import sqlite3
+          import pandas as pd
+          import goblin_spatial.study_reporting as base_reporting
+
+          def sqlite_safe_frame(frame: pd.DataFrame, table_name: str):
+              out = frame.copy()
+              used = set()
+              safe_columns = []
+              mappings = []
+              for original in [str(c) for c in out.columns]:
+                  candidate = original
+                  folded = candidate.casefold()
+                  if folded in used:
+                      number = 2
+                      candidate = f"{original}__SQLITE_CASE_VARIANT_{number}"
+                      while candidate.casefold() in used:
+                          number += 1
+                          candidate = f"{original}__SQLITE_CASE_VARIANT_{number}"
+                      mappings.append(
+                          {
+                              "TABLE_NAME": table_name,
+                              "ORIGINAL_COLUMN": original,
+                              "SQLITE_COLUMN": candidate,
+                              "REASON": "SQLite column names are case-insensitive; values retained under an explicit non-colliding name.",
+                          }
+                      )
+                  used.add(candidate.casefold())
+                  safe_columns.append(candidate)
+              out.columns = safe_columns
+              return out, mappings
+
+          def safe_write_sqlite(path: Path, tables: dict[str, pd.DataFrame], figure_data: pd.DataFrame) -> None:
+              if path.exists():
+                  path.unlink()
+              mapping_rows = []
+              with sqlite3.connect(path) as connection:
+                  for name, frame in tables.items():
+                      safe, mappings = sqlite_safe_frame(frame, name)
+                      mapping_rows.extend(mappings)
+                      safe.to_sql(name, connection, if_exists="replace", index=False)
+                  safe_fig, mappings = sqlite_safe_frame(figure_data, "figure_data")
+                  mapping_rows.extend(mappings)
+                  safe_fig.to_sql("figure_data", connection, if_exists="replace", index=False)
+                  pd.DataFrame(mapping_rows, columns=["TABLE_NAME", "ORIGINAL_COLUMN", "SQLITE_COLUMN", "REASON"]).to_sql(
+                      "sqlite_column_mapping", connection, if_exists="replace", index=False
+                  )
+                  pd.DataFrame(
+                      [{"reporting_version": base_reporting.STUDY_REPORTING_VERSION, "table_count": len(tables) + 2}]
+                  ).to_sql("report_metadata", connection, if_exists="replace", index=False)
+                  connection.execute("CREATE INDEX IF NOT EXISTS idx_sc1_ed_run ON sc1_ed (STUDY_SCENARIO_ID, STUDY_ALLOCATION_POLICY, CSOED)")
+                  connection.execute("CREATE INDEX IF NOT EXISTS idx_sc3_ed_run ON sc3_ed (STUDY_SCENARIO_ID, STUDY_ALLOCATION_POLICY, CSOED)")
+                  connection.execute("CREATE INDEX IF NOT EXISTS idx_county_run ON county (STUDY_SCENARIO_ID, STUDY_ALLOCATION_POLICY)")
+                  connection.commit()
+
+          base_reporting._write_sqlite = safe_write_sqlite
+          from goblin_spatial.final_study_reporting import export_study_results
+
+          outputs = export_study_results(
+              Path("data/processed/final_principal"),
+              output_dir=Path("data/processed/final_results"),
+              require_complete_matrix=True,
+              generate_figures=True,
+          )
+          for label, path in outputs.items():
+              print(f"{label}: {path}")
+          PY
 
       - name: Build high-impact manuscript figure suite
         run: |
