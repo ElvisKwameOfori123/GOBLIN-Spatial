@@ -14,7 +14,7 @@ def _map_data() -> pd.DataFrame:
     rows = []
     for s_i, scenario in enumerate(PRINCIPAL_SCENARIOS):
         for r_i, rule in enumerate(PRINCIPAL_RULES):
-            for e_i, ed in enumerate(("1", "2")):
+            for e_i, ed in enumerate(("1003", "08045/08046")):
                 relief = 0.0
                 burden = 0.0
                 if rule != "PRORATA":
@@ -38,7 +38,7 @@ def _map_data() -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def test_map_reporting_accepts_shapefile_and_freezes_model_geometry(tmp_path: Path) -> None:
+def test_map_reporting_accepts_source_ed_codes_and_freezes_model_geometry(tmp_path: Path) -> None:
     results = tmp_path / "results"
     results.mkdir()
     _map_data().to_csv(results / "GOBLIN_Spatial_Map_Data.csv", index=False)
@@ -46,7 +46,7 @@ def test_map_reporting_accepts_shapefile_and_freezes_model_geometry(tmp_path: Pa
     source = tmp_path / "source.shp"
     geometry = gpd.GeoDataFrame(
         {
-            "ED_CODE": ["1", "2", "999"],
+            "CSOED": ["01003", "08045/08046", "99999"],
             "geometry": [box(0, 0, 1, 1), box(1, 0, 2, 1), box(3, 0, 4, 1)],
         },
         crs="EPSG:2157",
@@ -65,6 +65,10 @@ def test_map_reporting_accepts_shapefile_and_freezes_model_geometry(tmp_path: Pa
     assert (outputs["map_directory"] / "map06_final_unallocated_land.svg").exists()
 
     frozen = gpd.read_file(outputs["frozen_geometry"])
-    assert set(frozen["CSOED"].astype(str)) == {"1", "2"}
+    assert set(frozen["CSOED"].astype(str)) == {"1003", "8045"}
+    assert set(frozen["CSOED_GEOMETRY_SOURCE"].astype(str)) == {"01003", "08045/08046"}
+
     joined = gpd.read_file(outputs["joined_map_layer"])
     assert len(joined) == 2 * len(PRINCIPAL_SCENARIOS) * len(PRINCIPAL_RULES)
+    assert set(joined["CSOED"].astype(str)) == {"1003", "8045"}
+    assert set(joined["CSOED_SOURCE"].astype(str)) == {"1003", "08045/08046"}
