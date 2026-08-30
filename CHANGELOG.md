@@ -12,6 +12,33 @@ For current scientific assumptions and interpretation boundaries, see [`docs/SCI
 
 ---
 
+## 2026-08-30 — Separate parent Available accounting from realised rewetting residuals
+
+**Type:** REPORTING / SCIENTIFIC GOVERNANCE / INTERFACE
+
+### Changed
+- Added an interpretation-safe scenario reporting layer and the `goblin-spatial-report` command.
+- Added `GOBLIN_Spatial_Scientific_Results.xlsx` generation from canonical principal-run CSV outputs.
+- Added machine-readable `sc3_land_accounting_summary.csv` and `sc3_scientific_validation.csv` reporting outputs.
+- Formalised three distinct land quantities: parent GOBLIN `Available` target accounting, realised post-Stage-A unallocated released land, and final unallocated released land after realised rewetting.
+- Added explicit closure tests for parent target accounting, realised Stage-A spatial accounting and strict post-rewetting spatial accounting.
+- Clarified that gross release is run-derived from the selected baseline `ALL_GRASSLAND` and the pathway `TARGET_LIVESTOCK_LAND_HA` endpoint.
+
+### Reason
+- The parent pathway `Available` category must remain reproducible and should not be silently replaced by a smaller strict residual after spatial rewetting.
+- Realised Stage-A infeasibility also needs to remain visible. If Stage-A targets are unmet, realised post-Stage-A unallocated land exceeds the parent target-accounting `Available` quantity by exactly the unmet Stage-A hectares.
+
+### Scientific effect
+- No change to SC1 livestock allocation, cohort propagation, released-land geography, SC2 opportunity logic or SC3 allocation mathematics.
+- Scientific interpretation and reporting semantics are corrected and made explicit.
+- Existing canonical CSV model outputs are never overwritten by the reporting layer.
+
+### Validation
+- Added focused unit tests for the three-ledger accounting identities, rewetting exclusivity, final residual non-negativity and preservation of canonical CSV files.
+- The reporting workbook includes a dedicated validation sheet with PASS/FAIL checks.
+
+---
+
 ## 2026-08-22 — Clarify historical CSO control hierarchy and project context
 
 **Type:** DOCUMENTATION / SCIENTIFIC GOVERNANCE
