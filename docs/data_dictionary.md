@@ -1,6 +1,6 @@
 # Data Dictionary
 
-This file documents the clean indicators exposed by the final GOBLIN-Spatial data workbook.
+This file documents the clean indicators exposed by the final GOBLIN-Spatial data workbook and the interpretation-safe scenario reporting layer.
 
 ## Core identifiers
 
@@ -95,3 +95,28 @@ The final GOBLIN sheep representation contains 10 cohorts:
 The GOBLIN `Upland` naming is operationally represented by the DAFM Mountain + Mountain Cross type aggregate in the current spatialisation.
 
 For every ED-year, these cohorts sum exactly to `TOTAL_SHEEP`.
+
+## Scenario land-accounting reporting
+
+The scientific reporting layer intentionally separates parent pathway accounting from realised SC3 spatial feasibility.
+
+| Variable | Meaning |
+|---|---|
+| `GOBLIN_PARENT_AVAILABLE_TARGET_HA` | National parent-pathway `Available` residual calculated as gross livestock-land release minus the five Stage-A national targets. This is target accounting, not an ED-level realised allocation. |
+| `SC3_POST_STAGE_A_UNALLOCATED_RELEASE_HA` | Released land remaining after realised Stage-A allocation. This is a realised spatial-feasibility quantity. |
+| `STAGE_A_UNMET_HA` | Stage-A target hectares not spatially realised. Under the accounting identity, this equals `SC3_POST_STAGE_A_UNALLOCATED_RELEASE_HA - GOBLIN_PARENT_AVAILABLE_TARGET_HA` nationally. |
+| `SC3_REWETTING_FROM_RELEASED_LAND_HA` | Realised rewetting allocated from post-Stage-A released land, subject to the drained-organic-grassland stock constraint. |
+| `SC3_FINAL_UNALLOCATED_RELEASED_LAND_HA` | Strict physical residual after realised Stage-A allocation and realised rewetting. This must not be labelled as the parent GOBLIN `Available` category. |
+| `PARENT_TARGET_ACCOUNTING_CLOSURE_HA` | Parent target-accounting closure residual. Expected value is zero. |
+| `SPATIAL_STAGE_A_ACCOUNTING_CLOSURE_HA` | Realised Stage-A spatial accounting closure residual. Expected value is zero. |
+| `STRICT_SPATIAL_ACCOUNTING_CLOSURE_HA` | Strict post-rewetting spatial accounting closure residual. Expected value is zero. |
+
+The reporting identities are:
+
+```text
+Gross release = Stage-A targets + GOBLIN parent Available target
+Gross release = realised Stage-A allocation + post-Stage-A unallocated release
+Gross release = realised Stage-A allocation + realised rewetting + final unallocated release
+```
+
+The reporting command retains the existing canonical SC3 columns for backward compatibility and adds explicit aliases in the workbook so scientific interpretation is unambiguous.
