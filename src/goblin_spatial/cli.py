@@ -1,10 +1,9 @@
 """Command-line interface for the validated GOBLIN-Spatial workflow.
 
-The root command keeps the historical build and repository-input verification
-interfaces, and adds a thin guided study wrapper around the already validated
-principal SC1 -> SC2 -> SC3 runner.  The wrapper does not duplicate or alter
-scenario science: it builds the baseline, then delegates scenario execution to
-``goblin_spatial.principal_cli``.
+The root command exposes the scientific pipeline and the downstream publication
+layers without mixing their mathematics. A user can stop after baseline, SC1,
+SC2 or SC3, or work only with already-completed results to regenerate reporting,
+figures or maps.
 """
 
 from __future__ import annotations
@@ -16,6 +15,9 @@ import sys
 
 from goblin_spatial.config import load_config
 from goblin_spatial.data_fetch import fetch_data
+from goblin_spatial.final_study_reporting import export_study_results
+from goblin_spatial.map_reporting import export_maps
+from goblin_spatial.paper_figures import generate_paper_figures
 from goblin_spatial.pipeline import run_baseline
 from goblin_spatial.scenario.control_table import read_scenario_control_table
 from goblin_spatial.scenario.principal_allocation import (
@@ -31,8 +33,9 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="goblin-spatial",
         description=(
-            "Build the validated GOBLIN-Spatial baseline or run a study through "
-            "SC1, SC2 or SC3. Run with no arguments for the guided menu."
+            "Run the validated GOBLIN-Spatial science through a chosen stage, "
+            "or regenerate downstream results, publication figures and maps. "
+            "Run with no arguments for the guided scientific-stage menu."
         ),
     )
     sub = parser.add_subparsers(dest="command")
@@ -105,12 +108,53 @@ def _parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional principal scenario output directory.",
     )
+
+    report_parser = sub.add_parser(
+        "report",
+        help="Build the cross-run workbook/SQLite result package from completed principal runs.",
+    )
+    report_parser.add_argument("study_root", help="Directory containing completed principal run folders.")
+    report_parser.add_argument("--output-dir", default=None)
+    report_parser.add_argument(
+        "--allow-partial",
+        action="store_true",
+        help="Allow a development subset instead of the exact 3 x 4 principal matrix.",
+    )
+    report_parser.add_argument(
+        "--no-figures",
+        action="store_true",
+        help="Build numerical reporting outputs without the diagnostic graph suite.",
+    )
+
+    figure_parser = sub.add_parser(
+        "figures",
+        help="Generate the eight publication-facing figures from a frozen final SQLite database.",
+    )
+    figure_parser.add_argument("database", help="Path to GOBLIN_Spatial_Final_Results.sqlite")
+    figure_parser.add_argument("--output-dir", default=None)
+
+    map_parser = sub.add_parser(
+        "maps",
+        help="Join map-ready ED results to geometry and generate the downstream map package.",
+    )
+    map_parser.add_argument(
+        "results",
+        help="Final results directory containing GOBLIN_Spatial_Map_Data.csv, or the CSV itself.",
+    )
+    map_parser.add_argument("--geometry", default=None, help="Optional ED Shapefile or GeoPackage.")
+    map_parser.add_argument("--geometry-key", default=None, help="Optional ED identifier attribute in the geometry source.")
+    map_parser.add_argument("--config", default="configs/ireland_2015_2025.yaml")
+    map_parser.add_argument("--output-dir", default=None)
+    map_parser.add_argument(
+        "--no-static-maps",
+        action="store_true",
+        help="Create GeoPackages only and skip PNG/SVG maps.",
+    )
     return parser
 
 
 def _choose(prompt: str, options: list[tuple[str, str]]) -> str:
     """Prompt until the user chooses one numbered option."""
-
     while True:
         print(prompt)
         for number, label in options:
@@ -130,10 +174,7 @@ def _scenario_options(config_path: str | Path) -> list[tuple[str, str]]:
     if active.empty:
         raise RuntimeError("scenario control table contains no ACTIVE pathways")
     return [
-        (
-            str(index + 1),
-            f"{row.SCENARIO_ID} — {row.SCENARIO_NAME}",
-        )
+        (str(index + 1), f"{row.SCENARIO_ID} — {row.SCENARIO_NAME}")
         for index, row in active.iterrows()
     ]
 
@@ -153,7 +194,6 @@ def _run_study(
     output_dir: str | None = None,
 ) -> None:
     """Build the baseline, then delegate to the validated principal stage runner."""
-
     stage = str(through).lower()
     if stage not in THROUGH_STAGES:
         raise ValueError(f"through must be one of {THROUGH_STAGES}")
@@ -192,17 +232,13 @@ def _run_study(
     if output_dir:
         command.extend(["--output-dir", str(output_dir)])
 
-    print(
-        f"Continuing with {scenario} through {stage.upper()} "
-        f"using {allocation_rule}..."
-    )
+    print(f"Continuing with {scenario} through {stage.upper()} using {allocation_rule}...")
     subprocess.run(command, check=True)
     print(f"Study completed and stopped after {stage.upper()} as requested.")
 
 
 def _interactive_study() -> None:
-    """Friendly guided workflow for users who run ``goblin-spatial`` alone."""
-
+    """Friendly guided workflow for the scientific model stages."""
     config_path = "configs/ireland_2015_2025.yaml"
     through = _choose(
         "\nWhat would you like to run?",
@@ -210,14 +246,14 @@ def _interactive_study() -> None:
             ("1", "Baseline only"),
             ("2", "Baseline + SC1 livestock transition"),
             ("3", "Baseline + SC1 + SC2 opportunity analysis"),
-            ("4", "Full study: Baseline + SC1 + SC2 + SC3"),
+            ("4", "Full scientific chain: Baseline + SC1 + SC2 + SC3"),
         ],
     )
     through = {
         "Baseline only": "baseline",
         "Baseline + SC1 livestock transition": "sc1",
         "Baseline + SC1 + SC2 opportunity analysis": "sc2",
-        "Full study: Baseline + SC1 + SC2 + SC3": "sc3",
+        "Full scientific chain: Baseline + SC1 + SC2 + SC3": "sc3",
     }[through]
 
     if through == "baseline":
@@ -233,25 +269,13 @@ def _interactive_study() -> None:
 
     scenario_label = _choose("\nChoose a national GOBLIN pathway:", _scenario_options(config_path))
     scenario = _scenario_id_from_label(scenario_label)
-
     allocation_rule = _choose(
         "\nChoose the spatial incidence rule:",
-        [
-            (str(index + 1), policy)
-            for index, policy in enumerate(PRINCIPAL_ALLOCATION_POLICIES)
-        ],
+        [(str(index + 1), policy) for index, policy in enumerate(PRINCIPAL_ALLOCATION_POLICIES)],
     )
 
     if through == "sc1":
-        baseline_year = int(
-            _choose(
-                "\nChoose the scenario baseline year:",
-                [
-                    ("1", "2020"),
-                    ("2", "2025"),
-                ],
-            )
-        )
+        baseline_year = int(_choose("\nChoose the scenario baseline year:", [("1", "2020"), ("2", "2025")]))
     else:
         baseline_year = 2020
         print("\nSC2/SC3 use the validated frozen 2020 spatial context.")
@@ -296,6 +320,40 @@ def main() -> None:
             protection_strength=args.protection_strength,
             output_dir=args.output_dir,
         )
+        return
+
+    if args.command == "report":
+        root = Path(args.study_root).resolve()
+        out = Path(args.output_dir).resolve() if args.output_dir is not None else None
+        outputs = export_study_results(
+            root,
+            output_dir=out,
+            require_complete_matrix=not args.allow_partial,
+            generate_figures=not args.no_figures,
+        )
+        for label, path in outputs.items():
+            print(f"{label}: {path}")
+        return
+
+    if args.command == "figures":
+        database = Path(args.database).resolve()
+        out = Path(args.output_dir).resolve() if args.output_dir is not None else database.parent / "paper_figures"
+        outputs = generate_paper_figures(database, out)
+        for label, path in outputs.items():
+            print(f"{label}: {path}")
+        return
+
+    if args.command == "maps":
+        outputs = export_maps(
+            Path(args.results),
+            geometry=Path(args.geometry) if args.geometry is not None else None,
+            geometry_key=args.geometry_key,
+            config_path=Path(args.config),
+            output_dir=Path(args.output_dir) if args.output_dir is not None else None,
+            generate_static_maps=not args.no_static_maps,
+        )
+        for label, path in outputs.items():
+            print(f"{label}: {path}")
         return
 
     raise ValueError(f"unknown command: {args.command}")
