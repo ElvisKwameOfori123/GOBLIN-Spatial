@@ -59,10 +59,21 @@ jobs:
           test -f data/processed/final_results/GOBLIN_Spatial_Final_Results_Master.xlsx
           test -f data/processed/final_results/GOBLIN_Spatial_Final_Results.sqlite
           test -f data/processed/final_results/GOBLIN_Spatial_Figure_Data.csv
+          test -f data/processed/final_results/GOBLIN_Spatial_Map_Data.csv
+          test -f data/processed/final_results/GOBLIN_Spatial_Transition_Conditions.csv
           test -f data/processed/final_results/figures/fig01_livestock_endpoint.png
-          test -f data/processed/final_results/figures/fig01_livestock_endpoint.svg
           test -f data/processed/final_results/figures/fig03_released_land_allocation.png
+          test -f data/processed/final_results/figures/fig04_transition_concentration.svg
+          test -f data/processed/final_results/figures/fig05_protection_redistribution.png
           test -f data/processed/final_results/figures/fig06_pathway_allocation_sensitivity.svg
+          test -f data/processed/final_results/figures/fig07_persistent_exposure.png
+          test -f data/processed/final_results/figures/fig08_within_between_heterogeneity.svg
+          test -f data/processed/final_results/figures/fig09_released_land_systems.png
+          test -f data/processed/final_results/figures/fig10_released_land_soil.svg
+          test -f data/processed/final_results/figures/fig11_exposure_forest_opportunity.png
+          test -f data/processed/final_results/figures/fig12_target_realised_unmet.svg
+          test -f data/processed/final_results/figures/fig13_land_accounting.png
+          test -f data/processed/final_results/figures/fig14_opportunity_mobilisation.svg
 
       - name: Upload final scientific results
         uses: actions/upload-artifact@v4
