@@ -1,21 +1,19 @@
 """Scientific reporting utilities for GOBLIN-Spatial scenario outputs.
 
-The reporting layer does not alter SC1, SC2 or SC3 model mathematics. It reads
-canonical machine-readable CSV outputs and produces interpretation-safe summary
-outputs for scientific use.
+This module is deliberately downstream of the model. It never changes SC1,
+SC2 or SC3 mathematics and never overwrites canonical model CSV outputs.
 
-A central reporting rule is that three land quantities remain distinct:
+For land accounting, three quantities are kept distinct:
 
-1. GOBLIN parent Available target accounting:
-   gross release minus the five national Stage-A targets.
-2. Post-Stage-A unallocated released land:
-   gross release minus realised Stage-A allocation.
-3. Final unallocated released land:
-   post-Stage-A unallocated land minus realised rewetting.
+1. GOBLIN parent Available target accounting
+   = gross release - five national Stage-A targets.
+2. Realised post-Stage-A unallocated released land
+   = gross release - realised Stage-A allocation.
+3. Final unallocated released land
+   = post-Stage-A unallocated land - realised rewetting.
 
-The first quantity reproduces the parent pathway accounting. The second and
-third are realised spatial-feasibility quantities. They coincide only when all
-relevant targets are fully feasible.
+The distinction preserves the parent pathway accounting while exposing spatial
+infeasibility and the physical effect of rewetting transparently.
 """
 
 from __future__ import annotations
@@ -28,7 +26,6 @@ import pandas as pd
 
 REPORTING_VERSION = "1.0"
 LAND_ACCOUNTING_TOL = 1e-6
-
 
 _REQUIRED_SC3_ACCOUNTING_COLUMNS = {
     "SC2_POTENTIAL_RELEASE_HA",
@@ -53,37 +50,51 @@ def _finite(value: object, label: str) -> float:
 
 
 def add_sc3_reporting_aliases(frame: pd.DataFrame) -> pd.DataFrame:
-    """Add explicit interpretation-safe aliases to an SC3 ED result table.
-
-    Existing SC3 columns are retained for backward compatibility. The aliases
-    make clear that ``SC3_STAGE_A_AVAILABLE_HA`` is a realised post-Stage-A
-    residual, while ``SC3_RESIDUAL_AVAILABLE_LAND_HA`` is the strict residual
-    after realised rewetting.
-    """
+    """Add interpretation-safe aliases and verify ED land accounting."""
 
     _require_columns(frame, _REQUIRED_SC3_ACCOUNTING_COLUMNS, "SC3 reporting")
-    out = frame.copy()
+    if frame.empty:
+        raise ValueError("SC3 reporting requires at least one ED row")
 
-    release = pd.to_numeric(out["SC2_POTENTIAL_RELEASE_HA"], errors="raise").to_numpy(float)
-    stage_a = pd.to_numeric(out["SC3_STAGE_A_REALIZED_HA"], errors="raise").to_numpy(float)
-    post_stage_a = pd.to_numeric(out["SC3_STAGE_A_AVAILABLE_HA"], errors="raise").to_numpy(float)
-    rewetting = pd.to_numeric(out["SC3_REALIZED_REWETTING_HA"], errors="raise").to_numpy(float)
+    out = frame.copy()
+    release = pd.to_numeric(
+        out["SC2_POTENTIAL_RELEASE_HA"], errors="raise"
+    ).to_numpy(float)
+    stage_a = pd.to_numeric(
+        out["SC3_STAGE_A_REALIZED_HA"], errors="raise"
+    ).to_numpy(float)
+    post_stage_a = pd.to_numeric(
+        out["SC3_STAGE_A_AVAILABLE_HA"], errors="raise"
+    ).to_numpy(float)
+    rewetting = pd.to_numeric(
+        out["SC3_REALIZED_REWETTING_HA"], errors="raise"
+    ).to_numpy(float)
     final_residual = pd.to_numeric(
         out["SC3_RESIDUAL_AVAILABLE_LAND_HA"], errors="raise"
     ).to_numpy(float)
+
+    for label, values in {
+        "released land": release,
+        "Stage-A realised land": stage_a,
+        "post-Stage-A unallocated land": post_stage_a,
+        "rewetting": rewetting,
+        "final unallocated land": final_residual,
+    }.items():
+        if (~np.isfinite(values)).any():
+            raise ValueError(f"SC3 {label} must be finite")
+        if (values < -LAND_ACCOUNTING_TOL).any():
+            raise AssertionError(f"SC3 {label} contains negative hectares")
 
     if (rewetting - post_stage_a > LAND_ACCOUNTING_TOL).any():
         raise AssertionError(
             "SC3 realised rewetting exceeds post-Stage-A unallocated released land"
         )
-    if (final_residual < -LAND_ACCOUNTING_TOL).any():
-        raise AssertionError("SC3 final unallocated released land is negative")
 
     stage_a_closure = stage_a + post_stage_a - release
     strict_closure = stage_a + rewetting + final_residual - release
-    if np.max(np.abs(stage_a_closure)) > LAND_ACCOUNTING_TOL:
+    if float(np.max(np.abs(stage_a_closure))) > LAND_ACCOUNTING_TOL:
         raise AssertionError("SC3 post-Stage-A land accounting does not close by ED")
-    if np.max(np.abs(strict_closure)) > LAND_ACCOUNTING_TOL:
+    if float(np.max(np.abs(strict_closure))) > LAND_ACCOUNTING_TOL:
         raise AssertionError("SC3 strict post-rewetting land accounting does not close by ED")
 
     out["SC3_POST_STAGE_A_UNALLOCATED_RELEASE_HA"] = post_stage_a
@@ -103,21 +114,17 @@ def build_sc3_land_accounting_summary(
     parent_available_target_ha: float,
     rewetting_target_ha: float,
 ) -> pd.DataFrame:
-    """Build the national three-ledger SC3 land-accounting summary.
-
-    ``parent_available_target_ha`` is the parent GOBLIN target-accounting
-    residual, normally ``gross release - Stage-A target``. It is intentionally
-    distinct from the realised post-Stage-A residual when Stage-A targets are
-    spatially infeasible.
-    """
+    """Build one national row for the three-ledger SC3 land accounting."""
 
     out = add_sc3_reporting_aliases(frame)
     gross_release = _finite(gross_release_ha, "gross_release_ha")
     stage_a_target = _finite(stage_a_target_ha, "stage_a_target_ha")
-    parent_target = _finite(parent_available_target_ha, "parent_available_target_ha")
+    parent_target = _finite(
+        parent_available_target_ha, "parent_available_target_ha"
+    )
     rewetting_target = _finite(rewetting_target_ha, "rewetting_target_ha")
 
-    if min(gross_release, stage_a_target, rewetting_target) < -LAND_ACCOUNTING_TOL:
+    if min(gross_release, stage_a_target, parent_target, rewetting_target) < -LAND_ACCOUNTING_TOL:
         raise ValueError("SC3 reporting controls must be non-negative")
 
     expected_parent = gross_release - stage_a_target
@@ -147,7 +154,9 @@ def build_sc3_land_accounting_summary(
         ).sum()
     )
     rewetting_realised = float(
-        pd.to_numeric(out["SC3_REWETTING_FROM_RELEASED_LAND_HA"], errors="raise").sum()
+        pd.to_numeric(
+            out["SC3_REWETTING_FROM_RELEASED_LAND_HA"], errors="raise"
+        ).sum()
     )
     final_residual = float(
         pd.to_numeric(
@@ -212,7 +221,9 @@ def build_sc3_validation_table(
 
     rewet_minus_post = float(
         (
-            pd.to_numeric(out["SC3_REWETTING_FROM_RELEASED_LAND_HA"], errors="raise")
+            pd.to_numeric(
+                out["SC3_REWETTING_FROM_RELEASED_LAND_HA"], errors="raise"
+            )
             - pd.to_numeric(
                 out["SC3_POST_STAGE_A_UNALLOCATED_RELEASE_HA"], errors="raise"
             )
@@ -229,49 +240,43 @@ def build_sc3_validation_table(
             "Parent GOBLIN target accounting closes",
             0.0,
             float(row["PARENT_TARGET_ACCOUNTING_CLOSURE_HA"]),
-            LAND_ACCOUNTING_TOL,
         ),
         (
             "Realised Stage-A spatial accounting closes",
             0.0,
             float(row["SPATIAL_STAGE_A_ACCOUNTING_CLOSURE_HA"]),
-            LAND_ACCOUNTING_TOL,
         ),
         (
             "Strict post-rewetting spatial accounting closes",
             0.0,
             float(row["STRICT_SPATIAL_ACCOUNTING_CLOSURE_HA"]),
-            LAND_ACCOUNTING_TOL,
         ),
         (
             "Stage-A unmet equals post-Stage-A excess over parent Available",
             float(row["STAGE_A_UNMET_HA"]),
             float(row["POST_STAGE_A_MINUS_PARENT_TARGET_HA"]),
-            LAND_ACCOUNTING_TOL,
         ),
         (
             "Rewetting does not exceed post-Stage-A unallocated land by ED",
             0.0,
             max(rewet_minus_post, 0.0),
-            LAND_ACCOUNTING_TOL,
         ),
         (
             "Final unallocated released land is non-negative by ED",
             0.0,
             min(min_final, 0.0),
-            LAND_ACCOUNTING_TOL,
         ),
     ]
 
     records = []
-    for check, expected, actual, tolerance in checks:
-        passed = abs(actual - expected) <= tolerance
+    for check, expected, actual in checks:
+        passed = abs(actual - expected) <= LAND_ACCOUNTING_TOL
         records.append(
             {
                 "CHECK": check,
                 "EXPECTED": expected,
                 "ACTUAL": actual,
-                "TOLERANCE": tolerance,
+                "TOLERANCE": LAND_ACCOUNTING_TOL,
                 "STATUS": "PASS" if passed else "FAIL",
             }
         )
@@ -297,42 +302,43 @@ def _headline_results(
             {"METRIC": metric, "VALUE": value, "UNIT": unit, "SOURCE": source}
         )
 
-    for metric, column, unit in (
-        ("Scenario", "SCENARIO_ID", "", "SC1 control"),
-        ("Scenario name", "SCENARIO_NAME", "", "SC1 control"),
-        ("Baseline year", "RUN_START_YEAR", "year", "SC1 control"),
-        ("Target year", "TARGET_YEAR", "year", "SC1 control"),
-        ("Allocation policy", "ALLOCATION_POLICY", "", "SC1 control"),
-        ("Protection strength", "PROTECTION_STRENGTH_LAMBDA", "lambda", "SC1 control"),
-        ("Gross livestock-land release", "RUN_GROSS_RELEASE_HA", "ha", "SC1 control"),
-        ("Target livestock land", "TARGET_LIVESTOCK_LAND_HA", "ha", "SC1 control"),
-        ("Stage-A national target", "STAGE_A_TARGET_HA", "ha", "SC1 control"),
+    control_items = (
+        ("Scenario", "SCENARIO_ID", ""),
+        ("Scenario name", "SCENARIO_NAME", ""),
+        ("Baseline year", "RUN_START_YEAR", "year"),
+        ("Target year", "TARGET_YEAR", "year"),
+        ("Allocation policy", "ALLOCATION_POLICY", ""),
+        ("Protection strength", "PROTECTION_STRENGTH_LAMBDA", "lambda"),
+        ("Gross livestock-land release", "RUN_GROSS_RELEASE_HA", "ha"),
+        ("Target livestock land", "TARGET_LIVESTOCK_LAND_HA", "ha"),
+        ("Stage-A national target", "STAGE_A_TARGET_HA", "ha"),
         (
             "GOBLIN parent Available target",
             "GOBLIN_PARENT_AVAILABLE_BEFORE_REWETTING_HA",
             "ha",
-            "SC1 control",
         ),
-        ("Rewetting target", "REWETTING_TARGET_HA", "ha", "SC1 control"),
-    ):
+        ("Rewetting target", "REWETTING_TARGET_HA", "ha"),
+    )
+    for metric, column, unit in control_items:
         if column in c.index:
-            add(metric, c[column], unit, source)
+            add(metric, c[column], unit, "SC1 control")
 
     if livestock is not None and len(livestock) == 1:
         l = livestock.iloc[0]
-        for metric, column, unit in (
+        livestock_items = (
             ("Scenario dairy cows", "SCENARIO_DAIRY_COW", "head"),
             ("Scenario suckler cows", "SCENARIO_SUCKLER_COW", "head"),
             ("Scenario total cattle", "SCENARIO_TOTAL_CATTLE", "head"),
             ("Total cattle change", "TOTAL_CATTLE_CHANGE", "head"),
-            ("Total cattle change", "TOTAL_CATTLE_CHANGE_PCT", "%"),
-        ):
+            ("Total cattle change percent", "TOTAL_CATTLE_CHANGE_PCT", "%"),
+        )
+        for metric, column, unit in livestock_items:
             if column in l.index:
                 add(metric, l[column], unit, "SC1 national livestock summary")
 
     if accounting is not None and len(accounting) == 1:
         a = accounting.iloc[0]
-        for metric, column in (
+        accounting_items = (
             ("Stage-A realised", "STAGE_A_REALIZED_HA"),
             ("Stage-A unmet", "STAGE_A_UNMET_HA"),
             (
@@ -345,7 +351,8 @@ def _headline_results(
                 "Final unallocated released land",
                 "SC3_FINAL_UNALLOCATED_RELEASED_LAND_HA",
             ),
-        ):
+        )
+        for metric, column in accounting_items:
             add(metric, a[column], "ha", "SC3 land accounting")
 
     return pd.DataFrame(records)
@@ -356,7 +363,7 @@ def _data_dictionary() -> pd.DataFrame:
         (
             "GOBLIN_PARENT_AVAILABLE_TARGET_HA",
             "ha",
-            "Parent pathway target-accounting residual: gross release minus the five national Stage-A targets. It reproduces the source pathway accounting and is not a realised ED allocation.",
+            "Parent pathway target-accounting residual: gross release minus the five national Stage-A targets. This reproduces the parent pathway accounting and is not a realised ED allocation.",
         ),
         (
             "SC3_POST_STAGE_A_UNALLOCATED_RELEASE_HA",
@@ -366,7 +373,7 @@ def _data_dictionary() -> pd.DataFrame:
         (
             "STAGE_A_UNMET_HA",
             "ha",
-            "National Stage-A target hectares not spatially realised. This equals post-Stage-A unallocated release minus parent Available target accounting.",
+            "National Stage-A target hectares not spatially realised. Nationally this equals post-Stage-A unallocated release minus parent Available target accounting.",
         ),
         (
             "SC3_REWETTING_FROM_RELEASED_LAND_HA",
@@ -406,10 +413,10 @@ def _format_sheet(writer: pd.ExcelWriter, name: str, frame: pd.DataFrame) -> Non
     for col, column in enumerate(frame.columns):
         worksheet.write(0, col, column, header)
         width = max(12, min(42, len(str(column)) + 2))
-        if column in {"INTERPRETATION", "CHECK", "METRIC", "SOURCE"}:
+        if column in {"INTERPRETATION", "CHECK", "METRIC", "SOURCE", "VALUE"}:
             width = 42
-        fmt = None
         upper = str(column).upper()
+        fmt = None
         if upper.endswith("_HA") or upper in {"EXPECTED", "ACTUAL", "TOLERANCE"}:
             fmt = number
         elif upper.endswith("_YEAR") or upper.endswith("_COW") or upper.endswith("_CATTLE"):
@@ -422,11 +429,7 @@ def export_scientific_results(
     run_dir: str | Path,
     output_path: str | Path | None = None,
 ) -> dict[str, Path]:
-    """Export a coherent scientific workbook from one principal scenario run.
-
-    Canonical model CSV files are never overwritten. The reporting layer writes
-    derived summaries and an Excel workbook alongside them.
-    """
+    """Create scientific summaries and a workbook from one principal run."""
 
     run_dir = Path(run_dir)
     if not run_dir.exists():
@@ -454,7 +457,6 @@ def export_scientific_results(
     outputs: dict[str, Path] = {}
 
     if sc3_ed is not None:
-        c = controls.iloc[0]
         required_control = {
             "RUN_GROSS_RELEASE_HA",
             "STAGE_A_TARGET_HA",
@@ -467,6 +469,7 @@ def export_scientific_results(
                 "SC3 scientific reporting requires control columns: "
                 f"{missing}"
             )
+        c = controls.iloc[0]
         enriched_sc3 = add_sc3_reporting_aliases(sc3_ed)
         accounting = build_sc3_land_accounting_summary(
             enriched_sc3,
@@ -495,30 +498,23 @@ def export_scientific_results(
             },
             {
                 "ITEM": "Canonical-data rule",
-                "VALUE": "This workbook is derived reporting output. The model CSV files remain the machine-readable source of truth.",
+                "VALUE": "This workbook is derived reporting output. Canonical model CSV files remain the machine-readable source of truth.",
             },
             {
                 "ITEM": "Available-land rule",
                 "VALUE": "Parent GOBLIN Available target accounting, realised post-Stage-A unallocated release, and final post-rewetting residual are reported separately.",
             },
-            {
-                "ITEM": "Reporting version",
-                "VALUE": REPORTING_VERSION,
-            },
-            {
-                "ITEM": "Run directory",
-                "VALUE": str(run_dir),
-            },
+            {"ITEM": "Reporting version", "VALUE": REPORTING_VERSION},
+            {"ITEM": "Run directory", "VALUE": str(run_dir)},
         ]
     )
 
-    workbook_path = (
-        Path(output_path)
-        if output_path is not None
-        else run_dir / "GOBLIN_Spatial_Scientific_Results.xlsx"
-    )
-    if not workbook_path.is_absolute():
-        workbook_path = run_dir / workbook_path
+    if output_path is None:
+        workbook_path = run_dir / "GOBLIN_Spatial_Scientific_Results.xlsx"
+    else:
+        workbook_path = Path(output_path)
+        if not workbook_path.is_absolute():
+            workbook_path = run_dir / workbook_path
     workbook_path.parent.mkdir(parents=True, exist_ok=True)
 
     sheets: list[tuple[str, pd.DataFrame]] = [
