@@ -1,0 +1,73 @@
+name: final principal results
+
+on:
+  workflow_dispatch:
+
+jobs:
+  final-results:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[geo,goblin,scenario]"
+
+      - name: Verify frozen runtime inputs
+        run: goblin-spatial fetch-data --verify-only
+
+      - name: Build canonical historical baseline
+        run: goblin-spatial build --config configs/ireland_2015_2025.yaml
+
+      - name: Run full 3 x 4 principal matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          scenarios=(SI_SG BE_SG ALL_GAS_NZ)
+          rules=(PRORATA DAIRY_PROTECTION ECONOMIC_CAPACITY_PROTECTION SOCIAL_VULNERABILITY_PROTECTION)
+          root="$PWD/data/processed/final_principal"
+          mkdir -p "$root"
+          for scenario in "${scenarios[@]}"; do
+            for rule in "${rules[@]}"; do
+              out="$root/${scenario}_2020_${rule}"
+              echo "Running ${scenario} x ${rule}"
+              goblin-spatial-principal "$scenario" \
+                --baseline-year 2020 \
+                --allocation-rule "$rule" \
+                --stage SC3 \
+                --output-dir "$out"
+            done
+          done
+
+      - name: Build final workbook database and figures
+        run: |
+          goblin-spatial-study-report \
+            "$PWD/data/processed/final_principal" \
+            --output-dir "$PWD/data/processed/final_results"
+
+      - name: Confirm final package
+        run: |
+          test -f data/processed/final_results/GOBLIN_Spatial_Final_Results_Master.xlsx
+          test -f data/processed/final_results/GOBLIN_Spatial_Final_Results.sqlite
+          test -f data/processed/final_results/GOBLIN_Spatial_Figure_Data.csv
+          test -f data/processed/final_results/figures/fig01_livestock_endpoint.png
+          test -f data/processed/final_results/figures/fig01_livestock_endpoint.svg
+          test -f data/processed/final_results/figures/fig03_released_land_allocation.png
+          test -f data/processed/final_results/figures/fig06_pathway_allocation_sensitivity.svg
+
+      - name: Upload final scientific results
+        uses: actions/upload-artifact@v4
+        with:
+          name: GOBLIN-Spatial-final-results
+          path: data/processed/final_results
+          if-no-files-found: error
+          retention-days: 30
