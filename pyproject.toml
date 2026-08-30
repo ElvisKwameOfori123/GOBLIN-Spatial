@@ -42,6 +42,7 @@ goblin = [
 [project.scripts]
 goblin-spatial = "goblin_spatial.cli:main"
 goblin-spatial-principal = "goblin_spatial.principal_cli:main"
+goblin-spatial-report = "goblin_spatial.reporting_cli:main"
 # Local/manual first-principles LPIS reconstruction tool. Not part of normal runtime.
 goblin-spatial-lpis = "goblin_spatial.lpis_cli:main"
 
