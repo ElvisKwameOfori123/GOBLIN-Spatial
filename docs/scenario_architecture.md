@@ -184,16 +184,56 @@ The main Stage-A uses are allocated jointly subject to ED released-land budgets,
 
 If a national target is infeasible, the unmet hectares are reported rather than forced into an unsuitable ED.
 
-### 6.1 Rewetting accounting
+### 6.1 Rewetting and Available-land accounting
 
-Rewetting is handled after Stage A. Its capacity is constrained by the post-Stage-A residual and the anchored drained-organic-grassland stock.
+Rewetting is handled after Stage A. Its physical capacity is constrained by both the realised post-Stage-A unallocated released land and the anchored drained-organic-grassland stock.
 
-Two quantities remain distinct:
+For scientific reporting, three quantities must remain separate.
 
-- **GOBLIN parent Available land**: released land left after the principal new-use targets before the rewetting overlay;
-- **strict residual available land**: land remaining after realised rewetting in the exclusive spatial accounting.
+1. **GOBLIN parent Available target accounting**
 
-The second quantity must not be presented as if it were the source pathway's original `Available` category.
+   ```text
+   parent Available target
+       = gross livestock-land release
+       - five national Stage-A land-use targets
+   ```
+
+   This is the quantity used to reproduce the parent GOBLIN pathway accounting. It is a national target-accounting residual, not a realised ED allocation.
+
+2. **SC3 post-Stage-A unallocated released land**
+
+   ```text
+   post-Stage-A unallocated release
+       = gross livestock-land release
+       - realised Stage-A allocation
+   ```
+
+   This is a realised spatial-feasibility quantity. If all Stage-A targets are feasible it equals the parent Available target. If Stage-A targets are spatially unmet, it is larger than parent Available by exactly the unmet Stage-A hectares.
+
+3. **SC3 final unallocated released land**
+
+   ```text
+   final unallocated release
+       = post-Stage-A unallocated release
+       - realised rewetting
+   ```
+
+   This is the strict physical residual after Stage A and rewetting. It must not be presented as the source pathway's original `Available` category.
+
+The three associated closure identities are therefore:
+
+```text
+Parent target accounting:
+Gross release = Stage-A targets + parent Available target
+
+Realised Stage-A spatial accounting:
+Gross release = realised Stage-A allocation + post-Stage-A unallocated release
+
+Strict spatial accounting:
+Gross release = realised Stage-A allocation + realised rewetting + final unallocated release
+```
+
+This distinction preserves the parent pathway exactly while allowing GOBLIN-Spatial to report spatial infeasibility and the physical effect of rewetting transparently.
 
 ## 7. Pathway consistency
 
@@ -254,6 +294,14 @@ goblin-spatial-principal <SCENARIO_ID> --baseline-year 2020 --stage SC1
 goblin-spatial-principal <SCENARIO_ID> --baseline-year 2020 --stage SC2
 goblin-spatial-principal <SCENARIO_ID> --baseline-year 2020 --stage SC3
 ```
+
+Scientific reporting for a completed run:
+
+```bash
+goblin-spatial-report data/processed/principal/<RUN_DIRECTORY>
+```
+
+The reporting command does not alter canonical CSV outputs. It creates interpretation-safe land-accounting summaries, validation checks and `GOBLIN_Spatial_Scientific_Results.xlsx` in the run directory.
 
 Optional first-principles reconstruction is separate and explicit:
 
