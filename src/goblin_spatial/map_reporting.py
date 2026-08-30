@@ -26,7 +26,7 @@ from goblin_spatial.config import load_config
 from goblin_spatial.study_reporting import PRINCIPAL_SCENARIOS
 
 
-MAP_REPORTING_VERSION = "1.0"
+MAP_REPORTING_VERSION = "1.1"
 SCENARIO_LABELS = {
     "SI_SG": "SI–SG",
     "BE_SG": "BE–SG",
@@ -52,8 +52,21 @@ def _gpd():
 
 
 def _normalise_id(values: pd.Series) -> pd.Series:
-    out = values.astype("string").str.strip()
-    return out.str.replace(r"\.0$", "", regex=True)
+    """Return the stable cartographic ED key used only for geometry joins.
+
+    The scientific model keeps its source ``CSOED`` values unchanged. For
+    cartography we deliberately use the first ED code where a source geography
+    is represented by a composite identifier such as ``08045/08046`` and remove
+    leading zeroes from numeric codes. This yields a simple text key such as
+    ``8045`` while the original source identifier is retained separately in the
+    joined map layer.
+    """
+    out = values.astype("string").str.strip().str.replace(r"\.0$", "", regex=True)
+    out = out.str.split("/", n=1).str[0].str.strip()
+    numeric = out.str.fullmatch(r"\d+", na=False)
+    cleaned = out.loc[numeric].str.lstrip("0")
+    out.loc[numeric] = cleaned.mask(cleaned.eq(""), "0")
+    return out
 
 
 def _resolve_map_csv(results: str | Path) -> Path:
@@ -155,8 +168,12 @@ def prepare_model_geometry(
 
     key = _detect_geometry_key(geometry, result_ids, geometry_key)
     geometry = geometry.copy()
+    geometry["CSOED_GEOMETRY_SOURCE"] = geometry[key].astype("string").str.strip()
     geometry["CSOED"] = _normalise_id(geometry[key])
-    selected = geometry.loc[geometry["CSOED"].isin(result_ids), ["CSOED", geometry.geometry.name]].copy()
+    selected = geometry.loc[
+        geometry["CSOED"].isin(result_ids),
+        ["CSOED", "CSOED_GEOMETRY_SOURCE", geometry.geometry.name],
+    ].copy()
     if selected["CSOED"].duplicated().any():
         dupes = selected.loc[selected["CSOED"].duplicated(), "CSOED"].astype(str).head().tolist()
         raise ValueError(f"ED geometry key is not unique for model EDs; examples={dupes}")
@@ -170,10 +187,16 @@ def prepare_model_geometry(
 
 def build_joined_map_layer(map_data: pd.DataFrame, model_geometry):
     """Attach the same frozen geometry to every ED x scenario x rule result row."""
-    if map_data[["STUDY_SCENARIO_ID", "STUDY_ALLOCATION_POLICY", "CSOED"]].duplicated().any():
+    raw_keys = ["STUDY_SCENARIO_ID", "STUDY_ALLOCATION_POLICY", "CSOED"]
+    if map_data[raw_keys].duplicated().any():
         raise ValueError("map data must contain one row per ED x scenario x allocation rule")
     data = map_data.copy()
+    data["CSOED_SOURCE"] = data["CSOED"].astype("string").str.strip()
     data["CSOED"] = _normalise_id(data["CSOED"])
+    if data[raw_keys].duplicated().any():
+        raise ValueError(
+            "cartographic ED normalisation created a duplicate ED x scenario x allocation-rule key"
+        )
     joined = model_geometry.merge(data, on="CSOED", how="right", validate="one_to_many")
     if joined.geometry.isna().any():
         raise AssertionError("map join lost ED geometry")
