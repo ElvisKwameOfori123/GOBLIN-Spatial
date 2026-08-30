@@ -48,11 +48,17 @@ jobs:
             done
           done
 
-      - name: Build final workbook database and figures
+      - name: Build final workbook database and diagnostic figures
         run: |
           goblin-spatial-study-report \
             "$PWD/data/processed/final_principal" \
             --output-dir "$PWD/data/processed/final_results"
+
+      - name: Build high-impact manuscript figure suite
+        run: |
+          goblin-spatial-paper-figures \
+            "$PWD/data/processed/final_results/GOBLIN_Spatial_Final_Results.sqlite" \
+            --output-dir "$PWD/data/processed/final_results/paper_figures"
 
       - name: Confirm final package
         run: |
@@ -74,6 +80,15 @@ jobs:
           test -f data/processed/final_results/figures/fig12_target_realised_unmet.svg
           test -f data/processed/final_results/figures/fig13_land_accounting.png
           test -f data/processed/final_results/figures/fig14_opportunity_mobilisation.svg
+          test -f data/processed/final_results/paper_figures/paper_fig01_national_transition.png
+          test -f data/processed/final_results/paper_figures/paper_fig02_transition_concentration.svg
+          test -f data/processed/final_results/paper_figures/paper_fig03_protection_redistribution.png
+          test -f data/processed/final_results/paper_figures/paper_fig04_persistence_sensitivity.svg
+          test -f data/processed/final_results/paper_figures/paper_fig05_released_land_composition.png
+          test -f data/processed/final_results/paper_figures/paper_fig06_transition_conditions.svg
+          test -f data/processed/final_results/paper_figures/paper_fig07_target_delivery.png
+          test -f data/processed/final_results/paper_figures/paper_fig08_opportunity_constraints.svg
+          test -f data/processed/final_results/paper_figures/GOBLIN_Spatial_Paper_Figure_Manifest.csv
 
       - name: Upload final scientific results
         uses: actions/upload-artifact@v4
