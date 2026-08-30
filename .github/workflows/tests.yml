@@ -58,6 +58,7 @@ jobs:
             tests/test_national_release.py \
             tests/test_principal_endpoint.py \
             tests/test_principal_soil_context.py \
+            tests/test_reporting.py \
             tests/test_sc1_comparison.py \
             tests/test_sc1_metrics.py \
             tests/test_sc2_context.py \
@@ -88,9 +89,16 @@ jobs:
             --stage SC3 \
             --output-dir data/processed/ci_principal_si_sg
 
-      - name: Confirm standalone scenario outputs
+      - name: Build scientific reporting package
+        run: |
+          goblin-spatial-report data/processed/ci_principal_si_sg
+
+      - name: Confirm standalone scenario and reporting outputs
         run: |
           test -f data/processed/ci_principal_si_sg/sc1_ed_results.csv
           test -f data/processed/ci_principal_si_sg/sc2_ed_context.csv
           test -f data/processed/ci_principal_si_sg/sc3_ed_results.csv
           test -f data/processed/ci_principal_si_sg/sc3_national_summary.csv
+          test -f data/processed/ci_principal_si_sg/sc3_land_accounting_summary.csv
+          test -f data/processed/ci_principal_si_sg/sc3_scientific_validation.csv
+          test -f data/processed/ci_principal_si_sg/GOBLIN_Spatial_Scientific_Results.xlsx
