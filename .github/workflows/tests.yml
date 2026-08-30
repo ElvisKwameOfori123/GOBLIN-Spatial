@@ -34,6 +34,9 @@ jobs:
       - name: Validate exact frozen 2020 land-context bundle
         run: pytest -q tests/test_land_context_bundle.py
 
+      - name: Validate frozen ED geometry and model-universe join
+        run: pytest -q tests/test_frozen_ed_geometry.py
+
       - name: Run historical baseline unit tests
         run: |
           pytest -q \
