@@ -49,9 +49,11 @@ def _parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     args = _parser().parse_args()
+    study_root = Path(args.study_root).resolve()
+    output_dir = Path(args.output_dir).resolve() if args.output_dir is not None else None
     outputs = export_study_results(
-        Path(args.study_root),
-        output_dir=Path(args.output_dir) if args.output_dir is not None else None,
+        study_root,
+        output_dir=output_dir,
         require_complete_matrix=not args.allow_partial,
         generate_figures=not args.no_figures,
     )
