@@ -76,6 +76,39 @@ SOCIAL_VULNERABILITY_PROTECTION
 
 The default protection strength remains the validated principal value of `0.50` and can be changed explicitly with `--protection-strength` for sensitivity analysis.
 
+## Scientific reporting workbook
+
+After a completed principal run, create the scientific reporting package with:
+
+```bash
+goblin-spatial-report data/processed/principal/SI_SG_2020_PRORATA
+```
+
+The reporting command reads the canonical run CSV files and writes derived reporting outputs without overwriting them:
+
+```text
+GOBLIN_Spatial_Scientific_Results.xlsx
+sc3_land_accounting_summary.csv
+sc3_scientific_validation.csv
+```
+
+The workbook separates parent GOBLIN target accounting from realised spatial feasibility. In particular, it reports three distinct land quantities:
+
+```text
+GOBLIN parent Available target
+SC3 post-Stage-A unallocated released land
+SC3 final unallocated released land after rewetting
+```
+
+This avoids using one `Available` label for different accounting concepts. The canonical model CSV files remain the machine-readable source of truth.
+
+An alternative workbook location can be supplied explicitly:
+
+```bash
+goblin-spatial-report data/processed/principal/SI_SG_2020_PRORATA \
+  --output results/SI_SG_PRORATA_scientific_results.xlsx
+```
+
 ## Existing low-level commands remain supported
 
 Repository verification:
