@@ -59,6 +59,7 @@ jobs:
             tests/test_principal_endpoint.py \
             tests/test_principal_soil_context.py \
             tests/test_reporting.py \
+            tests/test_study_reporting.py \
             tests/test_sc1_comparison.py \
             tests/test_sc1_metrics.py \
             tests/test_sc2_context.py \
