@@ -1,17 +1,17 @@
-"""CLI for the BE-SG / All-Gas NZ publication visual package."""
+"""CLI for the final BE-SG / All-Gas NZ publication visual package."""
 from __future__ import annotations
 
 import argparse
 
-from goblin_spatial.publication_visuals import generate_publication_visuals
+from goblin_spatial.publication_visuals_final import generate_final_publication_visuals
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="goblin-spatial-publication-visuals",
         description=(
-            "Generate SC1-led publication graphs and maps for the Bioeconomy / "
-            "Split Gas and All-Gas Net Zero pathways from frozen final results."
+            "Generate the final SC1-led publication graphs and maps for the "
+            "Bioeconomy / Split Gas and All-Gas Net Zero pathways from frozen results."
         ),
     )
     parser.add_argument(
@@ -32,7 +32,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     args = build_parser().parse_args()
-    outputs = generate_publication_visuals(
+    outputs = generate_final_publication_visuals(
         args.final_results,
         geometry=args.geometry,
         geometry_key=args.geometry_key,

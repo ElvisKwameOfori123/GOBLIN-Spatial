@@ -9,7 +9,7 @@ The main-paper visual focus is deliberately restricted to the two contraction pa
 - `BE_SG`: Bioeconomy / Split Gas
 - `ALL_GAS_NZ`: All-Gas Net Zero
 
-`SI_SG` remains part of the validated scenario envelope and can be reported in supplementary material, but it is excluded from the main-paper publication visual layer so the main comparison stays focused on moderate versus deep contraction.
+`SI_SG` remains part of the validated scenario envelope and can be reported in supplementary material, but it is excluded from the main-paper publication visual layer so the main comparison stays focused on two contraction depths.
 
 ## Scientific story
 
@@ -21,22 +21,37 @@ national transition pressure
     -> agricultural production-value exposure
     -> economic and social vulnerability
     -> protection relief and displaced burden
+    -> early-attention geography
     -> released-land geography
     -> downstream opportunity / SC3 feasibility
 ```
 
 Standard Output is interpreted only as agricultural production-value exposure. It is not income, profit, welfare loss or a compensation requirement.
 
+## Final manuscript polish
+
+The command-line publication workflow now routes through `publication_visuals_final.py`. The original publication visual module remains the reproducible base layer. The final layer regenerates only the panels that need stricter cross-pathway comparability and then overwrites those same output filenames, so no additional manuscript figures are created.
+
+The final refinements are:
+
+- the exposure-vulnerability scatter uses one pooled BE-SG / All-Gas NZ exposure cut-line and one common baseline vulnerability cut-line, so quadrant positions have the same numerical meaning in both pathways;
+- the exposure-vulnerability maps use pooled exposure terciles and common baseline vulnerability terciles, rather than recalculating classes separately inside each pathway;
+- the high-exposure/high-vulnerability quadrant is identified as an **early-attention** diagnostic, not as a probabilistic risk class;
+- the released-grassland figure now uses the same national-map + callout + statistics grammar as the headline exposure figure and reports future-use eligibility context where available;
+- dedicated synthetic tests cover both the final graph wrapper and the polished publication map functions.
+
 ## Graph package
 
-`goblin_spatial.publication_visuals.generate_publication_graphs()` creates:
+`goblin_spatial.publication_visuals.generate_publication_graphs()` provides the reproducible base graphs. `goblin_spatial.publication_visuals_final.generate_final_publication_visuals()` applies the final manuscript polish and is the function used by the CLI.
+
+The package contains:
 
 1. `pub_fig01_exposure_concentration`
    - cumulative incidence curves for cattle adjustment and Standard Output exposure under PRORATA;
    - compares `BE_SG` and `ALL_GAS_NZ` directly.
 
 2. `pub_fig02_ed_exposure_distributions`
-   - publication-style violin + box small multiples across the four incidence rules;
+   - violin + box small multiples across the four incidence rules;
    - physical adjustment, production-value exposure and released grassland;
    - one column per main pathway.
 
@@ -49,6 +64,7 @@ Standard Output is interpreted only as agricultural production-value exposure. I
 4. `pub_fig04_exposure_vulnerability`
    - ED-level production-value exposure against economic and social vulnerability;
    - point size represents released grassland;
+   - common cross-pathway cut-lines identify the high-exposure/high-vulnerability early-attention quadrant;
    - no composite just-transition or risk index is constructed.
 
 5. `pub_fig05_target_realised_unmet`
@@ -60,7 +76,7 @@ Every graph is written as 500-dpi PNG and vector SVG, with a manifest recording 
 
 ## Map package
 
-`generate_publication_maps()` uses the frozen `GOBLIN_Spatial_Map_Data.csv` and the same model ED geometry used by the existing map reporter.
+The map workflow uses the frozen `GOBLIN_Spatial_Map_Data.csv` and the same model ED geometry used by the existing map reporter.
 
 The publication map style follows these principles:
 
@@ -69,10 +85,10 @@ The publication map style follows these principles:
 - explicit no-data colour;
 - Irish Transverse Mercator (`EPSG:2157`) for distance-aware cartography;
 - real scale bars from projected metres;
-- consistent shared scales across the two paper pathways;
+- consistent shared scales and shared class thresholds across the two paper pathways;
 - maps answer a scientific question rather than merely display a variable.
 
-The package creates:
+The package contains:
 
 1. `pub_map01_standard_output_exposure`
    - BE-SG and All-Gas NZ production-value exposure;
@@ -86,6 +102,7 @@ The package creates:
 3. `pub_map03_exposure_vulnerability`
    - bivariate exposure-vulnerability maps;
    - economic and social vulnerability shown separately;
+   - pooled exposure terciles and common baseline vulnerability terciles ensure direct cross-pathway comparability;
    - no opaque composite index.
 
 4. `pub_map04_persistent_exposure`
@@ -93,7 +110,21 @@ The package creates:
    - this is frequency across modelled runs, not probability or confidence.
 
 5. `pub_map05_released_grassland`
-   - SC1 released-land bridge showing where livestock adjustment makes land available for downstream transition uses.
+   - SC1 released-land bridge showing where livestock adjustment makes land available for downstream transition uses;
+   - each pathway now includes an analytical released-land callout and compact opportunity-eligibility statistics where the variables are available.
+
+## Main-paper selection
+
+The code deliberately creates a slightly richer reproducible visual library than should appear in the manuscript. The recommended main-paper architecture remains four composite figures:
+
+1. transition incidence and production-value exposure;
+2. protection relief and displaced burden;
+3. vulnerability, persistence and early-attention geography;
+4. released land and future-use opportunity.
+
+Other generated panels are retained for supplementary material, diagnostics and alternative journal layouts rather than being forced into the main text.
+
+Two or three compact manuscript tables can complement the figures: scenario/allocation design, headline SC1 results, and an optional early-attention hotspot summary if the empirical results justify it.
 
 ## Run
 
@@ -132,5 +163,6 @@ The default output location is:
 - Economic and social vulnerability remain separate dimensions.
 - Standard Output is production-value exposure only.
 - Persistent exposure is frequency over the specified paper-run envelope, not forecast likelihood.
+- Early-attention is a descriptive high-exposure/high-vulnerability diagnostic, not a probability of harm.
 - SC2 eligibility sets overlap and must not be added across alternative uses.
 - SC3 realised land use is a model allocation, not an adoption forecast.
