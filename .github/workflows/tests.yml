@@ -65,6 +65,7 @@ jobs:
             tests/test_study_reporting.py \
             tests/test_paper_figures.py \
             tests/test_map_reporting.py \
+            tests/test_publication_visuals.py \
             tests/test_sc1_comparison.py \
             tests/test_sc1_metrics.py \
             tests/test_sc2_context.py \
