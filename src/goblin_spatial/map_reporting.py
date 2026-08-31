@@ -145,7 +145,6 @@ def _detect_geometry_key(geometry, result_ids: set[str], explicit: str | None = 
 def prepare_model_geometry(
     map_data: pd.DataFrame,
     geometry_path: str | Path,
-    *,
     geometry_key: str | None = None,
 ):
     """Read source geometry, identify the ED key and retain the model ED universe."""
