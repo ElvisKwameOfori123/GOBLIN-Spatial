@@ -8,7 +8,7 @@ on:
       - ".github/workflows/manuscript-results.yml"
 
 permissions:
-  contents: read
+  contents: write
   actions: read
 
 jobs:
@@ -99,10 +99,10 @@ jobs:
                   row[f"{label}_PATHWAY_DOMINATED_PCT"] = 100.0 * row[f"{label}_PATHWAY_DOMINATED_EDS"] / len(robust)
                   row[f"{label}_ALLOCATION_DOMINATED_PCT"] = 100.0 * row[f"{label}_ALLOCATION_DOMINATED_EDS"] / len(robust)
               rows.append(row)
-          out = root / "protection_strength_sensitivity_summary.csv"
-          pd.DataFrame(rows).to_csv(out, index=False)
+          summary = pd.DataFrame(rows)
+          summary.to_csv(root / "protection_strength_sensitivity_summary.csv", index=False)
           pd.concat(details, ignore_index=True).to_csv(root / "protection_strength_sensitivity_ed.csv", index=False)
-          print(pd.DataFrame(rows).to_string(index=False))
+          print(summary.to_string(index=False))
           PY
 
       - name: Build final diagnostics graphs and callout maps
@@ -142,6 +142,22 @@ jobs:
           test -f data/processed/final_results/manuscript/diagnostics/persistence_baseline_null.csv
           test -f data/processed/final_results/manuscript/diagnostics/Fig03_callouts.csv
           test -f data/processed/final_results/manuscript/diagnostics/Fig05_callouts.csv
+
+      - name: Publish lightweight manuscript outputs to repository
+        run: |
+          set -euo pipefail
+          rm -rf manuscript_outputs
+          mkdir -p manuscript_outputs/diagnostics manuscript_outputs/figures
+          cp data/processed/final_results/manuscript/manuscript_key_results.txt manuscript_outputs/
+          cp data/processed/final_results/manuscript/manuscript_figure_manifest.csv manuscript_outputs/
+          cp data/processed/final_results/manuscript/diagnostics/*.csv manuscript_outputs/diagnostics/
+          cp data/processed/protection_sensitivity/protection_strength_sensitivity_summary.csv manuscript_outputs/diagnostics/
+          cp data/processed/final_results/manuscript/figures/*.svg manuscript_outputs/figures/
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add manuscript_outputs
+          git commit -m "Publish reproducible manuscript diagnostics and SVG figures [skip ci]" || exit 0
+          git push
 
       - name: Upload compact manuscript package
         uses: actions/upload-artifact@v4
