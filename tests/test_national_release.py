@@ -130,6 +130,55 @@ def test_system_attribution_is_accounting_only_and_closes_to_same_release() -> N
         assert actual == pytest.approx(target)
 
 
+def test_independent_dm_diagnostic_is_not_rescaled_to_parent_release() -> None:
+    profiles = {2020: _profile(), 2050: _profile()}
+    out = allocate_national_goblin_land_release(
+        _frame(),
+        {2050: 600.0},
+        profiles,
+    )
+
+    # The solved livestock fixture implies 500 ha of net release from its own
+    # pasture-DM balance. The parent pathway control is deliberately set to 600
+    # ha and must remain a separate authoritative quantity.
+    assert out["GOBLIN_RELEASED_GRASSLAND_HA"].sum() == pytest.approx(600.0)
+    assert out["SIGNED_GRASSLAND_BALANCE_HA"].sum() == pytest.approx(500.0)
+    assert out["POTENTIAL_SPARED_GRASSLAND_HA"].sum() == pytest.approx(500.0)
+    assert out["ADDITIONAL_GRASSLAND_REQUIRED_HA"].sum() == pytest.approx(0.0)
+    assert out["DM_DIAGNOSTIC_NET_RELEASE_NATIONAL_HA"].iloc[0] == pytest.approx(500.0)
+    assert out["GOBLIN_MINUS_DM_DIAGNOSTIC_NET_RELEASE_HA"].iloc[0] == pytest.approx(100.0)
+    assert set(out["DM_DIAGNOSTIC_ACCOUNTING_ROLE"]) == {
+        "INDEPENDENT_PASTURE_DM_REQUIREMENT_NOT_RESCALED_TO_GOBLIN_RELEASE"
+    }
+
+
+def test_dm_diagnostic_preserves_local_additional_grassland_requirement() -> None:
+    frame = _frame()
+    e1 = frame["CSOED"].eq("E1")
+    e2 = frame["CSOED"].eq("E2")
+
+    # E1 expands its local pasture-DM demand by 10%, while E2 contracts enough
+    # for the national diagnostic still to show net release.
+    frame.loc[e1, "SCENARIO_COHORT_dairy_cows"] = 120
+    frame.loc[e1, "SCENARIO_COHORT_suckler_cows"] = 50
+    frame.loc[e2, "SCENARIO_COHORT_dairy_cows"] = 0
+    frame.loc[e2, "SCENARIO_COHORT_suckler_cows"] = 50
+
+    profiles = {2020: _profile(), 2050: _profile()}
+    out = allocate_national_goblin_land_release(
+        frame,
+        {2050: 450.0},
+        profiles,
+    )
+
+    assert out["POTENTIAL_SPARED_GRASSLAND_HA"].sum() == pytest.approx(500.0)
+    assert out["ADDITIONAL_GRASSLAND_REQUIRED_HA"].sum() == pytest.approx(100.0)
+    assert out["SIGNED_GRASSLAND_BALANCE_HA"].sum() == pytest.approx(400.0)
+    assert out["DM_DIAGNOSTIC_GROSS_SPATIAL_MOVEMENT_NATIONAL_HA"].iloc[0] == pytest.approx(600.0)
+    assert out["GOBLIN_MINUS_DM_DIAGNOSTIC_NET_RELEASE_HA"].iloc[0] == pytest.approx(50.0)
+    assert out.loc[e1.to_numpy(), "ADDITIONAL_GRASSLAND_REQUIRED_HA"].iloc[0] == pytest.approx(100.0)
+
+
 def test_targets_must_match_milestones_and_cannot_fall() -> None:
     frame = _frame(years=(2030, 2050))
     profiles = {2020: _profile(), 2030: _profile(), 2050: _profile()}
