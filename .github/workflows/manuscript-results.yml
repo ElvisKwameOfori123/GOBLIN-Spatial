@@ -11,6 +11,10 @@ permissions:
   contents: write
   actions: read
 
+concurrency:
+  group: final-manuscript-results
+  cancel-in-progress: true
+
 jobs:
   manuscript-package:
     runs-on: ubuntu-latest
@@ -19,6 +23,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Record workflow run ID
+        run: |
+          mkdir -p manuscript_outputs
+          printf '%s\n' "$GITHUB_RUN_ID" > manuscript_outputs/current_run.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add manuscript_outputs/current_run.txt
+          git commit -m "Record manuscript workflow run ${GITHUB_RUN_ID} [skip ci]" || true
+          git push
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -146,15 +160,15 @@ jobs:
       - name: Publish lightweight manuscript outputs to repository
         run: |
           set -euo pipefail
-          rm -rf manuscript_outputs
+          run_id=$(cat manuscript_outputs/current_run.txt)
+          rm -rf manuscript_outputs/diagnostics manuscript_outputs/figures
           mkdir -p manuscript_outputs/diagnostics manuscript_outputs/figures
+          printf '%s\n' "$run_id" > manuscript_outputs/current_run.txt
           cp data/processed/final_results/manuscript/manuscript_key_results.txt manuscript_outputs/
           cp data/processed/final_results/manuscript/manuscript_figure_manifest.csv manuscript_outputs/
           cp data/processed/final_results/manuscript/diagnostics/*.csv manuscript_outputs/diagnostics/
           cp data/processed/protection_sensitivity/protection_strength_sensitivity_summary.csv manuscript_outputs/diagnostics/
           cp data/processed/final_results/manuscript/figures/*.svg manuscript_outputs/figures/
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add manuscript_outputs
           git commit -m "Publish reproducible manuscript diagnostics and SVG figures [skip ci]" || exit 0
           git push
