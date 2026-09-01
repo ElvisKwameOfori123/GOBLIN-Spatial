@@ -12,7 +12,7 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="goblin-spatial-paper-figures",
         description=(
-            "Generate the eight agreed high-impact manuscript figures from the "
+            "Generate the six claim-led, reproducible manuscript graph figures from the "
             "final GOBLIN-Spatial SQLite results database."
         ),
     )
