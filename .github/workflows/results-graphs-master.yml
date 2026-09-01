@@ -11,6 +11,10 @@ permissions:
   contents: read
   actions: read
 
+concurrency:
+  group: graph-only-results-master
+  cancel-in-progress: true
+
 jobs:
   build-master:
     runs-on: ubuntu-latest
@@ -28,7 +32,7 @@ jobs:
       - name: Install package and workbook dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[geo,goblin,scenario]" openpyxl pillow
+          pip install -e ".[geo,goblin,scenario]" xlsxwriter pillow
 
       - name: Download frozen final-results artifact
         env:
@@ -38,96 +42,139 @@ jobs:
           mkdir -p frozen
           gh api repos/${{ github.repository }}/actions/artifacts/9741162790/zip > frozen/final-results.zip
           unzip -q frozen/final-results.zip -d frozen/results
-          find frozen/results -maxdepth 3 -type f | sort | head -100
+          test -n "$(find frozen/results -name 'GOBLIN_Spatial_Final_Results.sqlite' -print -quit)"
 
-      - name: Rebuild current reproducible graphs from frozen SQLite
+      - name: Rebuild reproducible Python graphs from frozen SQLite
         run: |
           set -euo pipefail
           SQLITE=$(find frozen/results -name 'GOBLIN_Spatial_Final_Results.sqlite' -print -quit)
-          test -n "$SQLITE"
           mkdir -p output/graphs
           goblin-spatial-paper-figures "$SQLITE" --output-dir "$PWD/output/graphs"
 
-      - name: Build Excel master with all results and graphs only
+      - name: Build compact Excel master directly from authoritative SQLite
         run: |
           python - <<'PY'
           from pathlib import Path
-          from copy import copy
-          from openpyxl import load_workbook
-          from openpyxl.drawing.image import Image
-          from openpyxl.styles import Font, PatternFill, Alignment
+          import sqlite3
+          import pandas as pd
 
           root = Path('frozen/results')
-          source = next(root.rglob('GOBLIN_Spatial_Final_Results_Master.xlsx'))
+          sqlite_path = next(root.rglob('GOBLIN_Spatial_Final_Results.sqlite'))
           out = Path('output/GOBLIN_Spatial_Results_and_Graphs_Master.xlsx')
           out.parent.mkdir(parents=True, exist_ok=True)
 
-          wb = load_workbook(source)
+          # Human-facing scientific result surfaces. Raw SC1/SC2/SC3 ED tables and map_data
+          # remain in the frozen SQLite/matrix artifacts and are intentionally not duplicated here.
+          wanted = [
+              ('01_Scenario_Design', 'run_registry'),
+              ('02_Headline_Results', 'headline_results'),
+              ('03_National_Pathways', 'national_results'),
+              ('04_SC1_Livestock', 'livestock'),
+              ('05_SC1_Distribution', 'distribution_summary'),
+              ('06_SC1_Protection', 'redistribution'),
+              ('07_SC1_Persistence', 'persistence'),
+              ('08_SC1_Robustness', 'robust_exposure'),
+              ('09_SC1_Land_Release', 'land_release_summary'),
+              ('10_SC2_Opportunity', 'opportunity_summary'),
+              ('11_Transition_Conditions', 'transition_conditions'),
+              ('12_Opportunity_Mobil', 'opportunity_mobilisation'),
+              ('13_SC3_Target_Realised', 'sc3_national'),
+              ('14_SC3_Shared_Pools', 'shared_pool_summary'),
+              ('15_SC3_Rewetting', 'rewetting_summary'),
+              ('16_SC3_Land_Accounting', 'land_accounting'),
+              ('17_County_Results', 'county'),
+              ('18_Figure_Data', 'figure_data'),
+              ('19_Validation', 'validation'),
+              ('20_Reconciliation', 'reconciliation'),
+          ]
 
-          # Remove map-specific and legacy figure surfaces. All numerical result sheets remain.
-          for name in ['18_Map_Data', '23_Figures']:
-              if name in wb.sheetnames:
-                  del wb[name]
+          with sqlite3.connect(sqlite_path) as con:
+              available = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+              tables = {}
+              for sheet, table in wanted:
+                  if table in available:
+                      tables[sheet] = pd.read_sql_query(f'SELECT * FROM "{table}"', con)
 
-          # Keep figure data because it is the reproducible numeric source for graphs.
-          if '18_Graphs' in wb.sheetnames:
-              del wb['18_Graphs']
-          ws = wb.create_sheet('18_Graphs')
-          ws.sheet_view.showGridLines = False
-          ws.column_dimensions['A'].width = 3
-          for col in 'BCDEFGHIJKLMN':
-              ws.column_dimensions[col].width = 13
-
-          ws['B2'] = 'GOBLIN-Spatial: reproducible scientific graphs'
-          ws['B2'].font = Font(size=16, bold=True)
-          ws['B3'] = ('All graphs are regenerated in Python from the frozen final-results SQLite database. '
-                      'Maps are intentionally excluded from this Excel master and remain a separate local cartographic output.')
-          ws['B3'].alignment = Alignment(wrap_text=True, vertical='top')
-          ws.merge_cells('B3:N4')
-
+          key_graphs = [
+              'paper_fig01_national_transition.png',
+              'paper_fig02_transition_concentration.png',
+              'paper_fig03_protection_redistribution.png',
+              'paper_fig05_released_land_composition.png',
+              'paper_fig07_target_delivery.png',
+          ]
           graph_dir = Path('output/graphs')
-          pngs = sorted(graph_dir.glob('*.png'))
-          row = 6
-          for i, png in enumerate(pngs, start=1):
-              title = png.stem.replace('_', ' ').title()
-              ws.cell(row=row, column=2, value=f'Graph {i}. {title}')
-              ws.cell(row=row, column=2).font = Font(size=12, bold=True)
-              img = Image(str(png))
-              max_width = 1050
-              if img.width > max_width:
-                  scale = max_width / img.width
-                  img.width = int(img.width * scale)
-                  img.height = int(img.height * scale)
-              ws.add_image(img, f'B{row+1}')
-              # generous vertical spacing so each graph reads as a standalone publication panel
-              row += max(30, int(img.height / 20) + 5)
 
-          # Move graph sheet immediately after headline results for easy use.
-          wb._sheets.remove(ws)
-          insert_at = min(3, len(wb._sheets))
-          wb._sheets.insert(insert_at, ws)
+          with pd.ExcelWriter(out, engine='xlsxwriter', engine_kwargs={'options': {'strings_to_urls': False}}) as writer:
+              wb = writer.book
+              title_fmt = wb.add_format({'bold': True, 'font_size': 16})
+              sub_fmt = wb.add_format({'font_size': 10, 'font_color': '#555555', 'text_wrap': True, 'valign': 'top'})
+              hdr_fmt = wb.add_format({'bold': True, 'bg_color': '#E2F0D9', 'border': 1, 'text_wrap': True, 'valign': 'top'})
+              note_fmt = wb.add_format({'text_wrap': True, 'valign': 'top'})
 
-          # Update Read Me if present.
-          if '00_Read_Me' in wb.sheetnames:
-              readme = wb['00_Read_Me']
-              last = readme.max_row + 2
-              readme.cell(last, 1, 'GRAPH-ONLY MASTER')
-              readme.cell(last, 1).font = Font(bold=True)
-              readme.cell(last + 1, 1,
-                          'This workbook retains all human-facing numerical result tables and the reproducible Python graph suite. '
-                          'Map data and embedded maps are intentionally excluded; spatial maps are maintained separately for local cartographic work.')
+              read = wb.add_worksheet('00_Read_Me')
+              writer.sheets['00_Read_Me'] = read
+              read.hide_gridlines(2)
+              read.set_column('A:A', 3)
+              read.set_column('B:B', 28)
+              read.set_column('C:N', 15)
+              read.write('B2', 'GOBLIN-Spatial Results and Graphs Master', title_fmt)
+              read.merge_range('B4:N5',
+                  'Purpose: a compact human-facing Excel master containing the complete scientific result summaries and the reproducible Python graph suite. '
+                  'Maps and map-data surfaces are intentionally excluded because cartography is being handled separately on the local desktop. '
+                  'The frozen SQLite database and canonical 12-run artifact remain the lossless machine-readable sources.', sub_fmt)
+              read.write('B7', 'Authoritative source', hdr_fmt)
+              read.write('C7', 'Frozen successful final-results artifact from workflow run 33342717108', note_fmt)
+              read.write('B8', 'Principal design', hdr_fmt)
+              read.write('C8', '3 pathways × 4 implementation principles = 12 validated configurations', note_fmt)
+              read.write('B9', 'Graph policy', hdr_fmt)
+              read.write('C9', 'Graphs are regenerated in Python from the frozen SQLite results; no scientific values are hand-entered.', note_fmt)
+              read.write('B10', 'Map policy', hdr_fmt)
+              read.write('C10', 'No maps are embedded in this workbook.', note_fmt)
 
-          wb.save(out)
+              # Key graph sheet first, immediately after Read Me.
+              gs = wb.add_worksheet('01_Key_Graphs')
+              writer.sheets['01_Key_Graphs'] = gs
+              gs.hide_gridlines(2)
+              gs.set_column('A:A', 3)
+              gs.set_column('B:N', 14)
+              gs.write('B2', 'Key reproducible scientific graphs', title_fmt)
+              gs.merge_range('B3:N4',
+                  'Selected high-information graphs only: national/economic exposure, concentration, protection redistribution, contested released land, and target delivery. '
+                  'Supporting diagnostics remain in the result sheets.', sub_fmt)
+              row = 6
+              for i, name in enumerate(key_graphs, start=1):
+                  png = graph_dir / name
+                  if not png.exists():
+                      continue
+                  label = png.stem.replace('paper_fig', 'Graph ').replace('_', ' ').title()
+                  gs.write(row, 1, label, hdr_fmt)
+                  gs.insert_image(row + 1, 1, str(png), {'x_scale': 0.55, 'y_scale': 0.55})
+                  row += 27
+
+              for sheet, frame in tables.items():
+                  frame.to_excel(writer, sheet_name=sheet, index=False, startrow=1)
+                  ws = writer.sheets[sheet]
+                  ws.hide_gridlines(2)
+                  ws.freeze_panes(2, 0)
+                  ws.autofilter(1, 0, max(1, len(frame)) + 1, max(0, len(frame.columns) - 1))
+                  ws.set_row(1, 30)
+                  for j, col in enumerate(frame.columns):
+                      ws.write(1, j, col, hdr_fmt)
+                      # Conservative readable widths; do not make very wide sheets unwieldy.
+                      sample = frame[col].astype(str).head(250) if len(frame) else pd.Series(dtype=str)
+                      width = min(28, max(10, len(str(col)) + 2, int(sample.str.len().quantile(0.9)) + 2 if len(sample) else 10))
+                      ws.set_column(j, j, width)
+
           print(out)
-          print('Sheets:')
-          for s in wb.sheetnames:
-              print(' -', s)
+          print('Workbook sheets:', ['00_Read_Me', '01_Key_Graphs', *tables.keys()])
           PY
 
       - name: Confirm workbook
         run: |
+          set -euo pipefail
           test -f output/GOBLIN_Spatial_Results_and_Graphs_Master.xlsx
-          ls -lh output/GOBLIN_Spatial_Results_and_Graphs_Master.xlsx output/graphs/*
+          ls -lh output/GOBLIN_Spatial_Results_and_Graphs_Master.xlsx
+          ls -lh output/graphs/*.png
 
       - name: Upload Excel master
         uses: actions/upload-artifact@v4
