@@ -23,6 +23,11 @@ def build_goblin_reconciliation(
     sheep decomposition of released land. System attribution is derived inside
     the single symmetric pasture-DM spatialisation route and is diagnostic, not
     a second national control.
+
+    When the independent pasture-DM land balance is present, the table also
+    reports its net, gross-release and additional-requirement quantities as
+    ``DIAGNOSTIC_ONLY`` rows. The net diagnostic is compared with the parent
+    GOBLIN land-release target without being forced to close to it.
     """
 
     rows: list[dict[str, object]] = []
@@ -50,6 +55,30 @@ def build_goblin_reconciliation(
                 }
             )
 
+        def add_diagnostic(
+            variable: str,
+            actual: float,
+            *,
+            target: float | None = None,
+        ) -> None:
+            target_value = np.nan if target is None else float(target)
+            difference = (
+                np.nan if target is None else float(actual) - float(target)
+            )
+            rows.append(
+                {
+                    "SCENARIO_ID": controls.scenario_id,
+                    "BASELINE_YEAR": int(controls.baseline_year),
+                    "MILESTONE_YEAR": year,
+                    "STAGE": "LAND_PRESSURE_DIAGNOSTIC",
+                    "VARIABLE": variable,
+                    "GOBLIN_TARGET": target_value,
+                    "ED_SPATIAL_SUM": float(actual),
+                    "DIFFERENCE": difference,
+                    "STATUS": "DIAGNOSTIC_ONLY",
+                }
+            )
+
         add_closed(
             "DAIRY_COW",
             milestone.dairy_cows,
@@ -67,7 +96,9 @@ def build_goblin_reconciliation(
             add_closed(
                 "TOTAL_CATTLE",
                 milestone.total_cattle,
-                pd.to_numeric(block["SCENARIO_TOTAL_CATTLE"], errors="raise").sum(),
+                pd.to_numeric(
+                    block["SCENARIO_TOTAL_CATTLE"], errors="raise"
+                ).sum(),
                 "LIVESTOCK",
             )
 
@@ -96,6 +127,50 @@ def build_goblin_reconciliation(
                 ).sum(),
                 "LAND_RELEASE",
             )
+
+            diagnostic_columns = {
+                "SIGNED_GRASSLAND_BALANCE_HA",
+                "POTENTIAL_SPARED_GRASSLAND_HA",
+                "ADDITIONAL_GRASSLAND_REQUIRED_HA",
+            }
+            present = diagnostic_columns.intersection(block.columns)
+            if present and present != diagnostic_columns:
+                missing = sorted(diagnostic_columns - set(block.columns))
+                raise ValueError(
+                    "incomplete independent DM land diagnostic; "
+                    f"missing columns={missing}"
+                )
+            if diagnostic_columns.issubset(block.columns):
+                signed = pd.to_numeric(
+                    block["SIGNED_GRASSLAND_BALANCE_HA"], errors="raise"
+                ).sum()
+                gross_release = pd.to_numeric(
+                    block["POTENTIAL_SPARED_GRASSLAND_HA"], errors="raise"
+                ).sum()
+                gross_additional = pd.to_numeric(
+                    block["ADDITIONAL_GRASSLAND_REQUIRED_HA"], errors="raise"
+                ).sum()
+                if abs(float(signed) - float(gross_release - gross_additional)) > 1e-7:
+                    raise AssertionError(
+                        "independent DM land diagnostic does not close nationally"
+                    )
+                add_diagnostic(
+                    "DM_IMPLIED_NET_LAND_RELEASE_HA",
+                    float(signed),
+                    target=float(milestone.livestock_land_release_ha),
+                )
+                add_diagnostic(
+                    "DM_IMPLIED_GROSS_POTENTIAL_RELEASE_HA",
+                    float(gross_release),
+                )
+                add_diagnostic(
+                    "DM_IMPLIED_GROSS_ADDITIONAL_REQUIRED_HA",
+                    float(gross_additional),
+                )
+                add_diagnostic(
+                    "DM_IMPLIED_GROSS_SPATIAL_MOVEMENT_HA",
+                    float(gross_release + gross_additional),
+                )
 
         for land_use, target in milestone.land_use_targets_ha.items():
             rows.append(
