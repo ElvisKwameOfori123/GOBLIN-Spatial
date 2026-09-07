@@ -55,6 +55,7 @@ jobs:
         run: |
           pytest -q \
             tests/test_cli_study.py \
+            tests/test_colm_ed_soil.py \
             tests/test_goblin_controls.py \
             tests/test_goblin_reconciliation.py \
             tests/test_national_cohort_targets.py \
