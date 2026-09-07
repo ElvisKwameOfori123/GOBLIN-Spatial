@@ -1,8 +1,28 @@
 # Soil and land-context sources
 
+## Current soil migration decision
+
+The soil architecture is being migrated in two explicit stages.
+
+**Stage 1, now formalised:** Colm's direct mapped soil evidence from
+`soil-group-package/ed_soil_shares.csv` is validated and resolved onto the exact
+GOBLIN-Spatial ED universe while retaining the mapped physical soil categories.
+No G1/G2/G3 capability group is derived in this ingestion step and no county or
+national fallback is permitted. See `docs/data/colm_soil_ed_stage1.md` and
+`goblin_spatial.soil.colm_ed`.
+
+**Stage 2, not yet frozen:** a scientifically documented crosswalk will translate
+Colm's mapped physical soil evidence into the broad GOBLIN G1/G2/G3 agricultural
+capability groups. Only after that crosswalk is validated will it be allowed to
+replace the current production 08B capability source and trigger a full SC1-SC3
+rerun.
+
+This migration boundary prevents an unvalidated soil classification from
+silently changing the paper results.
+
 ## Role in the production model
 
-The production 2020 scenario runtime uses the frozen repository bundle:
+The production 2020 scenario runtime currently uses the frozen repository bundle:
 
 ```text
 data/controls/land/ED_Land_Context_2020/
@@ -17,7 +37,7 @@ The historical livestock and land baseline remains authoritative. Soil and LPIS 
 
 ## 08B agricultural capability
 
-08B is the agricultural-capability control used in the principal framework. Six agricultural-use classes are retained and grouped as:
+08B is the current agricultural-capability control used in the principal framework. Six agricultural-use classes are retained and grouped as:
 
 ```text
 Class 1 + Class 2 -> G1
@@ -45,9 +65,11 @@ G1_GRASSLAND_HA + G2_GRASSLAND_HA + G3_GRASSLAND_HA
 
 ## 08C independent mapped physical soil
 
-08C is a separate mapped physical-soil evidence layer. It is attached only after SC1 livestock and released-land geography are frozen.
+08C is a separate mapped physical-soil evidence layer derived from Colm's soil package. It is attached only after SC1 livestock and released-land geography are frozen in the current production system.
 
 08C is not blended into 08B and cannot change livestock allocation or SC1 released hectares. Its purpose is downstream interpretation and physical eligibility in SC2/SC3.
+
+The migration described above promotes the direct Colm physical evidence to the candidate primary soil source, but the production role does not change until the new capability crosswalk is validated.
 
 Mapped peat is not automatically farmed peat and is not automatically rewettable land.
 
@@ -59,18 +81,20 @@ LPIS does not replace `ALL_GRASSLAND`, create released land or determine the nat
 
 ## Scenario sequence
 
-The scientific ordering is fixed:
+The current production scientific ordering is:
 
 ```text
 validated historical livestock + land baseline
         -> national scenario livestock endpoint
         -> SC1 ED livestock incidence
-        -> authoritative national released land spatialised using livestock pressure + 08B capacity
+        -> authoritative national released land spatialised using livestock pressure + current 08B capacity
         -> freeze SC1
-        -> attach LPIS 2020 + independent 08C context
+        -> attach LPIS 2020 + independent Colm mapped physical context
         -> SC2 opportunity / eligibility
         -> SC3 feasible allocation of explicit national land-use targets
 ```
+
+After the Colm-derived G1/G2/G3 crosswalk is validated, the **source behind the SC1/SC2 capability layer** may change. The national release authority, `ALL_GRASSLAND`, LPIS role and SC3 accounting boundaries do not change.
 
 The interpretation rule is:
 
