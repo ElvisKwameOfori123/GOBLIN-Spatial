@@ -16,6 +16,16 @@ data/interim/
 data/processed/
 outputs/
 
+# Generated downstream reporting artefacts. reporting/README.md remains tracked.
+reporting/report_data/
+reporting/figure_data/
+reporting/table_data/
+reporting/figures/
+reporting/maps/
+reporting/tables/
+reporting/gis/
+reporting/explorer/
+
 # Full-data inputs kept outside Git during development
 # They are pinned in data_manifest.yaml and will be supplied by Zenodo/official URLs.
 data/raw/cattle/CSO_ED_2020.csv
