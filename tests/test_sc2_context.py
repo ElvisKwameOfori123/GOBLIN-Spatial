@@ -101,6 +101,37 @@ def test_sc2_attaches_lpis_as_context_without_changing_release() -> None:
     }
 
 
+def test_sc2_is_invariant_to_legacy_08b_fields_in_a_merged_context() -> None:
+    """Legacy capability fields may coexist in a source file but cannot affect SC2."""
+
+    clean = _context()
+    reference = prepare_sc2_context(_sc1(), land_context=clean, baseline_year=2020)
+
+    contaminated = clean.copy()
+    contaminated["GOBLIN_SOIL_G1_SHARE"] = [1.0, 0.0]
+    contaminated["GOBLIN_SOIL_G2_SHARE"] = [0.0, 1.0]
+    contaminated["GOBLIN_SOIL_G3_SHARE"] = [0.0, 0.0]
+    contaminated["SOIL_USE_CLASS_1_SHARE"] = [1.0, 0.0]
+    contaminated["SOIL_USE_CLASS_6_SHARE"] = [0.0, 1.0]
+    changed = prepare_sc2_context(
+        _sc1(),
+        land_context=contaminated,
+        baseline_year=2020,
+    )
+
+    assert np.array_equal(
+        reference["GOBLIN_RELEASED_GRASSLAND_HA"].to_numpy(float),
+        changed["GOBLIN_RELEASED_GRASSLAND_HA"].to_numpy(float),
+    )
+    for column in COLM_RELEASED_AREA_COLUMNS:
+        assert np.array_equal(
+            reference[column].to_numpy(float),
+            changed[column].to_numpy(float),
+        )
+    assert "GOBLIN_SOIL_G1_SHARE" not in changed.columns
+    assert "SOIL_USE_CLASS_1_SHARE" not in changed.columns
+
+
 def test_sc2_applies_only_explicit_versioned_soil_rules() -> None:
     rules = {
         "ADDITIONAL_TILLAGE": {
