@@ -1,0 +1,67 @@
+name: publication-pack
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/publication_pack.yml"
+  workflow_dispatch:
+
+jobs:
+  publication-pack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[geo,goblin,scenario,reporting]"
+      - name: Verify frozen runtime inputs
+        run: goblin-spatial fetch-data --verify-only
+      - name: Build canonical historical baseline once
+        run: goblin-spatial build --config configs/ireland_2015_2025.yaml
+      - name: Build final eight-run publication pack
+        run: |
+          python scripts/run_publication_pack.py \
+            --clean \
+            --n-flex-alternatives 8
+      - name: Confirm complete publication pack
+        run: |
+          python - <<'PY'
+          import json
+          import pandas as pd
+          from pathlib import Path
+
+          manifest = json.loads(Path("reporting/publication/publication_pack_manifest.json").read_text())
+          assert manifest["RUN_COUNT"] == 8
+          report = json.loads(Path("reporting/report_data/report_data_manifest.json").read_text())
+          assert report["RUN_COUNT"] == 8
+          inventory = pd.read_csv("reporting/publication/publication_run_inventory.csv")
+          assert len(inventory) == 8
+          print(inventory[[
+              "RUN_ID",
+              "TOTAL_RELEASED_HA",
+              "TOTAL_ALLOCATED_HA",
+              "RESIDUAL_RELEASED_HA",
+              "REWETTING_UNMET_HA",
+          ]].to_string(index=False))
+          print("\nSC3 feasibility sensitivity:")
+          print(pd.read_csv("reporting/publication/sc3_feasibility_sensitivity.csv").to_string(index=False))
+          PY
+      - name: Upload final publication result pack
+        uses: actions/upload-artifact@v4
+        with:
+          name: goblin-spatial-publication-pack
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 6
+          path: |
+            data/processed/principal/
+            reporting/report_data/
+            reporting/publication/
