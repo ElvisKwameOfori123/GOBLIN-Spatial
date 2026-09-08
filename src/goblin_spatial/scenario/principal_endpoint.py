@@ -5,10 +5,10 @@ the endpoint and gross released land; GOBLIN-Spatial resolves their geography
 without introducing a second scenario generator or pathway-specific release
 method.
 
-In the Colm-direct architecture SC1 is deliberately independent of land
-suitability. Colm mapped soil, LPIS and legacy 08B/G1-G2-G3 capability do not
-move livestock and do not constrain the released-land geography. They enter only
-after SC1 has frozen its livestock and ED release vectors.
+SC1 is deliberately independent of mapped soil, LPIS and future land-use
+suitability. Those downstream evidence layers do not move livestock and do not
+constrain the released-land geography. They enter only after SC1 has frozen its
+livestock and ED release vectors.
 """
 
 from __future__ import annotations

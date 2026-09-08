@@ -1,4 +1,4 @@
-"""Tests for the no-download Colm-direct principal preflight contract."""
+"""Tests for the no-download principal preflight contract."""
 
 from __future__ import annotations
 
@@ -92,7 +92,7 @@ def _write_runtime_prerequisites(
     _write_controls(cfg, rewetting_ha=rewetting_ha)
 
 
-def test_sc2_preflight_accepts_frozen_2020_colm_lpis_runtime_contract(
+def test_sc2_preflight_accepts_frozen_2020_soil_lpis_runtime_contract(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -105,7 +105,7 @@ def test_sc2_preflight_accepts_frozen_2020_colm_lpis_runtime_contract(
     assert report["OK"].all(), report.to_dict("records")
     context = report.set_index("ITEM").loc["COLM_LPIS_CONTEXT_2020"]
     assert "rows=2" in context["DETAIL"]
-    assert "legacy 08B not required" in context["DETAIL"]
+    assert "expected=2" in context["DETAIL"]
 
 
 def test_missing_land_context_does_not_block_sc1(tmp_path: Path) -> None:
@@ -119,7 +119,7 @@ def test_missing_land_context_does_not_block_sc1(tmp_path: Path) -> None:
     assert "COLM_STAGE_A_ELIGIBILITY" not in set(report["ITEM"])
 
 
-def test_missing_colm_lpis_context_blocks_sc2(tmp_path: Path) -> None:
+def test_missing_soil_lpis_context_blocks_sc2(tmp_path: Path) -> None:
     cfg = _cfg(tmp_path)
     _write_runtime_prerequisites(cfg)
 
@@ -127,7 +127,7 @@ def test_missing_colm_lpis_context_blocks_sc2(tmp_path: Path) -> None:
     context = report.set_index("ITEM").loc["COLM_LPIS_CONTEXT_2020"]
 
     assert not bool(context["OK"])
-    assert "missing repository-contained Colm physical-soil + LPIS control" in context["DETAIL"]
+    assert context["DETAIL"] == "missing"
 
 
 def test_sc3_is_blocked_without_explicit_stage_a_eligibility(
@@ -170,7 +170,7 @@ def test_sc3_positive_rewetting_requires_external_capacity(
     rewet = report.set_index("ITEM").loc["REWETTING_CAPACITY"]
 
     assert not bool(rewet["OK"])
-    assert "drained-organic/agricultural" in rewet["DETAIL"]
+    assert "drained-organic agricultural capacity" in rewet["DETAIL"]
 
 
 def test_2025_sc1_is_soil_independent(tmp_path: Path) -> None:
@@ -190,7 +190,7 @@ def test_2025_sc2_sc3_are_blocked_until_separate_context_exists(
     _write_runtime_prerequisites(cfg)
 
     report = preflight.preflight_principal_inputs(cfg, baseline_year=2025, stage="SC3")
-    support = report.set_index("ITEM").loc["SPATIAL_BASELINE_SUPPORT"]
+    context = report.set_index("ITEM").loc["COLM_LPIS_CONTEXT_2020"]
 
-    assert not bool(support["OK"])
-    assert "2020 Colm+LPIS context only" in support["DETAIL"]
+    assert not bool(context["OK"])
+    assert "SC2/SC3 require the frozen 2020 context" in context["DETAIL"]

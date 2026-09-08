@@ -1,8 +1,6 @@
 # GOBLIN-Spatial Scientific Assumptions Register
 
-This document records the principal scientific assumptions, modelling choices and interpretation boundaries used by the current production version of GOBLIN-Spatial.
-
-It complements the README and the code. The README explains the model; this register identifies which parts are observed evidence, reconstruction assumptions, exogenous scenario controls, normative spatial experiments, feasibility rules or interpretation limits.
+This register records the principal scientific assumptions, exogenous controls, normative spatial experiments, feasibility rules and interpretation boundaries used by GOBLIN-Spatial v1.
 
 The guiding distinction is:
 
@@ -20,103 +18,74 @@ Feasibility rule
 Interpretation
 ```
 
-A change to any item marked **Core**, **Assumption**, **Normative**, **Temporary** or **Interpretation** should be recorded in `CHANGELOG.md` when it changes scientific meaning or published outputs.
-
----
-
 ## Historical reconstruction evidence hierarchy
 
-The 2015–2025 historical baseline is **not a simple forward or backward extrapolation from the 2020 Census of Agriculture**.
-
-The evidence hierarchy is:
+The 2015-2025 baseline is not a simple projection from 2020. The 2020 CSO Census of Agriculture is the principal ED spatial anchor, while repeated official higher-level livestock and land controls constrain surrounding years.
 
 ```text
-2020 CSO Census of Agriculture
+2020 CSO ED agricultural structure
         ↓
-principal ED-level spatial benchmark
+principal local spatial anchor
 
-Annual CSO county cattle series, 2015–2025
+annual county cattle controls
         ↓
-observed temporal controls for cattle
+annual regional/county sheep controls
         ↓
-county totals distributed through validated ED structure
-
-Annual regional sheep series, 2015–2025
+annual land and farm-structure controls
         ↓
-observed temporal controls for sheep
-        ↓
-region → county → ED reconciliation
+reconciled 2015-2025 ED panel
 ```
-
-The reconstruction therefore combines **detailed 2020 ED geography with repeated annual official higher-level observations**. The surrounding years inherit spatial structure where direct ED observations are unavailable, but their higher-level livestock totals are constrained by the corresponding annual CSO series.
-
-This distinction should be preserved in publications and documentation. The phrase **2020 spatial benchmark** or **2020 ED spatial anchor** does not mean that 2015–2025 values are projected from a single 2020 observation without annual controls.
-
----
 
 ## Current assumptions and modelling choices
 
-| ID | Component | Type / status | Current treatment | Scientific meaning |
+| ID | Component | Status | Current treatment | Scientific meaning |
 |---|---|---|---|---|
-| **A01** | National pathway boundary | **Core** | National livestock and land-use quantities are supplied by GOBLIN and remain authoritative. | GOBLIN-Spatial resolves geography; it does not redefine the national pathway. |
-| **A02** | Principal full scenario baseline | **Core** | The complete SC1 to SC3 workflow uses the frozen 2020 spatial land context. | 2020 is the principal spatial scenario baseline for the full scenario chain; this is separate from the annual controls used to reconstruct the 2015–2025 historical livestock panel. |
-| **A03** | 2025 scenario use | **Temporary** | The reconstructed 2025 livestock state may be used for SC1 sensitivity only. SC2 and SC3 remain disabled for 2025 until a separately validated 2025 land-context bundle is frozen. | The model does not silently apply 2020 land evidence to a 2025 land state. |
-| **A04** | Adult livestock controls | **Core** | Adult dairy and suckler populations are the principal spatial endpoint controls. | These categories anchor the spatial livestock transition. |
-| **A05** | Follower cattle cohorts | **Assumption** | Remaining cattle cohorts respond using the livestock structure associated with each ED and are reconciled to national cohort controls. | Local livestock signatures are retained while national totals remain authoritative. |
-| **A06** | Spatial support | **Assumption** | A cohort or category is not artificially seeded in an ED where the baseline provides no supporting livestock footprint. | The scenario preserves observed spatial support rather than inventing new local livestock systems. |
-| **A07** | Local expansion | **Core** | Category-level and ED-level expansion may occur inside an overall nationally contracting pathway where required by the endpoint allocation. | National contraction does not imply that every category or every ED must decline. |
-| **A08** | Sheep | **Replaceable assumption** | Sheep remain fixed in the principal cattle-transition workflow unless an explicit national sheep control is supplied. | Current livestock scenarios should not be interpreted as sheep destocking scenarios. |
-| **A09** | Spatial incidence rules | **Normative** | `PRORATA`, `DAIRY_PROTECTION`, `ECONOMIC_CAPACITY_PROTECTION` and `SOCIAL_VULNERABILITY_PROTECTION` redistribute where adjustment occurs without changing the national endpoint. | Protection rules are policy incidence experiments, not estimated behavioural responses. |
-| **A10** | Protection strength | **Sensitivity parameter** | The principal protection strength is `0.50`. | This is a modelling parameter and should be tested in sensitivity analysis rather than interpreted as an observed coefficient. |
-| **A11** | National released land | **Core** | GOBLIN supplies the pathway livestock-land endpoint. For a selected run, gross livestock-land release is calculated as selected baseline `ALL_GRASSLAND` minus pathway `TARGET_LIVESTOCK_LAND_HA`, and that run-derived national quantity is then frozen for spatialisation. | GOBLIN-Spatial does not infer a competing national release total from local livestock or pasture-DM calculations. The selected baseline determines the remaining release to the same pathway endpoint. |
-| **A12** | Released-land geography | **Assumption / allocation rule** | Spatial livestock pressure, pasture demand and land capability are used to locate the authoritative national release across EDs. | This determines geography of release, not its national magnitude. |
-| **A13** | SC1, SC2 and SC3 accounting | **Core** | `PotentialRelease != Opportunity != RealisedConversion`. | Released land is not automatically eligible land, and eligible land is not automatically converted land. |
-| **A14** | 08B capability | **Core evidence layer** | 08B provides agricultural capability, GOBLIN soil groups and related land-capability context. | Capability can constrain the geography and opportunity of released land. |
-| **A15** | 08C physical soil | **Core evidence layer** | 08C is retained as an independent mapped physical-soil representation and is not silently blended into 08B. | Distinct evidence sources remain auditable rather than being collapsed into one opaque soil signal. |
-| **A16** | LPIS | **Core evidence layer** | LPIS contributes land-use, parcel and grassland context but does not replace historical `ALL_GRASSLAND` accounting or independently create released land. | LPIS informs spatial compatibility rather than redefining the livestock land budget. |
-| **A17** | SC2 opportunity | **Interpretation** | SC2 opportunity and eligibility scores represent relative compatibility under stated evidence and rules. | They are not adoption probabilities and do not predict that a land-use change will occur. |
-| **A18** | SC3 allocation | **Core feasibility rule** | Competing land uses are allocated jointly under shared physical land pools, ED released-land budgets, eligibility constraints and national target ceilings. | The same hectare cannot be allocated twice. |
-| **A19** | SC3 infeasibility | **Core feasibility rule** | Infeasible hectares are not forced into allocation; unmet national targets are reported explicitly. | `RealisedConversion` may be lower than the national target where spatial capacity is insufficient. |
-| **A20** | Rewetting and Available-land accounting | **Assumption / accounting boundary** | Rewetting is constrained by the externally anchored national drained-organic grassland stock and by realised post-Stage-A unallocated released land. Reporting distinguishes: (i) parent GOBLIN `Available` target accounting = gross release minus the five national Stage-A targets; (ii) realised post-Stage-A unallocated released land = gross release minus realised Stage-A allocation; and (iii) final unallocated released land after realised rewetting. | The parent pathway `Available` category is preserved exactly as a target-accounting quantity. Spatial infeasibility and rewetting are reported separately rather than silently changing the parent value. When Stage-A targets are unmet, the realised post-Stage-A residual exceeds parent `Available` by exactly the unmet Stage-A hectares. |
-| **A21** | Standard Output | **Interpretation** | Fixed-2020 Standard Output is used as a production-value exposure indicator. | It is not profit, household income, welfare, compensation need or land value. |
-| **A22** | Scenario time interpretation | **Interpretation** | Current production controls primarily spatialise the specified pathway endpoint rather than predicting a fully dynamic annual ED trajectory. | Results are endpoint spatial stress tests unless intermediate controls are supplied explicitly. |
-| **A23** | Behavioural interpretation | **Interpretation** | GOBLIN-Spatial is deterministic and assumption-explicit. | It does not predict individual farmer behaviour, parcel conversion decisions or exact future ED outcomes. |
+| **A01** | National pathway authority | **Core** | GOBLIN supplies authoritative national livestock endpoints, target livestock-land area and future land-use requirements. | GOBLIN-Spatial resolves geography and feasibility; it does not redefine the national pathway. |
+| **A02** | Full spatial baseline | **Core** | The complete Baseline → SC1 → SC2 → SC3 workflow uses the validated 2020 spatial land context. | 2020 is the principal full spatial scenario anchor. |
+| **A03** | 2025 scenario use | **Temporary boundary** | The reconstructed 2025 livestock state may be used for SC1 sensitivity only. | The model does not silently apply 2020 soil/LPIS evidence to a 2025 SC2/SC3 run. |
+| **A04** | Adult livestock endpoints | **Core** | Dairy and suckler endpoints anchor the principal cattle transition. | Adult controls determine the national direction of structural change. |
+| **A05** | Follower cattle cohorts | **Assumption** | Remaining cattle cohorts respond through the validated biological cohort structure and are reconciled to any explicit national controls. | Local livestock structure is preserved without inventing a second national authority. |
+| **A06** | Spatial support | **Assumption** | Livestock categories are not artificially seeded into EDs without baseline support, except for the validated receiver/rearing logic where required for cohort closure. | The scenario respects observed local livestock structure while allowing known rearing/finishing geography. |
+| **A07** | Sheep | **Replaceable assumption** | Sheep remain fixed in the principal cattle-transition workflow unless an explicit national sheep control is supplied. | Current pathway runs are not sheep-destocking scenarios. |
+| **A08** | Spatial incidence rules | **Normative** | `PRORATA`, `DAIRY_PROTECTION`, `ECONOMIC_CAPACITY_PROTECTION` and `SOCIAL_VULNERABILITY_PROTECTION` redistribute where the same national adjustment falls. | These are policy-incidence experiments, not estimated behavioural responses. |
+| **A09** | Protection strength | **Sensitivity parameter** | The principal protection strength is `0.50`. | It is a modelling choice and should be sensitivity-tested rather than interpreted as an observed coefficient. |
+| **A10** | National released land | **Core** | Gross livestock-land release is derived from the selected baseline `ALL_GRASSLAND` and the pathway `TARGET_LIVESTOCK_LAND_HA`, then frozen as the authoritative national release quantity for that run. | Local pasture-DM calculations do not create a competing national release total. |
+| **A11** | Released-land geography | **Allocation rule** | SC1 spatialises the authoritative release using the solved livestock/pasture-DM transition signal, bounded only by ED `ALL_GRASSLAND`. | Soil, LPIS and future-use suitability do not determine SC1 release geography. |
+| **A12** | Pasture-DM land balance | **Diagnostic** | `POTENTIAL_SPARED_GRASSLAND_HA`, `SIGNED_GRASSLAND_BALANCE_HA` and `ADDITIONAL_GRASSLAND_REQUIRED_HA` remain independent diagnostics and are not rescaled to the parent release. | The diagnostic can disagree with the authoritative GOBLIN release without creating a second land authority. |
+| **A13** | Physical soil evidence | **Core SC2 evidence** | Seven mapped physical-soil/drainage categories characterise the frozen ED released-land resource proportionally. | This is physical resource evidence, not a land-use decision. |
+| **A14** | Soil attribution | **Assumption** | Within each ED, frozen release is proportionally distributed across the ED mapped physical-soil shares. | The model does not claim to observe the exact parcels released from livestock use. |
+| **A15** | LPIS | **Core SC2 evidence** | LPIS supplies current agricultural-use and management context after SC1 is frozen. | LPIS does not change livestock, national release or the physical-soil partition. |
+| **A16** | Soil × LPIS relationship | **Interpretation boundary** | The compact runtime does not contain an observed parcel-level soil × LPIS joint overlay and does not manufacture one through an independence assumption. | ED-level soil and LPIS evidence remain distinct unless a validated joint overlay is supplied in future. |
+| **A17** | Eligibility | **Core feasibility rule** | Stage-A land-use eligibility must be explicit, complete, versioned and evidence-backed across the seven physical-soil categories. | No hidden default suitability coefficients are permitted. |
+| **A18** | Fractional eligibility | **Sensitivity rule** | Coefficients in `(0,1)` are allowed only when they have a defensible quantitative interpretation. | Intermediate values are not used merely to express uncertainty or improve target closure. |
+| **A19** | Opportunity | **Interpretation** | Opportunity remains separate from eligibility. No arbitrary weighted composite is applied by default. | SC2 currently measures biophysical/agricultural response potential, not complete socioeconomic adaptive capacity. |
+| **A20** | SC3 land competition | **Core feasibility rule** | AD grass, biorefinery grass, willow, additional tillage and forest compete jointly for finite released-resource cells. | The same hectare cannot be allocated twice. |
+| **A21** | SC3 infeasibility | **Core feasibility rule** | Infeasible hectares are reported as unmet rather than forced into allocation. | For every use, `Target = Realised + Unmet`. |
+| **A22** | Rewetting | **Separate environmental requirement** | A positive rewetting target requires an independently validated drained agricultural organic-soil capacity control. Mapped peat alone is insufficient. | Rewetting is not automatically interpreted as productive diversification or alternative-income opportunity. |
+| **A23** | Standard Output | **Interpretation** | Fixed-2020 Standard Output is a production-value exposure indicator. | It is not profit, household income, welfare, compensation need or land value. |
+| **A24** | Scenario time | **Interpretation** | Current pathway runs primarily spatialise specified endpoints rather than predicting annual ED transitions to 2050. | Results are endpoint spatial stress tests unless intermediate controls are explicitly supplied. |
+| **A25** | Post-SC3 flexibility | **Core foresight analysis** | The model may hold realised national hectares of each use fixed and search alternative feasible geographies. | One solver map is not automatically treated as the uniquely necessary geography. |
+| **A26** | Behaviour and adoption | **Interpretation boundary** | GOBLIN-Spatial is deterministic and assumption-explicit. | It does not predict individual farmer behaviour, parcel conversion, willingness to adopt or exact realised future geography. |
 
----
+## Core scientific sequence
 
-## How to classify future changes
-
-When a new model choice is introduced, classify it before implementation where possible:
-
-### Observed evidence
-A quantity taken directly from an authoritative source or frozen spatial input.
-
-### Reconstruction assumption
-A rule needed because the source data do not directly contain the required spatial or cohort detail.
-
-### Exogenous national control
-A national livestock, land-use or release quantity supplied by GOBLIN or another explicitly authoritative control source.
-
-### Normative spatial experiment
-A deliberate policy-incidence assumption such as protecting a particular class of area from a larger share of contraction.
-
-### Calibration choice
-A parameter deliberately selected against a stated target. Calibration targets should be named explicitly and should not later be presented as independent validation.
-
-### Validation evidence
-Evidence not used to construct or tune the quantity being evaluated.
-
-### Sensitivity parameter
-A value whose uncertainty should be explored rather than treated as an observed truth.
-
-### Interpretation boundary
-A statement limiting what the resulting quantity can legitimately be claimed to represent.
-
----
+```text
+Release
+    !=
+Physical resource
+    !=
+Eligibility
+    !=
+Opportunity
+    !=
+Allocation
+    !=
+Adoption
+```
 
 ## Required record for a scientific change
 
-A scientifically meaningful change should state, at minimum:
+A scientifically meaningful change should state:
 
 ```text
 What changed?
@@ -128,4 +97,4 @@ Which stages or outputs must remain unchanged?
 What tests or reconciliation checks were run?
 ```
 
-The corresponding dated entry belongs in `CHANGELOG.md`.
+Git history is the authoritative development record. The live scientific documentation should describe the current model rather than preserve superseded architectures.

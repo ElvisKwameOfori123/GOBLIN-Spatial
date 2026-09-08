@@ -84,7 +84,7 @@ def test_validated_aqa06_mapping_is_complete():
     assert COUNTY_TO_AQA_REGION["Louth"] == "Dublin and Mid-East"
 
 
-def test_config_separates_baseline_from_soil_and_scenario_inputs():
+def test_config_separates_baseline_from_downstream_spatial_inputs():
     config = load_config("configs/ireland_2015_2025.yaml")
 
     baseline_keys = {
@@ -103,6 +103,14 @@ def test_config_separates_baseline_from_soil_and_scenario_inputs():
     assert "dafm_sheep_county_validation" in config.files
     assert "county_region_map" not in config.files
 
-    # 08B/08C exist for downstream work but are not baseline-module inputs.
-    assert "agricultural_soil_source" in config.files
-    assert "physical_soil_package" in config.files
+    # The production land context is the frozen 2020 soil + LPIS bundle.
+    assert "land_context_2020" in config.files
+
+    # Superseded 08B/08C source/reconstruction paths must not re-enter the
+    # production configuration. Their development history remains in Git.
+    assert "agricultural_soil_source" not in config.files
+    assert "physical_soil_package" not in config.files
+
+    # Geometry is reserved for downstream reporting and does not enter the
+    # baseline or SC1-SC3 scientific calculations.
+    assert "ed_boundaries_frozen" in config.files

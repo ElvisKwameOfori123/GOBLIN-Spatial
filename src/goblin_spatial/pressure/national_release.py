@@ -6,10 +6,10 @@ National GOBLIN supplies the pathway-level gross livestock-land release.
 GOBLIN-Spatial resolves where that fixed quantity falls across Electoral
 Divisions after the livestock endpoint and cohort state have been solved.
 
-SC1 is deliberately soil-independent. Colm mapped soil, LPIS and the legacy
-08B/G1-G2-G3 capability representation do not move livestock, do not determine
-the national released-land quantity, and do not constrain the ED release vector.
-Their substantive role begins downstream in SC2.
+SC1 is deliberately independent of mapped soil, LPIS and future-use
+suitability. Those downstream evidence layers do not move livestock, do not
+determine the national released-land quantity and do not constrain the ED
+release vector. Their substantive role begins in SC2.
 
 The ED release geography is driven by the solved livestock/pasture-DM transition
 and bounded only by the validated ``ALL_GRASSLAND`` resource. The independent
@@ -486,7 +486,6 @@ def allocate_national_goblin_land_release(
         block["GOBLIN_RELEASE_SYSTEM_CONTROL_AUTHORITY"] = controls["AUTHORITY"]
         block["GOBLIN_RELEASE_SYSTEM_SPLIT_SOURCE"] = controls["SYSTEM_SPLIT_SOURCE"]
         block["GOBLIN_RELEASE_SOIL_USED"] = False
-        block["GOBLIN_RELEASE_08C_USED"] = False
 
         block["DM_DIAGNOSTIC_BASELINE_PASTURE_DM_T"] = pd.to_numeric(
             block["BASELINE_PASTURE_DM_DEMAND_T"], errors="raise"

@@ -1,79 +1,149 @@
-# Validation
+# GOBLIN-Spatial validation
 
-The current validated baseline covers 2,857 Electoral Divisions for 2015–2025, giving 31,427 ED-year observations.
+Validation is designed around protected scientific boundaries rather than visual agreement with expected maps.
 
-## Script 5C: cattle cohorts
+The development rule is:
 
-The 21 GOBLIN cattle cohorts reproduce the fixed CSO ED cattle population exactly.
+> **Software structure may improve, but scientific mathematics must not change silently.**
 
-Key accounting checks from the validated run:
+## Historical baseline
 
-- maximum original CSO cattle-control change: `0`
-- maximum ED age-sex cohort difference: `0`
-- maximum 21-cohort `TOTAL_CATTLE` difference: `0`
-- maximum national target difference: `0`
-- negative genetic cells: `0`
-- age-sex structural-zero violations: `0`
-- young-only ED pre-adult closure difference: `0`
+The validated historical panel covers 2,857 EDs for 2015-2025.
 
-The corrected cattle spatial support is also validated explicitly. In the 2020 baseline:
+Core identities include:
 
-- zero-dairy EDs: `1,463`
-- zero-dairy EDs retaining zero DxD/DxB cattle: `1,142`
-- zero-dairy EDs admitted as receiver/rearing exceptions: `321`
-- EDs with no adult cows but positive `OTHER_CATTLE`: `51`
-- dairy-only EDs: `11`
-- dairy-only EDs receiving BxB cattle: `0`
+```text
+sum(21 GOBLIN cattle cohorts) = TOTAL_CATTLE
+sum(10 GOBLIN sheep cohorts) = TOTAL_SHEEP
+AREA_FARMED = ALL_GRASSLAND + TOTAL_CEREALS + OTHER_CROPS_HA
+```
 
-The 321 zero-dairy receiver/rearing exceptions are not imposed as a fixed percentage. They arise from the ED support algorithm required to keep the complete 2015–2025 set of CSO age-sex rows and national GOBLIN genetic margins simultaneously feasible. Most zero-dairy EDs therefore retain a true dairy-origin structural zero, while a limited set of EDs with strong young-stock/receiver characteristics can carry bought-in DxD or DxB cattle.
+The 2020 ED baseline is locked as the principal fine-scale spatial anchor. Surrounding years are controlled reconstructions using repeated official higher-level statistics.
 
-These support checks validate the internal biological-spatial logic of the disaggregation. They are not a claim that the precise genetic mix of every ED has been independently observed.
+## SC1 validation
 
-## Script 5D: final 31 cohorts
+SC1 must preserve the national GOBLIN pathway while resolving its geography.
 
-The 10 GOBLIN sheep cohorts reproduce the fixed sheep population exactly and combine with the 21 cattle cohorts to produce the final 31-cohort representation.
+For every authoritative livestock control supplied by the selected pathway:
 
-Key checks from the validated run:
+```text
+sum_e scenario_livestock[e,k] = national_target[k]
+```
 
-- maximum Lowland cohort difference: `0`
-- maximum Upland cohort difference: `0`
-- maximum 10-cohort `TOTAL_SHEEP` difference: `0`
-- maximum original-control change: `0`
-- maximum national sheep target difference: `0`
-- negative GOBLIN sheep cells: `0`
-- zero-sheep ED cohort violations: `0`
-- maximum final 31-cohort livestock difference: `0`
+For released land:
 
-## Script 6: land and farm structure
+```text
+sum_e GOBLIN_RELEASED_GRASSLAND_HA[e]
+    = authoritative national gross release
+```
 
-The 2020 ED baseline is explicitly locked.
+and for every ED:
 
-Key checks from the validated run:
+```text
+0 <= GOBLIN_RELEASED_GRASSLAND_HA[e] <= ALL_GRASSLAND[e]
+```
 
-- maximum change in any of the eight 2020 structural/land indicators: `0`
-- maximum livestock/cohort change: `0`
-- negative land cells: `0`
-- maximum ED land-accounting difference: approximately `9.09e-10 ha`, numerical floating-point noise
+The independent pasture-DM diagnostic is checked separately and is not rescaled to the parent release.
 
-For every ED-year:
+### Soil/LPIS invariance
 
-`AREA_FARMED = ALL_GRASSLAND + TOTAL_CEREALS + OTHER_CROPS_HA`
+A protected regression test deliberately changes downstream mapped-soil and LPIS fields and verifies that the SC1 released-land vector is unchanged.
 
-## Script 7: clean research workbook
+This is a causal-boundary test:
 
-The final clean workbook validation passed with:
+```text
+change soil / LPIS evidence
+        ↓
+SC1 livestock and released-land geography must remain identical
+```
 
-- 31,427 rows in each all-years sheet
-- 2,857 rows in each 2020 sheet
-- 35 columns in `CSO_All_Years`
-- 50 columns in `GOBLIN_All_Years`
-- exact 2020 subset identity
-- no model-diagnostic, status, target/allocation or reconstruction-method fields in the clean presentation sheets
+## SC2 validation
 
-## Automated regression
+SC2 may characterise the frozen release but may not change it.
 
-The complete input bundle is now Git-tracked. GitHub Actions therefore runs both the compact tests and the full 2015–2025 regression automatically. The full regression checks national cattle and sheep totals, cohort closure, land/SE constraints and the final clean-workbook dimensions.
+For every ED:
 
-## Interpretation
+```text
+sum_s ReleasedPhysicalResource[e,s]
+    = GOBLIN_RELEASED_GRASSLAND_HA[e]
+```
 
-Exact closure validates the accounting and reconciliation constraints of the spatialisation. It should not be described as independent empirical validation of every reconstructed non-2020 ED value. Non-baseline annual ED values are controlled reconstructions from official higher-level statistics around the fixed 2020 spatial anchor.
+The seven mapped physical-soil shares must close to one and all physical-resource areas must be finite and non-negative.
+
+The frozen soil and LPIS controls must:
+
+- cover the same 2,857-ED universe;
+- contain unique canonical ED keys;
+- match the frozen SHA-256 values;
+- use the validated 2020 context year.
+
+Eligibility controls must explicitly cover every required future use × soil-class combination and contain only finite coefficients in `[0,1]`. Rewetting is rejected from the generic soil-only eligibility matrix.
+
+## SC3 validation
+
+SC3 treats released land as a finite shared resource.
+
+For every ED × physical-resource cell:
+
+```text
+sum_u allocation[e,s,u] <= released_resource[e,s]
+```
+
+For every national use target:
+
+```text
+Realised_u + Unmet_u = Target_u
+```
+
+The allocator must never create negative allocation, exceed physical released resource or double-count the same hectare across competing uses.
+
+A positive rewetting target requires an explicit validated capacity control. Mapped peat alone cannot create rewetting capacity.
+
+## Post-SC3 flexibility validation
+
+Alternative feasible geographies must preserve the same realised national end-use vector as the reference SC3 solution.
+
+For every use `u`:
+
+```text
+sum_e AlternativeAllocation[e,u]
+    = sum_e ReferenceAllocation[e,u]
+```
+
+while retaining the same physical-resource and eligibility constraints.
+
+Exact ED-use minimum/maximum bounds are therefore interpreted within the same national realised outcome, not as different scenarios.
+
+## Scenario isolation
+
+Scenario IDs are hard boundaries. Livestock endpoints, target livestock-land area and future land-use requirements for one pathway must never be combined with another pathway.
+
+The scenario-control loader and reconciliation tests enforce this boundary.
+
+## Repository-contained input verification
+
+`data_manifest.yaml` is the machine-readable authority for frozen production inputs. `goblin-spatial fetch-data --verify-only` verifies required repository files and checksums rather than downloading or rebuilding model inputs.
+
+## Continuous integration
+
+The CI workflow covers:
+
+- Python compilation;
+- repository input verification;
+- frozen 2020 soil + LPIS context checks;
+- historical baseline unit tests;
+- complete 2015-2025 regression;
+- SC1 endpoint, release, comparison and metric tests;
+- SC2 physical-resource and eligibility tests;
+- SC3 finite-resource and feasible-geography tests;
+- canonical baseline rebuild;
+- real end-to-end SC1;
+- real end-to-end SC2 physical-resource preparation.
+
+A real SC3 publication run is deliberately not fabricated in CI because SC3 requires an explicit scientifically approved eligibility control and, where relevant, rewetting-capacity evidence.
+
+## Interpretation of validation
+
+Exact closure validates accounting, reconciliation and implementation boundaries. It is not independent empirical validation of every reconstructed non-2020 ED value, nor does it validate actual future farmer behaviour.
+
+The model should fail transparently rather than silently continue when authoritative controls are internally impossible, required scientific evidence is absent or an accounting identity is violated.

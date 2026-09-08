@@ -14,7 +14,6 @@ paths:
   processed: data/processed
 
 files:
-  # VALIDATED HISTORICAL BASELINE INPUTS: stages 01-09
   cso_ed_2020: data/inputs/baseline/01_CSO_ED_Agricultural_Baseline_2020.csv
   cso_cattle_county: data/inputs/baseline/01_CSO_AAA10_Cattle_County_2015_2025.csv
   cso_sheep_workbook: data/inputs/baseline/03_CSO_AAA09_Sheep_County_Region_2015_2025.xlsx
@@ -26,34 +25,12 @@ files:
   standard_output_mapping: data/inputs/baseline/08_IFS2020_Standard_Output_Mapping.xlsx
   standard_output_coefficients: data/controls/standard_output/IFS_SOC2020_IE_model_controls.csv
 
-  # PRINCIPAL SCENARIO RUNTIME
-  # SC1 is soil-independent. It starts from the validated livestock/grassland/SO
-  # baseline and uses no 08B, Colm-soil or LPIS suitability input to move the
-  # livestock endpoint or the authoritative GOBLIN released-land quantity.
-  #
-  # SC2/SC3 use only the frozen Colm mapped physical-soil component (08C source)
-  # and LPIS 2020 component from this repository-contained context directory.
-  # The Colm-direct runtime reader deliberately ignores the legacy 08B component.
   land_context_2020: data/controls/land/ED_Land_Context_2020
   scenario_controls: data/controls/scenario/GOBLIN_Scenario_Controls.csv
   pasture_dm_controls: data/controls/pasture/GOBLIN_pasture_dm_2020_fixed.csv
 
-  # OPTIONAL LEGACY / FIRST-PRINCIPLES RECONSTRUCTION / PROVENANCE SOURCES
-  # The 08B agricultural-capability representation is retained only as a legacy
-  # benchmark/sensitivity source. It is not part of the Colm-direct SC1-SC3
-  # production decision chain. Principal runs never auto-download or rebuild
-  # heavy spatial source data.
-  agricultural_soil_source: data/inputs/spatial/08B_NFS_Agricultural_Soil_Capability.csv
-  agricultural_soil_profile: data/controls/soil/ED_GOBLIN_soil_profile.csv.xz
-  physical_soil_package: data/inputs/spatial/08C_IFS_Mapped_Physical_Soil_Package.zip
-  physical_soil_profile: data/controls/soil/ED_IFS_mapped_physical_soil_profile.csv.xz
-  saps_ed_geography: data/external/spatial/ed/Electoral_Divisions_generalised_SAPS_Shp_with_proper_names.shp
-  lpis_2020_parcels: data/external/spatial/lpis/LPIS_2020_GOBLIN_reduced_v2.parquet
-  lpis_2025_parcels: data/external/spatial/lpis/LPIS_2025_GOBLIN_reduced.parquet
-  lpis_ed_profile: data/controls/lpis/ED_LPIS_opportunity_2020_2025.csv.xz
+  # Reserved for the downstream reporting phase. It does not enter model science.
   ed_boundaries_frozen: data/inputs/spatial/SC2_ED_Boundaries_Frozen.gpkg
-  lpis_2020_frozen: data/inputs/spatial/SC2_LPIS_2020_Frozen.parquet
-  lpis_2025_frozen: data/inputs/spatial/SC2_LPIS_2025_Frozen.parquet
 
 outputs:
   cattle_panel: data/interim/cattle_ed_2015_2025.csv
