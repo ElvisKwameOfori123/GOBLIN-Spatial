@@ -72,6 +72,7 @@ jobs:
             tests/test_sc2_context.py \
             tests/test_sc3_allocation.py \
             tests/test_sc3_colm_allocation.py \
+            tests/test_sc3_feasible_geographies.py \
             tests/test_scenario_control_table.py \
             tests/test_scenario_preflight.py
 
@@ -117,4 +118,5 @@ jobs:
         run: |
           echo "Real-path SC3 is intentionally not run until evidence-backed Colm eligibility and validated rewetting-capacity controls are supplied."
           echo "The finite-resource SC3 engine is covered by tests/test_sc3_colm_allocation.py."
+          echo "The same-end-use spatial-flexibility layer is covered by tests/test_sc3_feasible_geographies.py."
           echo "Paper-figure regeneration remains a separate promotion gate after Colm-direct reporting schemas are finalised."
