@@ -1,9 +1,13 @@
-"""No-download preflight checks for the principal scenario pipeline.
+"""No-download preflight checks for the Colm-direct principal scenario pipeline.
 
 The normal runtime verifies only repository-contained controls. It never fetches,
 rebuilds or spatially intersects LPIS parcels, soil packages or ED geography.
-For 2020, one frozen ``ED_Land_Context_2020`` control supplies the 08B, 08C and
-LPIS evidence required by the principal scenario chain.
+
+SC1 requires only the validated historical livestock/grassland/SO baseline plus
+national scenario and pasture/cohort controls. It does not require soil or LPIS.
+SC2/SC3 additionally require the frozen 2020 Colm physical-soil + LPIS context.
+Scientific eligibility and rewetting-capacity controls are caller-supplied and
+are validated by the stage runner rather than silently defaulted here.
 """
 
 from __future__ import annotations
@@ -13,12 +17,7 @@ from pathlib import Path
 import pandas as pd
 
 from goblin_spatial.config import SpatialConfig
-from goblin_spatial.land.context import (
-    LAND_CONTEXT_EXPECTED_COLUMNS,
-    LAND_CONTEXT_EXPECTED_EDS,
-    land_context_sha256,
-    read_land_context_table,
-)
+from goblin_spatial.land.colm_lpis_context import read_colm_lpis_context
 from goblin_spatial.scenario.control_table import read_scenario_control_table
 from goblin_spatial.soil import canonical_csoed
 
@@ -124,50 +123,54 @@ def preflight_principal_inputs(
             f"ACTIVE={active}",
         )
 
-    context_path = Path(cfg.files["land_context_2020"])
-    if not context_path.exists():
-        _status(
-            rows,
-            "FROZEN_LAND_CONTEXT_2020",
-            context_path,
-            False,
-            "missing repository-contained runtime control",
-        )
-    else:
-        try:
-            context = read_land_context_table(context_path)
-            digest = land_context_sha256(context_path)
+    # SC1 deliberately stops here with respect to spatial land evidence.
+    if stage in {"SC2", "SC3"}:
+        context_path = Path(cfg.files["land_context_2020"])
+        if baseline_year != 2020:
             _status(
                 rows,
-                "FROZEN_LAND_CONTEXT_2020",
-                context_path,
-                True,
-                (
-                    f"rows={len(context):,}; columns={len(context.columns)}; "
-                    f"expected={LAND_CONTEXT_EXPECTED_EDS:,}x{LAND_CONTEXT_EXPECTED_COLUMNS}; "
-                    f"sha256={digest}"
-                ),
-            )
-        except Exception as exc:
-            _status(
-                rows,
-                "FROZEN_LAND_CONTEXT_2020",
+                "SPATIAL_BASELINE_SUPPORT",
                 context_path,
                 False,
-                f"invalid: {exc}",
+                (
+                    "Colm-direct SC2/SC3 currently support the validated frozen "
+                    "2020 Colm+LPIS context only; a separate validated 2025 context "
+                    "has not been supplied"
+                ),
             )
-
-    if stage in {"SC2", "SC3"} and baseline_year != 2020:
-        _status(
-            rows,
-            "SPATIAL_BASELINE_SUPPORT",
-            context_path,
-            False,
-            (
-                "SC2/SC3 currently support the validated frozen 2020 land context only; "
-                "a separate validated 2025 compact context has not been supplied"
-            ),
-        )
+        elif not context_path.exists():
+            _status(
+                rows,
+                "COLM_LPIS_CONTEXT_2020",
+                context_path,
+                False,
+                "missing repository-contained Colm physical-soil + LPIS control",
+            )
+        else:
+            try:
+                context = read_colm_lpis_context(context_path)
+                ok = (
+                    len(context) == int(cfg.expected_eds)
+                    and not context["CSOED"].duplicated().any()
+                )
+                _status(
+                    rows,
+                    "COLM_LPIS_CONTEXT_2020",
+                    context_path,
+                    ok,
+                    (
+                        f"rows={len(context):,}; expected={cfg.expected_eds:,}; "
+                        "legacy 08B not required"
+                    ),
+                )
+            except Exception as exc:
+                _status(
+                    rows,
+                    "COLM_LPIS_CONTEXT_2020",
+                    context_path,
+                    False,
+                    f"invalid: {exc}",
+                )
 
     return pd.DataFrame(rows)
 
