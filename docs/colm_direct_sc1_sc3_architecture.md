@@ -67,6 +67,15 @@ sum(GOBLIN_RELEASED_GRASSLAND_HA) = authoritative national GOBLIN release
 `ADDITIONAL_GRASSLAND_REQUIRED_HA` remain independent pasture-DM diagnostics.
 They are never rescaled to the parent GOBLIN land control.
 
+The primary authoritative-release spatial signal is the positive livestock/
+pasture-DM release propensity. If that signal cannot absorb the complete parent
+GOBLIN release because ED grassland ceilings bind, remaining hectares are placed
+through an explicit livestock-bearing grassland fallback. The model reports both
+fallback hectares and their national share. This is an accounting bridge, not a
+soil-suitability rule, and must remain visible in diagnostics because it indicates
+how much of the parent land-release control is not located by the primary local
+livestock-pressure signal alone.
+
 SC1 also retains the validated incidence measures and allocation policies,
 including PRORATA, dairy protection, economic-capacity protection and social
 vulnerability protection. Those policies are based on livestock, holding,
@@ -95,6 +104,11 @@ The seven Colm physical categories are retained directly:
 5. alluvium;
 6. peat;
 7. miscellaneous.
+
+The Colm-direct core deliberately does **not** collapse these categories into
+synthetic SG1/SG2/SG3 groups and does **not** apply the legacy assumed 10% farmed-
+peat fraction. Those transformations remain available only in legacy/provenance
+code and must not feed the new SC2 or SC3 decision chain.
 
 The current ED-level resource attribution is:
 
@@ -131,6 +145,12 @@ Potential release
 ```
 
 Mapped peat alone cannot generate rewetting capacity.
+
+Fractional eligibility coefficients are technically supported for transparent
+sensitivity analysis, but production coefficients should be binary unless a
+scientific source gives a defensible interpretation for partial eligibility.
+The code must not invent intermediate coefficients simply to improve target
+closure.
 
 ### Opportunity
 
@@ -176,11 +196,18 @@ The optimisation is lexicographic:
 
 1. minimise total unmet Stage-A target;
 2. only if an explicit opportunity-score mapping is supplied, hold minimum
-   shortfall fixed and maximise evidence-backed opportunity fit.
+   total shortfall fixed and maximise evidence-backed opportunity fit.
 
 Without an evidence-backed opportunity mapping, the resulting allocation is a
 feasibility solution and should not be interpreted as a unique predicted land-use
 map.
+
+The current Stage-2 formulation fixes the minimum **total** Stage-A shortfall.
+Consequently, if several equally feasible solutions exist, an opportunity ranking
+can alter which use carries some of that shortfall. This is intentional only if
+all Stage-A targets are treated as equally prioritised. If policy requires fixed
+per-use shortfalls or target priorities, those priorities must be supplied
+explicitly rather than inferred by the optimiser.
 
 ## Rewetting
 
@@ -194,6 +221,9 @@ A positive pathway rewetting target therefore requires an external, versioned
 ED-level rewetting-capacity control with evidence notes. Rewetting is allocated
 only from the residual released resource after Stage A and cannot exceed the
 validated capacity intersected with that residual resource.
+
+Neither Colm `PEAT` nor LPIS bog/peat context is treated as sufficient evidence
+of drained agricultural organic soil on its own.
 
 ## Scientific invariants
 
@@ -213,6 +243,8 @@ sum(seven Colm released-resource cells within ED)
     = frozen SC1 released hectares
 SC2 cannot alter livestock or release
 G1/G2/G3 are not used
+synthetic mapped SG1/SG2/SG3 are not used
+no assumed farmed-peat fraction is used
 ```
 
 ### SC3
