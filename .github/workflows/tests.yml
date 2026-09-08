@@ -22,7 +22,7 @@ jobs:
           pip install -e ".[geo,goblin,scenario,reporting]"
           pip install pytest
       - name: Compile Python sources
-        run: python -m compileall -q src tests
+        run: python -m compileall -q src tests scripts
       - name: Verify repository-contained runtime inputs
         run: goblin-spatial fetch-data --verify-only
       - name: Guard against superseded land runtime
@@ -76,10 +76,54 @@ jobs:
           report = assert_principal_ready(cfg, baseline_year=2020, stage="SC2")
           print(report.to_string(index=False))
           PY
+      - name: Validate principal SC3 eligibility control
+        run: |
+          python - <<'PY'
+          from goblin_spatial.land.colm_rules import load_colm_eligibility_control
+          rules, version, evidence = load_colm_eligibility_control(
+              "data/controls/sc3/SC3_StageA_Eligibility_Principal_v1.csv"
+          )
+          assert version == "SC3_STAGEA_PRINCIPAL_V1"
+          assert len(rules) == 5
+          assert all(len(v) == 7 for v in rules.values())
+          print(version)
+          print(evidence)
+          PY
       - name: Run end-to-end SC1 smoke test
         run: goblin-spatial-principal SI_SG --baseline-year 2020 --allocation-rule PRORATA --stage SC1 --output-dir data/processed/ci_principal_si_sg
       - name: Run end-to-end SC2 smoke test
         run: goblin-spatial-principal SI_SG --baseline-year 2020 --allocation-rule PRORATA --stage SC2 --output-dir data/processed/ci_principal_si_sg
+      - name: Run BE_SG SC2 with principal eligibility
+        run: |
+          goblin-spatial-principal BE_SG \
+            --baseline-year 2020 \
+            --allocation-rule PRORATA \
+            --stage SC2 \
+            --colm-eligibility-rules data/controls/sc3/SC3_StageA_Eligibility_Principal_v1.csv \
+            --output-dir data/processed/ci_principal_be_sg_sc3
+      - name: Build transparent rewetting proxy for SC3 smoke test
+        run: |
+          python scripts/build_rewetting_proxy_control.py \
+            --sc2 data/processed/ci_principal_be_sg_sc3/sc2_ed_context.csv \
+            --output data/processed/ci_principal_be_sg_sc3/rewetting_proxy.csv
+      - name: Run one real end-to-end SC3 smoke test
+        run: |
+          goblin-spatial-principal BE_SG \
+            --baseline-year 2020 \
+            --allocation-rule PRORATA \
+            --stage SC3 \
+            --colm-eligibility-rules data/controls/sc3/SC3_StageA_Eligibility_Principal_v1.csv \
+            --rewetting-capacity data/processed/ci_principal_be_sg_sc3/rewetting_proxy.csv \
+            --output-dir data/processed/ci_principal_be_sg_sc3
+      - name: Confirm real SC3 smoke-test outputs
+        run: |
+          test -f data/processed/ci_principal_be_sg_sc3/sc3_ed_results.csv
+          test -f data/processed/ci_principal_be_sg_sc3/sc3_national_summary.csv
+          python - <<'PY'
+          import pandas as pd
+          s = pd.read_csv("data/processed/ci_principal_be_sg_sc3/sc3_national_summary.csv")
+          print(s.to_string(index=False))
+          PY
       - name: Build downstream report data from frozen smoke-test outputs
         run: |
           goblin-spatial-report-data \
@@ -94,7 +138,8 @@ jobs:
           test -f reporting/report_data_ci/sc1/ed_results.parquet
           test -f reporting/report_data_ci/sc1/robust_exposure.parquet
           test -f reporting/report_data_ci/report_data_manifest.json
-      - name: Confirm SC3 scientific safeguard
+      - name: Confirm SC3 scientific boundary
         run: |
-          echo "Real-path SC3 requires explicit evidence-backed eligibility controls and, when needed, validated rewetting capacity."
-          echo "The finite-resource optimiser and fixed-end-use flexibility analysis are unit-tested."
+          echo "SC3 finite-resource logic is unchanged."
+          echo "Principal Stage-A eligibility is explicit and versioned."
+          echo "Rewetting smoke-test capacity is a transparent proxy and is interpreted separately from productive transformability."
