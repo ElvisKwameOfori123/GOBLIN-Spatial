@@ -6,6 +6,9 @@ from pathlib import Path
 
 
 FORBIDDEN_RUNTIME_TOKENS = (
+    "08B",
+    "G1-G2-G3",
+    "G1/G2/G3",
     "ED_Soil_Capability_08B",
     "GOBLIN_RELEASED_G1_HA",
     "GOBLIN_RELEASED_G2_HA",
@@ -13,6 +16,7 @@ FORBIDDEN_RUNTIME_TOKENS = (
     "GOBLIN_SOIL_G1_SHARE",
     "GOBLIN_SOIL_G2_SHARE",
     "GOBLIN_SOIL_G3_SHARE",
+    "GOBLIN_RELEASE_08C_USED",
     "sc2_opportunity",
     "context_attach",
     "principal_context",
