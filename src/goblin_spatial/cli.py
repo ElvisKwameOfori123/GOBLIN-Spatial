@@ -68,7 +68,7 @@ def _parser() -> argparse.ArgumentParser:
         default=PRINCIPAL_PROTECTION_STRENGTH,
     )
     study_parser.add_argument(
-        "--soil-eligibility-rules",
+        "--colm-eligibility-rules",
         default=None,
         help="Versioned evidence-backed Stage-A soil eligibility control; required for SC3.",
     )
@@ -119,7 +119,7 @@ def _run_study(
     allocation_rule: str,
     protection_strength: float,
     output_dir: str | None = None,
-    soil_eligibility_rules: str | None = None,
+    colm_eligibility_rules: str | None = None,
     rewetting_capacity: str | None = None,
 ) -> None:
     stage = str(through).lower()
@@ -129,9 +129,9 @@ def _run_study(
         raise ValueError("--scenario is required when --through is SC1, SC2 or SC3")
     if stage in {"sc2", "sc3"} and int(baseline_year) != 2020:
         raise ValueError("SC2/SC3 currently require the frozen 2020 soil + LPIS spatial baseline")
-    if stage == "sc3" and not soil_eligibility_rules:
+    if stage == "sc3" and not colm_eligibility_rules:
         raise ValueError(
-            "--soil-eligibility-rules is required for SC3; "
+            "--colm-eligibility-rules is required for SC3; "
             "no default suitability assumptions are supplied"
         )
 
@@ -160,8 +160,8 @@ def _run_study(
     ]
     if output_dir:
         command.extend(["--output-dir", str(output_dir)])
-    if soil_eligibility_rules:
-        command.extend(["--soil-eligibility-rules", str(soil_eligibility_rules)])
+    if colm_eligibility_rules:
+        command.extend(["--colm-eligibility-rules", str(colm_eligibility_rules)])
     if rewetting_capacity:
         command.extend(["--rewetting-capacity", str(rewetting_capacity)])
     subprocess.run(command, check=True)
@@ -215,7 +215,7 @@ def _interactive_study() -> None:
         baseline_year=baseline_year,
         allocation_rule=allocation_rule,
         protection_strength=PRINCIPAL_PROTECTION_STRENGTH,
-        soil_eligibility_rules=eligibility,
+        colm_eligibility_rules=eligibility,
         rewetting_capacity=rewetting,
     )
 
@@ -246,7 +246,7 @@ def main() -> None:
             allocation_rule=args.allocation_rule,
             protection_strength=args.protection_strength,
             output_dir=args.output_dir,
-            soil_eligibility_rules=args.soil_eligibility_rules,
+            colm_eligibility_rules=args.colm_eligibility_rules,
             rewetting_capacity=args.rewetting_capacity,
         )
         return
