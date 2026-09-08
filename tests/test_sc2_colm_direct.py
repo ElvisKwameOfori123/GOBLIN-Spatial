@@ -38,7 +38,7 @@ def test_colm_released_resource_closes_to_frozen_sc1_release() -> None:
 
     assert np.array_equal(out["GOBLIN_RELEASED_GRASSLAND_HA"], before)
     assert np.allclose(out[list(COLM_RELEASED_AREA_COLUMNS)].sum(axis=1), before)
-    assert not out["COLM_DIRECT_G1_G2_G3_USED"].any()
+    assert "COLM_DIRECT_G1_G2_G3_USED" not in out.columns
     assert out["COLM_DIRECT_SC2_RULE_STATUS"].eq("PHYSICAL_RESOURCE_ONLY").all()
 
 
@@ -82,7 +82,7 @@ def test_explicit_rules_generate_auditable_use_specific_capacity() -> None:
     assert out["COLM_DIRECT_SC2_RULE_EVIDENCE"].eq(
         "unit-test coefficients only"
     ).all()
-    assert not out["COLM_DIRECT_G1_G2_G3_USED"].any()
+    assert "COLM_DIRECT_G1_G2_G3_USED" not in out.columns
 
 
 def test_rule_table_must_cover_every_colm_category() -> None:
