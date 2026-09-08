@@ -7,6 +7,10 @@ on:
       - ".github/workflows/reporting_only_final.yml"
   workflow_dispatch:
 
+permissions:
+  contents: read
+  actions: read
+
 jobs:
   final-reporting-only:
     runs-on: ubuntu-latest
