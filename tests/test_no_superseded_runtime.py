@@ -1,4 +1,4 @@
-"""Guard against reintroducing superseded land-capability runtime paths."""
+"""Guard against reintroducing superseded land-runtime paths or documentation."""
 
 from __future__ import annotations
 
@@ -23,16 +23,19 @@ FORBIDDEN_RUNTIME_TOKENS = (
 )
 
 
-def test_superseded_land_runtime_cannot_reenter_production_source() -> None:
+def test_superseded_land_runtime_cannot_reenter_live_v1_tree() -> None:
     root = Path(__file__).resolve().parents[1]
-    production_files = [
+    live_files = [
         *sorted((root / "src" / "goblin_spatial").rglob("*.py")),
+        *sorted((root / "docs").rglob("*.md")),
+        root / "README.md",
         root / "configs" / "ireland_2015_2025.yaml",
+        root / "data" / "README.md",
         root / "data" / "controls" / "land" / "ED_Land_Context_2020" / "README.md",
     ]
 
     hits: list[str] = []
-    for path in production_files:
+    for path in live_files:
         if not path.is_file():
             continue
         text = path.read_text(encoding="utf-8")
