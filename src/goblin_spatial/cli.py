@@ -11,7 +11,10 @@ from goblin_spatial.config import load_config
 from goblin_spatial.data_fetch import fetch_data
 from goblin_spatial.pipeline import run_baseline
 from goblin_spatial.scenario.control_table import read_scenario_control_table
-from goblin_spatial.scenario.principal_allocation import PRINCIPAL_ALLOCATION_POLICIES, PRINCIPAL_PROTECTION_STRENGTH
+from goblin_spatial.scenario.principal_allocation import (
+    PRINCIPAL_ALLOCATION_POLICIES,
+    PRINCIPAL_PROTECTION_STRENGTH,
+)
 
 THROUGH_STAGES = ("baseline", "sc1", "sc2", "sc3")
 
@@ -25,20 +28,55 @@ def _parser() -> argparse.ArgumentParser:
 
     fetch_parser = sub.add_parser("fetch-data", help="Verify repository-contained model inputs.")
     fetch_parser.add_argument("--manifest", default="data_manifest.yaml")
-    fetch_parser.add_argument("--verify-only", action="store_true", help="Compatibility flag; verification is always local.")
+    fetch_parser.add_argument(
+        "--verify-only",
+        action="store_true",
+        help="Compatibility flag; verification is always local.",
+    )
 
-    build_parser = sub.add_parser("build", help="Build the validated 2015-2025 historical baseline.")
+    build_parser = sub.add_parser(
+        "build",
+        help="Build the validated 2015-2025 historical baseline.",
+    )
     build_parser.add_argument("--config", default="configs/ireland_2015_2025.yaml")
 
-    study_parser = sub.add_parser("study", help="Build the baseline and continue through the requested scenario stage.")
+    study_parser = sub.add_parser(
+        "study",
+        help="Build the baseline and continue through the requested scenario stage.",
+    )
     study_parser.add_argument("--through", choices=THROUGH_STAGES, default="sc3")
-    study_parser.add_argument("--scenario", default=None, help="ACTIVE SCENARIO_ID; required beyond baseline.")
+    study_parser.add_argument(
+        "--scenario",
+        default=None,
+        help="ACTIVE SCENARIO_ID; required beyond baseline.",
+    )
     study_parser.add_argument("--config", default="configs/ireland_2015_2025.yaml")
-    study_parser.add_argument("--baseline-year", type=int, choices=(2020, 2025), default=2020)
-    study_parser.add_argument("--allocation-rule", choices=PRINCIPAL_ALLOCATION_POLICIES, default="PRORATA")
-    study_parser.add_argument("--protection-strength", type=float, default=PRINCIPAL_PROTECTION_STRENGTH)
-    study_parser.add_argument("--colm-eligibility-rules", default=None, help="Versioned evidence-backed Colm eligibility control; required for SC3.")
-    study_parser.add_argument("--rewetting-capacity", default=None, help="Validated rewetting-capacity control when required by the pathway.")
+    study_parser.add_argument(
+        "--baseline-year",
+        type=int,
+        choices=(2020, 2025),
+        default=2020,
+    )
+    study_parser.add_argument(
+        "--allocation-rule",
+        choices=PRINCIPAL_ALLOCATION_POLICIES,
+        default="PRORATA",
+    )
+    study_parser.add_argument(
+        "--protection-strength",
+        type=float,
+        default=PRINCIPAL_PROTECTION_STRENGTH,
+    )
+    study_parser.add_argument(
+        "--soil-eligibility-rules",
+        default=None,
+        help="Versioned evidence-backed Stage-A soil eligibility control; required for SC3.",
+    )
+    study_parser.add_argument(
+        "--rewetting-capacity",
+        default=None,
+        help="Validated rewetting-capacity control when required by the pathway.",
+    )
     study_parser.add_argument("--output-dir", default=None)
     return parser
 
@@ -62,7 +100,10 @@ def _scenario_options(config_path: str | Path) -> list[tuple[str, str]]:
     active = table.loc[table["ACTIVE"]].reset_index(drop=True)
     if active.empty:
         raise RuntimeError("scenario control table contains no ACTIVE pathways")
-    return [(str(index + 1), f"{row.SCENARIO_ID} — {row.SCENARIO_NAME}") for index, row in active.iterrows()]
+    return [
+        (str(index + 1), f"{row.SCENARIO_ID} — {row.SCENARIO_NAME}")
+        for index, row in active.iterrows()
+    ]
 
 
 def _scenario_id_from_label(label: str) -> str:
@@ -78,7 +119,7 @@ def _run_study(
     allocation_rule: str,
     protection_strength: float,
     output_dir: str | None = None,
-    colm_eligibility_rules: str | None = None,
+    soil_eligibility_rules: str | None = None,
     rewetting_capacity: str | None = None,
 ) -> None:
     stage = str(through).lower()
@@ -87,9 +128,12 @@ def _run_study(
     if stage != "baseline" and not scenario:
         raise ValueError("--scenario is required when --through is SC1, SC2 or SC3")
     if stage in {"sc2", "sc3"} and int(baseline_year) != 2020:
-        raise ValueError("SC2/SC3 currently require the frozen 2020 Colm+LPIS spatial baseline")
-    if stage == "sc3" and not colm_eligibility_rules:
-        raise ValueError("--colm-eligibility-rules is required for SC3; no default suitability assumptions are supplied")
+        raise ValueError("SC2/SC3 currently require the frozen 2020 soil + LPIS spatial baseline")
+    if stage == "sc3" and not soil_eligibility_rules:
+        raise ValueError(
+            "--soil-eligibility-rules is required for SC3; "
+            "no default suitability assumptions are supplied"
+        )
 
     cfg = load_config(Path(config_path))
     print("Building validated historical baseline...")
@@ -99,15 +143,25 @@ def _run_study(
         return
 
     command = [
-        sys.executable, "-m", "goblin_spatial.principal_cli", str(scenario),
-        "--config", str(config_path), "--baseline-year", str(int(baseline_year)),
-        "--allocation-rule", str(allocation_rule), "--protection-strength",
-        str(float(protection_strength)), "--stage", stage.upper(),
+        sys.executable,
+        "-m",
+        "goblin_spatial.principal_cli",
+        str(scenario),
+        "--config",
+        str(config_path),
+        "--baseline-year",
+        str(int(baseline_year)),
+        "--allocation-rule",
+        str(allocation_rule),
+        "--protection-strength",
+        str(float(protection_strength)),
+        "--stage",
+        stage.upper(),
     ]
     if output_dir:
         command.extend(["--output-dir", str(output_dir)])
-    if colm_eligibility_rules:
-        command.extend(["--colm-eligibility-rules", str(colm_eligibility_rules)])
+    if soil_eligibility_rules:
+        command.extend(["--soil-eligibility-rules", str(soil_eligibility_rules)])
     if rewetting_capacity:
         command.extend(["--rewetting-capacity", str(rewetting_capacity)])
     subprocess.run(command, check=True)
@@ -116,34 +170,67 @@ def _run_study(
 
 def _interactive_study() -> None:
     config_path = "configs/ireland_2015_2025.yaml"
-    label = _choose("\nWhat would you like to run?", [
-        ("1", "baseline"), ("2", "sc1"), ("3", "sc2"), ("4", "sc3")
-    ])
-    if label == "baseline":
-        _run_study(config_path=config_path, through="baseline", scenario=None, baseline_year=2020, allocation_rule="PRORATA", protection_strength=PRINCIPAL_PROTECTION_STRENGTH)
+    stage = _choose(
+        "\nWhat would you like to run?",
+        [("1", "baseline"), ("2", "sc1"), ("3", "sc2"), ("4", "sc3")],
+    )
+    if stage == "baseline":
+        _run_study(
+            config_path=config_path,
+            through="baseline",
+            scenario=None,
+            baseline_year=2020,
+            allocation_rule="PRORATA",
+            protection_strength=PRINCIPAL_PROTECTION_STRENGTH,
+        )
         return
-    scenario = _scenario_id_from_label(_choose("\nChoose a national GOBLIN pathway:", _scenario_options(config_path)))
-    allocation_rule = _choose("\nChoose the spatial incidence rule:", [(str(i + 1), p) for i, p in enumerate(PRINCIPAL_ALLOCATION_POLICIES)])
-    baseline_year = int(_choose("\nChoose baseline year:", [("1", "2020"), ("2", "2025")])) if label == "sc1" else 2020
+
+    scenario = _scenario_id_from_label(
+        _choose("\nChoose a national GOBLIN pathway:", _scenario_options(config_path))
+    )
+    allocation_rule = _choose(
+        "\nChoose the spatial incidence rule:",
+        [(str(index + 1), policy) for index, policy in enumerate(PRINCIPAL_ALLOCATION_POLICIES)],
+    )
+    baseline_year = (
+        int(_choose("\nChoose baseline year:", [("1", "2020"), ("2", "2025")]))
+        if stage == "sc1"
+        else 2020
+    )
+
     eligibility = None
     rewetting = None
-    if label == "sc3":
-        eligibility = input("Path to validated Colm eligibility-rule CSV: ").strip()
+    if stage == "sc3":
+        eligibility = input("Path to validated soil eligibility-rule CSV: ").strip()
         if not eligibility:
-            raise ValueError("SC3 requires a validated Colm eligibility-rule CSV")
-        rewetting = input("Path to validated rewetting-capacity CSV, if required: ").strip() or None
-    _run_study(config_path=config_path, through=label, scenario=scenario, baseline_year=baseline_year, allocation_rule=allocation_rule, protection_strength=PRINCIPAL_PROTECTION_STRENGTH, colm_eligibility_rules=eligibility, rewetting_capacity=rewetting)
+            raise ValueError("SC3 requires a validated soil eligibility-rule CSV")
+        rewetting = input(
+            "Path to validated rewetting-capacity CSV, if required: "
+        ).strip() or None
+
+    _run_study(
+        config_path=config_path,
+        through=stage,
+        scenario=scenario,
+        baseline_year=baseline_year,
+        allocation_rule=allocation_rule,
+        protection_strength=PRINCIPAL_PROTECTION_STRENGTH,
+        soil_eligibility_rules=eligibility,
+        rewetting_capacity=rewetting,
+    )
 
 
 def main() -> None:
     parser = _parser()
     args = parser.parse_args()
+
     if args.command is None:
         if sys.stdin.isatty():
             _interactive_study()
         else:
             parser.print_help()
         return
+
     if args.command == "fetch-data":
         fetch_data(Path(args.manifest), verify_only=True, tracked_only=True)
         return
@@ -159,8 +246,9 @@ def main() -> None:
             allocation_rule=args.allocation_rule,
             protection_strength=args.protection_strength,
             output_dir=args.output_dir,
-            colm_eligibility_rules=args.colm_eligibility_rules,
+            soil_eligibility_rules=args.soil_eligibility_rules,
             rewetting_capacity=args.rewetting_capacity,
         )
         return
+
     raise ValueError(f"unknown command: {args.command}")
