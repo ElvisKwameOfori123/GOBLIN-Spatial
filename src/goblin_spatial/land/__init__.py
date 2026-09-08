@@ -5,7 +5,8 @@ The active scientific chain is:
 * historical land/farm-structure reconstruction;
 * soil-independent SC1 livestock transition and released-land geography;
 * Colm physical-soil + LPIS SC2 resource characterisation and eligibility;
-* SC3 joint target feasibility on finite ED x Colm-soil resource cells.
+* SC3 joint target feasibility on finite ED x Colm-soil resource cells;
+* optional post-SC3 spatial-flexibility analysis for the same national end use.
 
 Legacy 08B/G1-G2-G3 helpers remain importable only for benchmark/provenance work
 and are not part of the Colm-direct production decision chain.
@@ -53,6 +54,14 @@ from .sc3_colm_allocation import (
     allocate_colm_sc3_targets,
     summarise_colm_sc3_allocation,
 )
+from .sc3_feasible_geographies import (
+    DEFAULT_SEED as SC3_FEASIBLE_GEOGRAPHY_DEFAULT_SEED,
+    FLEX_VERSION as SC3_FEASIBLE_GEOGRAPHY_VERSION,
+    FeasibleGeographyEnsemble,
+    exact_colm_sc3_ed_use_bounds,
+    infer_rewetting_capacity_columns,
+    sample_colm_sc3_feasible_geographies,
+)
 
 __all__ = [
     "COLM_PHYSICAL_CATEGORIES",
@@ -66,8 +75,11 @@ __all__ = [
     "REWETTING_USE",
     "SC2_CONTEXT_VERSION",
     "SC3_COLM_VERSION",
+    "SC3_FEASIBLE_GEOGRAPHY_DEFAULT_SEED",
+    "SC3_FEASIBLE_GEOGRAPHY_VERSION",
     "SC3_USES",
     "STAGE_A_USES",
+    "FeasibleGeographyEnsemble",
     "add_colm_direct_eligibility",
     "add_colm_released_soil_resource",
     "add_ed_lpis_context",
@@ -78,6 +90,8 @@ __all__ = [
     "attach_rewetting_capacity",
     "build_colm_direct_sc2_physical",
     "build_ed_lpis_profile",
+    "exact_colm_sc3_ed_use_bounds",
+    "infer_rewetting_capacity_columns",
     "land_context_sha256",
     "load_colm_eligibility_control",
     "load_rewetting_capacity_control",
@@ -86,6 +100,7 @@ __all__ = [
     "read_ed_lpis_profile",
     "read_land_context_table",
     "reconstruct_land_context_bytes",
+    "sample_colm_sc3_feasible_geographies",
     "summarise_colm_sc3_allocation",
     "validate_colm_eligibility_rules",
     "validate_land_context",
