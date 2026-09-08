@@ -73,11 +73,22 @@ def test_sc2_preserves_frozen_release_and_partitions_to_colm_categories() -> Non
     assert out["SC2_COLM_PHYSICAL_CONTEXT_AVAILABLE"].all()
     assert out["SC2_LPIS_CONTEXT_AVAILABLE"].all()
     assert out["SC2_G1_G2_G3_USED"].eq(False).all()
-    assert set(out["SC2_CONTEXT_VERSION"]) == {"COLM_DIRECT_1.0"}
+    assert out["SC2_SYNTHETIC_SOIL_GROUPS_USED"].eq(False).all()
+    assert out["SC2_FARMED_PEAT_FRACTION_ASSUMPTION_USED"].eq(False).all()
+    assert out["COLM_PHYSICAL_SYNTHETIC_SG_USED"].eq(False).all()
+    assert out["COLM_PHYSICAL_FARMED_PEAT_ASSUMPTION_USED"].eq(False).all()
+    assert set(out["SC2_CONTEXT_VERSION"]) == {"COLM_DIRECT_1.1"}
     assert set(out["SC2_OPPORTUNITY_STATUS"]) == {
         "CONTEXT_EVIDENCE_ONLY_NO_ARBITRARY_COMPOSITE"
     }
     assert not any(column.startswith("SC2_RELEASED_G") for column in out.columns)
+    for legacy in (
+        "IFS_MAP_SG1_SHARE",
+        "IFS_MAP_SG2_SHARE",
+        "IFS_MAP_SG3_SHARE",
+        "IFS_MAP_EFFECTIVE_FARMED_PEAT_HA",
+    ):
+        assert legacy not in out.columns
 
 
 def test_sc2_attaches_lpis_as_context_without_changing_release() -> None:
