@@ -7,9 +7,10 @@ The production framework is deliberately narrow:
 3. propagate the 21 cattle cohorts while preserving ED signatures;
 4. keep sheep fixed in the current principal cattle transition;
 5. reconcile exactly to national livestock controls;
-6. spatialise authoritative released land through solved livestock pressure and
-   frozen agricultural-capability constraints;
-7. pass the frozen SC1 result to SC2/SC3 for land opportunity and allocation.
+6. spatialise authoritative released land from solved livestock/pasture-DM
+   transition pressure, bounded only by ``ALL_GRASSLAND``;
+7. pass the frozen SC1 result to SC2/SC3 for physical-resource context,
+   evidence-backed eligibility and finite-resource allocation.
 
 Superseded generic pathway, sequential, net-zero and cattle-study interfaces are
 not part of the supported runtime API. Reconstruction utilities remain separate
