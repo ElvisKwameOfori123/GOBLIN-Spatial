@@ -27,13 +27,14 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from goblin_spatial.land.context import LAND_CONTEXT_YEAR, read_land_context_table
+from goblin_spatial.land.colm_lpis_context import read_colm_lpis_context
+from goblin_spatial.land.context import LAND_CONTEXT_YEAR, PHYSICAL_AREA_COLUMNS
 from goblin_spatial.land.lpis import add_ed_lpis_context
 from goblin_spatial.land.sc2_colm_direct import (
     COLM_RELEASED_AREA_COLUMNS,
     build_colm_direct_sc2_physical,
 )
-from goblin_spatial.soil import PHYSICAL_AREA_COLUMNS, add_principal_08c_context
+from goblin_spatial.soil import add_principal_08c_context
 
 SC2_CONTEXT_VERSION = "COLM_DIRECT_1.0"
 
@@ -81,10 +82,10 @@ def prepare_sc2_context(
 ) -> pd.DataFrame:
     """Build Colm-direct SC2 from a frozen SC1 ED result.
 
-    ``apply_opportunity_science`` is retained as a compatibility argument for old
-    callers. In the Colm-direct architecture no legacy composite opportunity
-    score is applied. LPIS and other contextual evidence remain explicit columns
-    until an evidence-backed future-use opportunity rule is supplied.
+    ``apply_opportunity_science`` is retained only as a compatibility argument
+    for old callers. The Colm-direct architecture does not apply the legacy
+    composite Opportunity-v2 equations. LPIS and other context remain explicit
+    until a future-use opportunity rule has a documented evidence base.
     """
 
     baseline_year = int(baseline_year)
@@ -109,7 +110,7 @@ def prepare_sc2_context(
         raise ValueError("frozen SC1 release exceeds ED ALL_GRASSLAND capacity")
     release_before = np.maximum(release_before, 0.0)
 
-    context = read_land_context_table(land_context)
+    context = read_colm_lpis_context(land_context)
     out = sc1_ed.copy()
     out["SC2_POTENTIAL_RELEASE_HA"] = release_before
 
