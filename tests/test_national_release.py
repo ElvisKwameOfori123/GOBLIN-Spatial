@@ -68,7 +68,12 @@ def test_principal_release_closes_to_authoritative_national_total_without_soil()
     }
     assert not out["GOBLIN_RELEASE_SOIL_USED"].any()
     assert not out["GOBLIN_RELEASE_08C_USED"].any()
-    assert not any(column.startswith("GOBLIN_RELEASED_G") for column in out.columns)
+    legacy_group_columns = {
+        "GOBLIN_RELEASED_G1_HA",
+        "GOBLIN_RELEASED_G2_HA",
+        "GOBLIN_RELEASED_G3_HA",
+    }
+    assert legacy_group_columns.isdisjoint(out.columns)
 
 
 def test_release_respects_only_ed_all_grassland_capacity() -> None:
@@ -138,6 +143,42 @@ def test_dm_diagnostic_preserves_local_additional_grassland_requirement() -> Non
     assert out["ADDITIONAL_GRASSLAND_REQUIRED_HA"].sum() > 0
     assert out.loc[out["CSOED"].eq("E1"), "ADDITIONAL_GRASSLAND_REQUIRED_HA"].iloc[0] > 0
     assert out["GOBLIN_RELEASED_GRASSLAND_HA"].sum() == pytest.approx(450.0)
+
+
+def test_sc1_release_is_invariant_to_soil_and_lpis_columns() -> None:
+    """Changing downstream land evidence must not alter the SC1 release vector."""
+
+    frame = _frame()
+    profiles = {2020: _profile(), 2050: _profile()}
+    reference = allocate_national_goblin_land_release(frame, {2050: 500.0}, profiles)
+
+    contaminated = frame.copy()
+    contaminated["GOBLIN_SOIL_G1_SHARE"] = [0.0, 1.0]
+    contaminated["GOBLIN_SOIL_G2_SHARE"] = [1.0, 0.0]
+    contaminated["GOBLIN_SOIL_G3_SHARE"] = [0.0, 0.0]
+    contaminated["IFS_MAP_DEEP_WELL_DRAINED_HA"] = [1.0e9, 0.0]
+    contaminated["IFS_MAP_PEAT_HA"] = [0.0, 1.0e9]
+    contaminated["LPIS_CLAIMED_GRASS_HA"] = [0.0, 1.0e9]
+    contaminated["LPIS_FORESTRY_CONTEXT_HA"] = [1.0e9, 0.0]
+
+    changed = allocate_national_goblin_land_release(
+        contaminated,
+        {2050: 500.0},
+        profiles,
+    )
+
+    assert np.array_equal(
+        reference["GOBLIN_RELEASED_GRASSLAND_HA"].to_numpy(float),
+        changed["GOBLIN_RELEASED_GRASSLAND_HA"].to_numpy(float),
+    )
+    assert np.array_equal(
+        reference["GOBLIN_RELEASED_DAIRY_LAND_HA"].to_numpy(float),
+        changed["GOBLIN_RELEASED_DAIRY_LAND_HA"].to_numpy(float),
+    )
+    assert np.array_equal(
+        reference["GOBLIN_RELEASED_BEEF_LAND_HA"].to_numpy(float),
+        changed["GOBLIN_RELEASED_BEEF_LAND_HA"].to_numpy(float),
+    )
 
 
 def test_targets_must_match_milestones_and_cannot_fall() -> None:
