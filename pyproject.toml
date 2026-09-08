@@ -20,6 +20,14 @@ dependencies = [
 [project.optional-dependencies]
 geo = ["geopandas>=0.14", "shapely>=2.0", "pyogrio>=0.7", "pyarrow>=14"]
 scenario = ["scipy>=1.10"]
+reporting = [
+  "pyarrow>=14",
+  "geopandas>=0.14",
+  "shapely>=2.0",
+  "pyogrio>=0.7",
+  "matplotlib>=3.8"
+]
+query = ["duckdb>=1.0"]
 goblin = [
   "cattle_lca==0.3.1",
   "sheep_lca==0.3.1",
@@ -31,6 +39,7 @@ goblin = [
 [project.scripts]
 goblin-spatial = "goblin_spatial.cli:main"
 goblin-spatial-principal = "goblin_spatial.principal_cli:main"
+goblin-spatial-report-data = "goblin_spatial.reporting.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
