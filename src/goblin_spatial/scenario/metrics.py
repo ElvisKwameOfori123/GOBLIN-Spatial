@@ -9,6 +9,12 @@ endpoint composition shifts even while the national pathway contracts.
 Distributional loss/reduction metrics therefore use positive-part quantities
 and report gains/expansion separately rather than forcing signed values into
 non-negative concentration statistics.
+
+The authoritative parent GOBLIN released-land control and the independent
+pasture-DM land balance are reported separately. The DM balance is signed:
+positive values indicate lower implied livestock grassland requirement, while
+negative values indicate additional grassland requirement. Neither diagnostic
+is rescaled to make it equal the parent GOBLIN land control.
 """
 
 from __future__ import annotations
@@ -81,19 +87,17 @@ def add_sc1_ed_metrics(frame: pd.DataFrame) -> pd.DataFrame:
         out["SO_LIVESTOCK_GAIN_2020_EUR"] = np.maximum(-exposure, 0.0)
 
     if "CUMULATIVE_REDUCTION_TOTAL_CATTLE" in out.columns:
-        # Endpoint state defines this signed quantity as baseline minus scenario.
-        # A negative value is therefore a legitimate local expansion, not an
-        # invalid national-pathway result. Keep reduction and expansion as
-        # separate non-negative reporting quantities.
         signed_reduction = _numeric(out, "CUMULATIVE_REDUCTION_TOTAL_CATTLE")
         out["TOTAL_CATTLE_REDUCTION_HEAD"] = np.maximum(signed_reduction, 0.0)
         out["TOTAL_CATTLE_EXPANSION_HEAD"] = np.maximum(-signed_reduction, 0.0)
 
     if "AGRICULTURAL_HOLDINGS" in out.columns:
-        holdings = pd.to_numeric(out["AGRICULTURAL_HOLDINGS"], errors="coerce").to_numpy(dtype=float)
+        holdings = pd.to_numeric(
+            out["AGRICULTURAL_HOLDINGS"], errors="coerce"
+        ).to_numpy(dtype=float)
         valid_holdings = np.isfinite(holdings) & (holdings > 0)
         if "SO_LIVESTOCK_GROSS_LOSS_2020_EUR" in out.columns:
-            gross_loss = out["SO_LIVESTOCK_GROSS_LOSS_2020_EUR"].to_numpy(dtype=float)
+            gross_loss = out["SO_LIVESTOCK_GROSS_LOSS_2020_EUR"].to_numpy(float)
             out["SO_LIVESTOCK_GROSS_LOSS_PER_HOLDING_2020_EUR"] = np.divide(
                 gross_loss,
                 holdings,
@@ -101,7 +105,7 @@ def add_sc1_ed_metrics(frame: pd.DataFrame) -> pd.DataFrame:
                 where=valid_holdings,
             )
         if "TOTAL_CATTLE_REDUCTION_HEAD" in out.columns:
-            cattle = out["TOTAL_CATTLE_REDUCTION_HEAD"].to_numpy(dtype=float)
+            cattle = out["TOTAL_CATTLE_REDUCTION_HEAD"].to_numpy(float)
             out["TOTAL_CATTLE_REDUCTION_PER_HOLDING"] = np.divide(
                 cattle,
                 holdings,
@@ -109,7 +113,7 @@ def add_sc1_ed_metrics(frame: pd.DataFrame) -> pd.DataFrame:
                 where=valid_holdings,
             )
         if "TOTAL_CATTLE_EXPANSION_HEAD" in out.columns:
-            cattle = out["TOTAL_CATTLE_EXPANSION_HEAD"].to_numpy(dtype=float)
+            cattle = out["TOTAL_CATTLE_EXPANSION_HEAD"].to_numpy(float)
             out["TOTAL_CATTLE_EXPANSION_PER_HOLDING"] = np.divide(
                 cattle,
                 holdings,
@@ -133,11 +137,47 @@ def add_sc1_ed_metrics(frame: pd.DataFrame) -> pd.DataFrame:
                 where=grass > 0,
             )
 
+    dm_columns = {
+        "SIGNED_GRASSLAND_BALANCE_HA",
+        "POTENTIAL_SPARED_GRASSLAND_HA",
+        "ADDITIONAL_GRASSLAND_REQUIRED_HA",
+    }
+    if dm_columns.issubset(out.columns):
+        signed = _numeric(out, "SIGNED_GRASSLAND_BALANCE_HA")
+        spared = _numeric(out, "POTENTIAL_SPARED_GRASSLAND_HA")
+        additional = _numeric(out, "ADDITIONAL_GRASSLAND_REQUIRED_HA")
+        if (spared < -1e-9).any() or (additional < -1e-9).any():
+            raise ValueError("DM grassland positive-part diagnostics cannot be negative")
+        spared = np.maximum(spared, 0.0)
+        additional = np.maximum(additional, 0.0)
+        if not np.allclose(signed, spared - additional, atol=1e-8):
+            raise ValueError("DM grassland diagnostic identity does not close")
+        out["DM_DIAGNOSTIC_SPATIAL_MOVEMENT_HA"] = spared + additional
+
+        if "ALL_GRASSLAND" in out.columns:
+            grass = _numeric(out, "ALL_GRASSLAND")
+            out["DM_DIAGNOSTIC_POTENTIAL_RELEASE_PCT_OF_BASE"] = np.divide(
+                100.0 * spared,
+                grass,
+                out=np.zeros(len(out), dtype=float),
+                where=grass > 0,
+            )
+            out["DM_DIAGNOSTIC_ADDITIONAL_REQUIRED_PCT_OF_BASE"] = np.divide(
+                100.0 * additional,
+                grass,
+                out=np.zeros(len(out), dtype=float),
+                where=grass > 0,
+            )
+
     share_columns = {
         "SO_LIVESTOCK_GROSS_LOSS_2020_EUR": "SO_GROSS_LOSS_SHARE_NATIONAL",
         "TOTAL_CATTLE_REDUCTION_HEAD": "TOTAL_CATTLE_REDUCTION_SHARE_NATIONAL",
         "TOTAL_CATTLE_EXPANSION_HEAD": "TOTAL_CATTLE_EXPANSION_SHARE_NATIONAL",
         "GOBLIN_RELEASED_GRASSLAND_HA": "RELEASED_GRASSLAND_SHARE_NATIONAL",
+        "POTENTIAL_SPARED_GRASSLAND_HA": "DM_POTENTIAL_RELEASE_SHARE_NATIONAL",
+        "ADDITIONAL_GRASSLAND_REQUIRED_HA": "DM_ADDITIONAL_REQUIRED_SHARE_NATIONAL",
+        "DM_DIAGNOSTIC_SPATIAL_MOVEMENT_HA": "DM_SPATIAL_MOVEMENT_SHARE_NATIONAL",
+        "GOBLIN_RELEASE_FALLBACK_HA": "GOBLIN_RELEASE_FALLBACK_SHARE_NATIONAL",
     }
     for source, destination in share_columns.items():
         if source not in out.columns:
@@ -164,12 +204,20 @@ def build_sc1_national_metrics(frame: pd.DataFrame) -> pd.DataFrame:
             row[destination] = str(out[source].iloc[0])
             break
     if "PATHWAY_BASELINE_YEAR" in out.columns:
-        row["RUN_START_YEAR"] = int(pd.to_numeric(out["PATHWAY_BASELINE_YEAR"], errors="raise").iloc[0])
+        row["RUN_START_YEAR"] = int(
+            pd.to_numeric(out["PATHWAY_BASELINE_YEAR"], errors="raise").iloc[0]
+        )
     elif "SCENARIO_BASELINE_YEAR" in out.columns:
-        row["RUN_START_YEAR"] = int(pd.to_numeric(out["SCENARIO_BASELINE_YEAR"], errors="raise").iloc[0])
+        row["RUN_START_YEAR"] = int(
+            pd.to_numeric(out["SCENARIO_BASELINE_YEAR"], errors="raise").iloc[0]
+        )
     if "MILESTONE_YEAR" in out.columns:
-        row["TARGET_YEAR"] = int(pd.to_numeric(out["MILESTONE_YEAR"], errors="raise").iloc[0])
-    row["ED_COUNT"] = int(out["CSOED"].nunique()) if "CSOED" in out.columns else int(len(out))
+        row["TARGET_YEAR"] = int(
+            pd.to_numeric(out["MILESTONE_YEAR"], errors="raise").iloc[0]
+        )
+    row["ED_COUNT"] = (
+        int(out["CSOED"].nunique()) if "CSOED" in out.columns else int(len(out))
+    )
 
     sum_columns = {
         "BASE_DAIRY_COW": "BASE_DAIRY_COWS",
@@ -178,8 +226,6 @@ def build_sc1_national_metrics(frame: pd.DataFrame) -> pd.DataFrame:
         "SCENARIO_OTHER_COW": "SCENARIO_SUCKLER_COWS",
         "BASE_TOTAL_CATTLE": "BASE_TOTAL_CATTLE",
         "SCENARIO_TOTAL_CATTLE": "SCENARIO_TOTAL_CATTLE",
-        # Preserve the historical national field as the signed/net national
-        # reduction while adding explicit gross spatial-incidence quantities.
         "CUMULATIVE_REDUCTION_TOTAL_CATTLE": "TOTAL_CATTLE_REDUCTION_HEAD",
         "TOTAL_CATTLE_REDUCTION_HEAD": "GROSS_TOTAL_CATTLE_REDUCTION_HEAD",
         "TOTAL_CATTLE_EXPANSION_HEAD": "GROSS_TOTAL_CATTLE_EXPANSION_HEAD",
@@ -189,13 +235,49 @@ def build_sc1_national_metrics(frame: pd.DataFrame) -> pd.DataFrame:
         "SO_LIVESTOCK_GROSS_LOSS_2020_EUR": "GROSS_SO_LIVESTOCK_LOSS_2020_EUR",
         "SO_LIVESTOCK_GAIN_2020_EUR": "GROSS_SO_LIVESTOCK_GAIN_2020_EUR",
         "GOBLIN_RELEASED_GRASSLAND_HA": "GOBLIN_RELEASED_GRASSLAND_HA",
+        "SIGNED_GRASSLAND_BALANCE_HA": "DM_DIAGNOSTIC_NET_LAND_RELEASE_HA",
+        "POTENTIAL_SPARED_GRASSLAND_HA": "DM_DIAGNOSTIC_GROSS_POTENTIAL_RELEASE_HA",
+        "ADDITIONAL_GRASSLAND_REQUIRED_HA": "DM_DIAGNOSTIC_GROSS_ADDITIONAL_REQUIRED_HA",
+        "DM_DIAGNOSTIC_SPATIAL_MOVEMENT_HA": "DM_DIAGNOSTIC_GROSS_SPATIAL_MOVEMENT_HA",
+        "GOBLIN_RELEASE_FALLBACK_HA": "GOBLIN_RELEASE_FALLBACK_HA",
     }
     for column, name in sum_columns.items():
         if column in out.columns:
             row[name] = float(pd.to_numeric(out[column], errors="raise").sum())
+
     if "CUMULATIVE_REDUCTION_TOTAL_CATTLE" in out.columns:
         row["NET_TOTAL_CATTLE_REDUCTION_HEAD"] = float(
-            pd.to_numeric(out["CUMULATIVE_REDUCTION_TOTAL_CATTLE"], errors="raise").sum()
+            pd.to_numeric(
+                out["CUMULATIVE_REDUCTION_TOTAL_CATTLE"], errors="raise"
+            ).sum()
+        )
+
+    if {
+        "GOBLIN_RELEASED_GRASSLAND_HA",
+        "DM_DIAGNOSTIC_NET_LAND_RELEASE_HA",
+    }.issubset(row):
+        row["GOBLIN_MINUS_DM_DIAGNOSTIC_NET_RELEASE_HA"] = (
+            float(row["GOBLIN_RELEASED_GRASSLAND_HA"])
+            - float(row["DM_DIAGNOSTIC_NET_LAND_RELEASE_HA"])
+        )
+
+    if "DM_DIAGNOSTIC_NET_LAND_RELEASE_HA" in row:
+        net = float(row["DM_DIAGNOSTIC_NET_LAND_RELEASE_HA"])
+        gross_movement = float(
+            row.get("DM_DIAGNOSTIC_GROSS_SPATIAL_MOVEMENT_HA", 0.0)
+        )
+        row["DM_DIAGNOSTIC_GROSS_MOVEMENT_TO_ABS_NET_RATIO"] = (
+            gross_movement / abs(net) if abs(net) > 1e-12 else np.nan
+        )
+
+    if "GOBLIN_RELEASE_FALLBACK_HA" in row:
+        fallback = float(row["GOBLIN_RELEASE_FALLBACK_HA"])
+        release = float(row.get("GOBLIN_RELEASED_GRASSLAND_HA", 0.0))
+        row["GOBLIN_RELEASE_FALLBACK_SHARE"] = (
+            fallback / release if release > 1e-12 else 0.0
+        )
+        row["EDS_WITH_RELEASE_FALLBACK"] = int(
+            (_numeric(out, "GOBLIN_RELEASE_FALLBACK_HA") > 1e-9).sum()
         )
 
     if "BASE_SO_LIVESTOCK_2020_EUR" in out.columns:
@@ -203,7 +285,9 @@ def build_sc1_national_metrics(frame: pd.DataFrame) -> pd.DataFrame:
         scenario_so = np.maximum(_numeric(out, "SCENARIO_SO_LIVESTOCK_2020_EUR"), 0.0)
         row["GINI_BASE_SO_LIVESTOCK"] = gini(base_so)
         row["GINI_SCENARIO_SO_LIVESTOCK"] = gini(scenario_so)
-        row["DELTA_GINI_SO_LIVESTOCK"] = row["GINI_SCENARIO_SO_LIVESTOCK"] - row["GINI_BASE_SO_LIVESTOCK"]
+        row["DELTA_GINI_SO_LIVESTOCK"] = (
+            row["GINI_SCENARIO_SO_LIVESTOCK"] - row["GINI_BASE_SO_LIVESTOCK"]
+        )
 
     diagnostic_vectors = {
         "SO_LOSS": "SO_LIVESTOCK_GROSS_LOSS_2020_EUR",
@@ -211,6 +295,10 @@ def build_sc1_national_metrics(frame: pd.DataFrame) -> pd.DataFrame:
         "TOTAL_CATTLE_EXPANSION": "TOTAL_CATTLE_EXPANSION_HEAD",
         "ADULT_CATTLE_REDUCTION": "REDUCTION_ADULT_COWS",
         "RELEASED_GRASSLAND": "GOBLIN_RELEASED_GRASSLAND_HA",
+        "DM_POTENTIAL_RELEASE": "POTENTIAL_SPARED_GRASSLAND_HA",
+        "DM_ADDITIONAL_GRASSLAND": "ADDITIONAL_GRASSLAND_REQUIRED_HA",
+        "DM_SPATIAL_MOVEMENT": "DM_DIAGNOSTIC_SPATIAL_MOVEMENT_HA",
+        "RELEASE_FALLBACK": "GOBLIN_RELEASE_FALLBACK_HA",
     }
     for label, column in diagnostic_vectors.items():
         if column not in out.columns:
@@ -232,11 +320,31 @@ def build_sc1_national_metrics(frame: pd.DataFrame) -> pd.DataFrame:
         row["EDS_WITH_SO_GAIN"] = int((exposure < -1e-9).sum())
         row["EDS_WITH_NO_MATERIAL_SO_CHANGE"] = int((np.abs(exposure) <= 1e-9).sum())
 
+    if "ADDITIONAL_GRASSLAND_REQUIRED_HA" in out.columns:
+        additional = _numeric(out, "ADDITIONAL_GRASSLAND_REQUIRED_HA")
+        additional_mask = additional > 1e-9
+        row["EDS_WITH_ADDITIONAL_GRASSLAND_REQUIREMENT"] = int(
+            additional_mask.sum()
+        )
+        if "TOTAL_CATTLE_EXPANSION_HEAD" in out.columns:
+            expansion = _numeric(out, "TOTAL_CATTLE_EXPANSION_HEAD") > 1e-9
+            row["EDS_WITH_BOTH_ADDITIONAL_GRASSLAND_AND_CATTLE_EXPANSION"] = int(
+                (additional_mask & expansion).sum()
+            )
+        if {"BASE_DAIRY_COW", "SCENARIO_DAIRY_COW"}.issubset(out.columns):
+            dairy_expansion = (
+                _numeric(out, "SCENARIO_DAIRY_COW")
+                > _numeric(out, "BASE_DAIRY_COW") + 1e-9
+            )
+            row["EDS_WITH_BOTH_ADDITIONAL_GRASSLAND_AND_DAIRY_EXPANSION"] = int(
+                (additional_mask & dairy_expansion).sum()
+            )
+
     return pd.DataFrame([row])
 
 
 def build_sc1_county_summary(frame: pd.DataFrame) -> pd.DataFrame:
-    """Aggregate SC1 physical and SO exposure incidence to county level."""
+    """Aggregate SC1 physical, SO and land-pressure incidence to county level."""
 
     if "County" not in frame.columns:
         raise ValueError("SC1 county summary requires County")
@@ -258,16 +366,34 @@ def build_sc1_county_summary(frame: pd.DataFrame) -> pd.DataFrame:
             "SO_LIVESTOCK_GROSS_LOSS_2020_EUR",
             "SO_LIVESTOCK_GAIN_2020_EUR",
             "GOBLIN_RELEASED_GRASSLAND_HA",
+            "SIGNED_GRASSLAND_BALANCE_HA",
+            "POTENTIAL_SPARED_GRASSLAND_HA",
+            "ADDITIONAL_GRASSLAND_REQUIRED_HA",
+            "DM_DIAGNOSTIC_SPATIAL_MOVEMENT_HA",
+            "GOBLIN_RELEASE_FALLBACK_HA",
             "AGRICULTURAL_HOLDINGS",
             "ALL_GRASSLAND",
         )
         if column in out.columns
     ]
     summary = out.groupby("County", as_index=False)[value_columns].sum(numeric_only=True)
-    summary["ED_COUNT"] = out.groupby("County")["CSOED"].nunique().reindex(summary["County"]).to_numpy()
+    summary["ED_COUNT"] = (
+        out.groupby("County")["CSOED"]
+        .nunique()
+        .reindex(summary["County"])
+        .to_numpy()
+    )
     if {"BASE_TOTAL_CATTLE", "SCENARIO_TOTAL_CATTLE"}.issubset(summary.columns):
         summary["NET_TOTAL_CATTLE_REDUCTION_HEAD"] = (
             summary["BASE_TOTAL_CATTLE"] - summary["SCENARIO_TOTAL_CATTLE"]
+        )
+    if {
+        "GOBLIN_RELEASED_GRASSLAND_HA",
+        "SIGNED_GRASSLAND_BALANCE_HA",
+    }.issubset(summary.columns):
+        summary["GOBLIN_MINUS_DM_DIAGNOSTIC_NET_RELEASE_HA"] = (
+            summary["GOBLIN_RELEASED_GRASSLAND_HA"]
+            - summary["SIGNED_GRASSLAND_BALANCE_HA"]
         )
 
     for source, destination in (
@@ -275,6 +401,9 @@ def build_sc1_county_summary(frame: pd.DataFrame) -> pd.DataFrame:
         ("TOTAL_CATTLE_REDUCTION_HEAD", "COUNTY_SHARE_NATIONAL_CATTLE_REDUCTION"),
         ("TOTAL_CATTLE_EXPANSION_HEAD", "COUNTY_SHARE_NATIONAL_CATTLE_EXPANSION"),
         ("GOBLIN_RELEASED_GRASSLAND_HA", "COUNTY_SHARE_NATIONAL_RELEASED_GRASSLAND"),
+        ("POTENTIAL_SPARED_GRASSLAND_HA", "COUNTY_SHARE_NATIONAL_DM_POTENTIAL_RELEASE"),
+        ("ADDITIONAL_GRASSLAND_REQUIRED_HA", "COUNTY_SHARE_NATIONAL_DM_ADDITIONAL_REQUIRED"),
+        ("GOBLIN_RELEASE_FALLBACK_HA", "COUNTY_SHARE_NATIONAL_RELEASE_FALLBACK"),
     ):
         if source not in summary.columns:
             continue
