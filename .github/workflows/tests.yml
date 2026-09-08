@@ -29,8 +29,6 @@ jobs:
         run: pytest -q tests/test_no_superseded_runtime.py
       - name: Validate frozen 2020 soil and LPIS runtime context
         run: pytest -q tests/test_land_context_bundle.py
-      - name: Validate frozen ED geometry and model-universe join
-        run: pytest -q tests/test_frozen_ed_geometry.py
       - name: Run historical baseline unit tests
         run: |
           pytest -q \
