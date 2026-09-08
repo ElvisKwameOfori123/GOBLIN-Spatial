@@ -1,15 +1,14 @@
-"""Supported land API for the validated baseline and principal SC1-SC3 workflow.
+"""Supported land API for the Colm-direct GOBLIN-Spatial workflow.
 
-The production land framework is intentionally separated into three roles:
+The active scientific chain is:
 
 * historical land/farm-structure reconstruction;
-* one frozen 2020 ED land context used as neutral spatial evidence;
-* downstream SC2 opportunity/eligibility and SC3 target allocation.
+* soil-independent SC1 livestock transition and released-land geography;
+* Colm physical-soil + LPIS SC2 resource characterisation and eligibility;
+* SC3 joint target feasibility on finite ED x Colm-soil resource cells.
 
-Potential release, opportunity and realised conversion are distinct quantities.
-The frozen land context never changes livestock allocation. Heavy LPIS, soil and
-geometry reconstruction remains an explicit provenance workflow, not a normal
-scenario dependency.
+Legacy 08B/G1-G2-G3 helpers remain importable only for benchmark/provenance work
+and are not part of the Colm-direct production decision chain.
 """
 
 from .panel import add_land
@@ -23,50 +22,65 @@ from .context import (
     reconstruct_land_context_bytes,
     validate_land_context,
 )
+from .colm_lpis_context import read_colm_lpis_context
+from .colm_rules import load_colm_eligibility_control
 from .context_attach import add_frozen_08b_context
 from .lpis import add_ed_lpis_context, read_ed_lpis_profile
 from .lpis_spatial import build_ed_lpis_profile
-from .sc2_context import (
-    SC1_SOIL_RELEASE_COLUMNS,
-    SC2_SOIL_RELEASE_COLUMNS,
-    prepare_sc2_context,
+from .rewetting_capacity import (
+    attach_rewetting_capacity,
+    load_rewetting_capacity_control,
 )
-from .sc2_opportunity import (
-    SC2_VERSION as SC2_OPPORTUNITY_VERSION,
-    build_sc2_opportunity,
+from .sc2_colm_direct import (
+    COLM_PHYSICAL_CATEGORIES,
+    COLM_RELEASED_AREA_COLUMNS,
+    COLM_STAGE_A_USES,
+    add_colm_direct_eligibility,
+    add_colm_released_soil_resource,
+    build_colm_direct_sc2_physical,
+    validate_colm_eligibility_rules,
 )
-from .sc3_allocation import (
-    NATIONAL_DRAINED_ORGANIC_GRASSLAND_HA,
+from .sc2_context import SC2_CONTEXT_VERSION, prepare_sc2_context
+from .sc3_colm_allocation import (
     REWETTING_USE,
+    SC3_COLM_VERSION,
     SC3_USES,
     STAGE_A_USES,
-    allocate_sc3_targets,
-    summarise_sc3_allocation,
+    allocate_colm_sc3_targets,
+    summarise_colm_sc3_allocation,
 )
 
 __all__ = [
+    "COLM_PHYSICAL_CATEGORIES",
+    "COLM_RELEASED_AREA_COLUMNS",
+    "COLM_STAGE_A_USES",
     "LAND_CONTEXT_CANONICAL_SHA256",
     "LAND_CONTEXT_EXPECTED_COLUMNS",
     "LAND_CONTEXT_EXPECTED_EDS",
     "LAND_CONTEXT_YEAR",
-    "NATIONAL_DRAINED_ORGANIC_GRASSLAND_HA",
     "REWETTING_USE",
-    "SC1_SOIL_RELEASE_COLUMNS",
-    "SC2_OPPORTUNITY_VERSION",
-    "SC2_SOIL_RELEASE_COLUMNS",
+    "SC2_CONTEXT_VERSION",
+    "SC3_COLM_VERSION",
     "SC3_USES",
     "STAGE_A_USES",
+    "add_colm_direct_eligibility",
+    "add_colm_released_soil_resource",
     "add_ed_lpis_context",
     "add_frozen_08b_context",
     "add_land",
-    "allocate_sc3_targets",
+    "allocate_colm_sc3_targets",
+    "attach_rewetting_capacity",
+    "build_colm_direct_sc2_physical",
     "build_ed_lpis_profile",
-    "build_sc2_opportunity",
     "land_context_sha256",
+    "load_colm_eligibility_control",
+    "load_rewetting_capacity_control",
     "prepare_sc2_context",
+    "read_colm_lpis_context",
     "read_ed_lpis_profile",
     "read_land_context_table",
     "reconstruct_land_context_bytes",
-    "summarise_sc3_allocation",
+    "summarise_colm_sc3_allocation",
+    "validate_colm_eligibility_rules",
     "validate_land_context",
 ]
