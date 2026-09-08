@@ -27,16 +27,18 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from goblin_spatial.land.colm_lpis_context import read_colm_lpis_context
+from goblin_spatial.land.colm_lpis_context import (
+    attach_colm_physical_context,
+    read_colm_lpis_context,
+)
 from goblin_spatial.land.context import LAND_CONTEXT_YEAR, PHYSICAL_AREA_COLUMNS
 from goblin_spatial.land.lpis import add_ed_lpis_context
 from goblin_spatial.land.sc2_colm_direct import (
     COLM_RELEASED_AREA_COLUMNS,
     build_colm_direct_sc2_physical,
 )
-from goblin_spatial.soil import add_principal_08c_context
 
-SC2_CONTEXT_VERSION = "COLM_DIRECT_1.0"
+SC2_CONTEXT_VERSION = "COLM_DIRECT_1.1"
 
 
 def _numeric(frame: pd.DataFrame, column: str) -> np.ndarray:
@@ -129,11 +131,11 @@ def prepare_sc2_context(
     if not lpis_year.eq(LAND_CONTEXT_YEAR).all():
         raise AssertionError("SC2 LPIS context does not match the frozen 2020 runtime")
 
-    # Colm physical soil is the principal physical-resource evidence. Only the
-    # seven mapped physical-area fields are supplied to the helper. Legacy 08B
-    # agricultural capability is deliberately excluded from the new chain.
+    # Colm physical soil is attached directly as its seven mapped categories.
+    # Do not call the legacy 08C helper here because that helper additionally
+    # derives synthetic SG1/SG2/SG3 classes and a farmed-peat fraction.
     physical_context = context[["CSOED", *PHYSICAL_AREA_COLUMNS]].copy()
-    out = add_principal_08c_context(out, physical_context)
+    out = attach_colm_physical_context(out, physical_context)
 
     out = build_colm_direct_sc2_physical(
         out,
@@ -167,6 +169,8 @@ def prepare_sc2_context(
     out["SC2_LAND_CONTEXT_YEAR"] = LAND_CONTEXT_YEAR
     out["SC2_LAND_CONTEXT_ROLE"] = "COLM_PHYSICAL_SOIL_PLUS_LPIS_BASELINE_EVIDENCE"
     out["SC2_G1_G2_G3_USED"] = False
+    out["SC2_SYNTHETIC_SOIL_GROUPS_USED"] = False
+    out["SC2_FARMED_PEAT_FRACTION_ASSUMPTION_USED"] = False
     out["SC2_OPPORTUNITY_STATUS"] = "CONTEXT_EVIDENCE_ONLY_NO_ARBITRARY_COMPOSITE"
     out["SC2_REWETTING_CAPACITY_STATUS"] = (
         "NOT_DERIVED_FROM_SOIL_ALONE_REQUIRES_VALIDATED_DRAINED_ORGANIC_AG_EVIDENCE"
