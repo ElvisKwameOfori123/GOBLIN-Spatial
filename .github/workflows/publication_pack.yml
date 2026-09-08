@@ -21,7 +21,7 @@ jobs:
       - name: Install package
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[geo,goblin,scenario,reporting]"
+          pip install -e ".[geo,goblin,scenario,reporting,query]"
       - name: Verify frozen runtime inputs
         run: goblin-spatial fetch-data --verify-only
       - name: Build canonical historical baseline once
@@ -31,6 +31,9 @@ jobs:
           python scripts/run_publication_pack.py \
             --clean \
             --n-flex-alternatives 8
+      - name: Finalize queryable reporting and figure-map data
+        run: |
+          python scripts/finalize_publication_reporting.py
       - name: Confirm complete publication pack
         run: |
           python - <<'PY'
@@ -42,6 +45,13 @@ jobs:
           assert manifest["RUN_COUNT"] == 8
           report = json.loads(Path("reporting/report_data/report_data_manifest.json").read_text())
           assert report["RUN_COUNT"] == 8
+          final = json.loads(Path("reporting/query/final_reporting_manifest.json").read_text())
+          assert final["RUN_COUNT"] == 8
+          assert final["PARQUET_CANONICAL"] is True
+          assert final["VALIDATION"]["NATIONAL_TARGET_IDENTITIES"] == "PASS"
+          assert final["VALIDATION"]["POST_SC3_SAME_OUTCOME_VECTOR_FIXED"] == "PASS"
+          assert Path("reporting/query/goblin_spatial_results.duckdb").exists()
+
           inventory = pd.read_csv("reporting/publication/publication_run_inventory.csv")
           assert len(inventory) == 8
           print(inventory[[
@@ -53,6 +63,8 @@ jobs:
           ]].to_string(index=False))
           print("\nSC3 feasibility sensitivity:")
           print(pd.read_csv("reporting/publication/sc3_feasibility_sensitivity.csv").to_string(index=False))
+          print("\nFinal reporting validation:")
+          print(json.dumps(final["VALIDATION"], indent=2))
           PY
       - name: Upload final publication result pack
         uses: actions/upload-artifact@v4
@@ -65,3 +77,6 @@ jobs:
             data/processed/principal/
             reporting/report_data/
             reporting/publication/
+            reporting/figure_data/
+            reporting/map_data/
+            reporting/query/
