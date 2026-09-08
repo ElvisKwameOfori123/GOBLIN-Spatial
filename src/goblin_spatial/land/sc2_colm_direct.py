@@ -1,19 +1,18 @@
-"""Transparent Colm-direct SC2 physical-resource prototype.
-
-This module is intentionally parallel to the frozen production SC2 v3.1 path.
-It does not change SC1, does not derive G1/G2/G3, and does not supply default
-land-use suitability assumptions.
+"""Colm-direct SC2 physical-resource and eligibility contract.
 
 Scientific boundary
 -------------------
 1. SC1 supplies a frozen ED released-land vector.
 2. Colm mapped physical-soil shares characterise that released-land resource
    proportionally within each ED.
-3. Optional use-specific eligibility coefficients may be supplied through an
-   explicit, complete and versioned rule table. No coefficient is inferred or
-   defaulted by this module.
+3. LPIS and other downstream evidence may provide agricultural-use context but
+   cannot change the frozen SC1 release.
+4. Optional use-specific soil eligibility coefficients must be explicit,
+   complete, versioned and evidence-backed. No coefficient is inferred here.
+5. Rewetting is deliberately excluded from generic soil-only eligibility because
+   mapped peat is not equivalent to drained agricultural organic soil.
 
-``PotentialRelease != PhysicalResource != Eligibility != RealisedConversion``.
+``PotentialRelease != PhysicalResource != Eligibility != Opportunity != RealisedConversion``.
 """
 
 from __future__ import annotations
@@ -39,6 +38,14 @@ COLM_PHYSICAL_SHARE_COLUMNS = tuple(
 COLM_RELEASED_AREA_COLUMNS = tuple(
     f"COLM_RELEASED_{category}_HA" for category in COLM_PHYSICAL_CATEGORIES
 )
+COLM_STAGE_A_USES = (
+    "AD_GRASS",
+    "BIOREFINERY_GRASS",
+    "WILLOW",
+    "ADDITIONAL_TILLAGE",
+    "FOREST",
+)
+SOIL_ONLY_FORBIDDEN_USES = {"REWETTING"}
 
 
 def _numeric(frame: pd.DataFrame, column: str) -> np.ndarray:
@@ -57,8 +64,10 @@ def add_colm_released_soil_resource(
 ) -> pd.DataFrame:
     """Characterise frozen ED release using Colm physical-soil shares.
 
-    The result is a proportional within-ED representation of the released-land
-    resource. It is not a claim that exact released parcels have been observed.
+    This is a proportional within-ED physical-resource attribution. It does not
+    identify the actual parcel or exact soil provenance of future livestock
+    contraction. The seven resource quantities must close exactly to the frozen
+    SC1 released-land budget in every ED.
     """
 
     out = frame.copy()
@@ -81,7 +90,7 @@ def add_colm_released_soil_resource(
     ).to_numpy(float)
     if (~np.isfinite(shares)).any() or (shares < -1e-10).any():
         raise ValueError("Colm physical-soil shares contain invalid values")
-    closure = np.max(np.abs(shares.sum(axis=1) - 1.0))
+    closure = float(np.max(np.abs(shares.sum(axis=1) - 1.0)))
     if closure > 1e-8:
         raise ValueError(
             f"Colm physical-soil shares do not close to one; max error={closure:.3e}"
@@ -89,10 +98,10 @@ def add_colm_released_soil_resource(
     shares = np.clip(shares, 0.0, 1.0)
 
     released = release[:, None] * shares
-    for idx, column in enumerate(COLM_RELEASED_AREA_COLUMNS):
-        out[column] = released[:, idx]
+    for index, column in enumerate(COLM_RELEASED_AREA_COLUMNS):
+        out[column] = released[:, index]
 
-    release_error = np.max(np.abs(released.sum(axis=1) - release))
+    release_error = float(np.max(np.abs(released.sum(axis=1) - release)))
     if release_error > 1e-7:
         raise AssertionError(
             f"Colm released-soil partition does not close; max error={release_error:.3e}"
@@ -110,28 +119,45 @@ def add_colm_released_soil_resource(
     return out
 
 
-def _validate_rule_mapping(
+def validate_colm_eligibility_rules(
     rules: Mapping[str, Mapping[str, float]],
+    *,
+    allowed_uses: tuple[str, ...] | None = None,
 ) -> dict[str, dict[str, float]]:
+    """Validate complete explicit use-by-soil eligibility coefficients."""
+
     if not rules:
         raise ValueError("eligibility rules must contain at least one future use")
 
     validated: dict[str, dict[str, float]] = {}
-    expected = set(COLM_PHYSICAL_CATEGORIES)
+    expected_categories = set(COLM_PHYSICAL_CATEGORIES)
+    allowed = None if allowed_uses is None else {str(use).upper() for use in allowed_uses}
+
     for use, coefficients in rules.items():
         use_name = str(use).strip().upper()
         if not use_name:
             raise ValueError("future-use rule names must be non-empty")
+        if use_name in SOIL_ONLY_FORBIDDEN_USES:
+            raise ValueError(
+                "REWETTING cannot be derived from Colm soil coefficients alone; "
+                "supply a separately validated drained-organic agricultural capacity"
+            )
+        if allowed is not None and use_name not in allowed:
+            raise ValueError(
+                f"unsupported Colm-direct future use {use_name!r}; allowed={sorted(allowed)}"
+            )
+
         supplied = {str(key).strip().upper() for key in coefficients}
-        missing = sorted(expected - supplied)
-        extra = sorted(supplied - expected)
+        missing = sorted(expected_categories - supplied)
+        extra = sorted(supplied - expected_categories)
         if missing or extra:
             raise ValueError(
                 f"{use_name} rule must explicitly cover all Colm categories; "
                 f"missing={missing}, extra={extra}"
             )
-        row: dict[str, float] = {}
+
         upper = {str(key).strip().upper(): value for key, value in coefficients.items()}
+        row: dict[str, float] = {}
         for category in COLM_PHYSICAL_CATEGORIES:
             value = float(upper[category])
             if not np.isfinite(value) or value < 0.0 or value > 1.0:
@@ -151,12 +177,11 @@ def add_colm_direct_eligibility(
     evidence_note: str,
     release_column: str = "GOBLIN_RELEASED_GRASSLAND_HA",
 ) -> pd.DataFrame:
-    """Apply explicit Colm-category eligibility coefficients.
+    """Apply explicit Colm-category soil eligibility rules.
 
-    This function deliberately requires a complete coefficient for every Colm
-    category and every future use. It supplies no scientific defaults. The
-    caller must provide a non-empty rule version and evidence note so that any
-    derived eligibility quantity remains auditable.
+    Aggregate eligible hectares are reporting quantities. SC3 should still
+    allocate against the underlying seven shared physical resource cells so the
+    same released hectare cannot be counted for multiple competing future uses.
     """
 
     if not str(rule_version).strip():
@@ -168,7 +193,7 @@ def add_colm_direct_eligibility(
     if not all(column in out.columns for column in COLM_RELEASED_AREA_COLUMNS):
         out = add_colm_released_soil_resource(out, release_column=release_column)
 
-    validated = _validate_rule_mapping(rules)
+    validated = validate_colm_eligibility_rules(rules)
     released = out[list(COLM_RELEASED_AREA_COLUMNS)].apply(
         pd.to_numeric, errors="raise"
     ).to_numpy(float)
@@ -183,7 +208,9 @@ def add_colm_direct_eligibility(
         if (eligible < -1e-9).any() or (eligible - total_release > 1e-7).any():
             raise AssertionError(f"{use} eligibility falls outside released-land budget")
         out[f"COLM_DIRECT_{use}_ELIGIBLE_HA"] = np.clip(
-            eligible, 0.0, total_release
+            eligible,
+            0.0,
+            total_release,
         )
 
     out["COLM_DIRECT_SC2_RULE_STATUS"] = "EXPLICIT_RULES_APPLIED"
@@ -201,12 +228,7 @@ def build_colm_direct_sc2_physical(
     evidence_note: str | None = None,
     release_column: str = "GOBLIN_RELEASED_GRASSLAND_HA",
 ) -> pd.DataFrame:
-    """Build the parallel Colm-direct physical-resource layer.
-
-    With ``rules=None`` this returns only the source-grounded physical-resource
-    characterisation. Passing rules additionally derives use-specific eligible
-    hectares, but only from explicit caller-supplied coefficients.
-    """
+    """Build the Colm-direct physical-resource layer and optional eligibility."""
 
     out = add_colm_released_soil_resource(frame, release_column=release_column)
     if rules is None:
