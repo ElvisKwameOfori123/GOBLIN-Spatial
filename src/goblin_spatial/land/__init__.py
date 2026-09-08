@@ -22,7 +22,11 @@ from .context import (
     reconstruct_land_context_bytes,
     validate_land_context,
 )
-from .colm_lpis_context import read_colm_lpis_context
+from .colm_lpis_context import (
+    COLM_PHYSICAL_SHARE_COLUMNS,
+    attach_colm_physical_context,
+    read_colm_lpis_context,
+)
 from .colm_rules import load_colm_eligibility_control
 from .context_attach import add_frozen_08b_context
 from .lpis import add_ed_lpis_context, read_ed_lpis_profile
@@ -52,6 +56,7 @@ from .sc3_colm_allocation import (
 
 __all__ = [
     "COLM_PHYSICAL_CATEGORIES",
+    "COLM_PHYSICAL_SHARE_COLUMNS",
     "COLM_RELEASED_AREA_COLUMNS",
     "COLM_STAGE_A_USES",
     "LAND_CONTEXT_CANONICAL_SHA256",
@@ -69,6 +74,7 @@ __all__ = [
     "add_frozen_08b_context",
     "add_land",
     "allocate_colm_sc3_targets",
+    "attach_colm_physical_context",
     "attach_rewetting_capacity",
     "build_colm_direct_sc2_physical",
     "build_ed_lpis_profile",
