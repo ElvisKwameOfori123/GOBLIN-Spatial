@@ -4,6 +4,11 @@ This is the supported livestock scenario engine. National GOBLIN controls set
 the endpoint and gross released land; GOBLIN-Spatial resolves their geography
 without introducing a second scenario generator or pathway-specific release
 method.
+
+In the Colm-direct architecture SC1 is deliberately independent of land
+suitability. Colm mapped soil, LPIS and legacy 08B/G1-G2-G3 capability do not
+move livestock and do not constrain the released-land geography. They enter only
+after SC1 has frozen its livestock and ED release vectors.
 """
 
 from __future__ import annotations
@@ -49,14 +54,19 @@ def run_principal_goblin_endpoint(
     control is introduced.
 
     National land release is an authoritative pathway control. When supplied,
-    it is spatialised through the solved livestock state, pasture-DM pressure
-    and frozen 08B capacity. All pathways use the same spatialisation method.
-    Pasture-DM independently calculated spared hectares remain diagnostics and
-    do not replace the national land control.
+    it is spatialised from the solved livestock state and pasture-DM transition,
+    bounded only by the validated ED ``ALL_GRASSLAND`` resource. Soil and LPIS
+    are not SC1 release drivers. Pasture-DM independently calculated spared and
+    additional-required hectares remain diagnostics and do not replace or get
+    rescaled to the parent GOBLIN national land control.
     """
 
     try:
-        rule = allocation_rule if isinstance(allocation_rule, AllocationRule) else AllocationRule(str(allocation_rule))
+        rule = (
+            allocation_rule
+            if isinstance(allocation_rule, AllocationRule)
+            else AllocationRule(str(allocation_rule))
+        )
     except (TypeError, ValueError) as exc:
         supported = tuple(item.value for item in AllocationRule)
         raise ValueError(
