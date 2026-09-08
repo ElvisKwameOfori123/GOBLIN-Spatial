@@ -1,6 +1,6 @@
 """Command-line interface for the validated GOBLIN-Spatial workflow.
 
-The root command exposes the scientific pipeline and the downstream publication
+The root command exposes the scientific pipeline and downstream publication
 layers without mixing their mathematics. A user can stop after baseline, SC1,
 SC2 or SC3, or work only with already-completed results to regenerate reporting,
 figures or maps.
@@ -86,7 +86,7 @@ def _parser() -> argparse.ArgumentParser:
         type=int,
         choices=(2020, 2025),
         default=2020,
-        help="Scenario baseline year. SC2/SC3 currently require 2020.",
+        help="Scenario baseline year. Colm-direct SC2/SC3 currently require 2020.",
     )
     study_parser.add_argument(
         "--allocation-rule",
@@ -104,6 +104,22 @@ def _parser() -> argparse.ArgumentParser:
         ),
     )
     study_parser.add_argument(
+        "--colm-eligibility-rules",
+        default=None,
+        help=(
+            "Versioned evidence-backed Colm soil eligibility control. Optional "
+            "for SC2 and required for SC3."
+        ),
+    )
+    study_parser.add_argument(
+        "--rewetting-capacity",
+        default=None,
+        help=(
+            "Versioned validated ED rewetting-capacity control. Required for SC3 "
+            "whenever the selected pathway has a positive rewetting target."
+        ),
+    )
+    study_parser.add_argument(
         "--output-dir",
         default=None,
         help="Optional principal scenario output directory.",
@@ -113,7 +129,10 @@ def _parser() -> argparse.ArgumentParser:
         "report",
         help="Build the cross-run workbook/SQLite result package from completed principal runs.",
     )
-    report_parser.add_argument("study_root", help="Directory containing completed principal run folders.")
+    report_parser.add_argument(
+        "study_root",
+        help="Directory containing completed principal run folders.",
+    )
     report_parser.add_argument("--output-dir", default=None)
     report_parser.add_argument(
         "--allow-partial",
@@ -130,7 +149,10 @@ def _parser() -> argparse.ArgumentParser:
         "figures",
         help="Generate the eight publication-facing figures from a frozen final SQLite database.",
     )
-    figure_parser.add_argument("database", help="Path to GOBLIN_Spatial_Final_Results.sqlite")
+    figure_parser.add_argument(
+        "database",
+        help="Path to GOBLIN_Spatial_Final_Results.sqlite",
+    )
     figure_parser.add_argument("--output-dir", default=None)
 
     map_parser = sub.add_parser(
@@ -141,8 +163,16 @@ def _parser() -> argparse.ArgumentParser:
         "results",
         help="Final results directory containing GOBLIN_Spatial_Map_Data.csv, or the CSV itself.",
     )
-    map_parser.add_argument("--geometry", default=None, help="Optional ED Shapefile or GeoPackage.")
-    map_parser.add_argument("--geometry-key", default=None, help="Optional ED identifier attribute in the geometry source.")
+    map_parser.add_argument(
+        "--geometry",
+        default=None,
+        help="Optional ED Shapefile or GeoPackage.",
+    )
+    map_parser.add_argument(
+        "--geometry-key",
+        default=None,
+        help="Optional ED identifier attribute in the geometry source.",
+    )
     map_parser.add_argument("--config", default="configs/ireland_2015_2025.yaml")
     map_parser.add_argument("--output-dir", default=None)
     map_parser.add_argument(
@@ -192,8 +222,11 @@ def _run_study(
     allocation_rule: str,
     protection_strength: float,
     output_dir: str | None = None,
+    colm_eligibility_rules: str | None = None,
+    rewetting_capacity: str | None = None,
 ) -> None:
-    """Build the baseline, then delegate to the validated principal stage runner."""
+    """Build the baseline, then delegate to the principal stage runner."""
+
     stage = str(through).lower()
     if stage not in THROUGH_STAGES:
         raise ValueError(f"through must be one of {THROUGH_STAGES}")
@@ -201,8 +234,13 @@ def _run_study(
         raise ValueError("--scenario is required when --through is SC1, SC2 or SC3")
     if stage in {"sc2", "sc3"} and int(baseline_year) != 2020:
         raise ValueError(
-            "SC2/SC3 currently require the frozen 2020 spatial baseline; "
+            "SC2/SC3 currently require the frozen 2020 Colm+LPIS spatial baseline; "
             "2025 is supported for SC1 sensitivity only."
+        )
+    if stage == "sc3" and not colm_eligibility_rules:
+        raise ValueError(
+            "--colm-eligibility-rules is required for SC3; the Colm-direct "
+            "architecture supplies no default suitability assumptions"
         )
 
     cfg = load_config(Path(config_path))
@@ -231,6 +269,10 @@ def _run_study(
     ]
     if output_dir:
         command.extend(["--output-dir", str(output_dir)])
+    if colm_eligibility_rules:
+        command.extend(["--colm-eligibility-rules", str(colm_eligibility_rules)])
+    if rewetting_capacity:
+        command.extend(["--rewetting-capacity", str(rewetting_capacity)])
 
     print(f"Continuing with {scenario} through {stage.upper()} using {allocation_rule}...")
     subprocess.run(command, check=True)
@@ -239,20 +281,21 @@ def _run_study(
 
 def _interactive_study() -> None:
     """Friendly guided workflow for the scientific model stages."""
+
     config_path = "configs/ireland_2015_2025.yaml"
     through = _choose(
         "\nWhat would you like to run?",
         [
             ("1", "Baseline only"),
             ("2", "Baseline + SC1 livestock transition"),
-            ("3", "Baseline + SC1 + SC2 opportunity analysis"),
+            ("3", "Baseline + SC1 + SC2 Colm/LPIS resource analysis"),
             ("4", "Full scientific chain: Baseline + SC1 + SC2 + SC3"),
         ],
     )
     through = {
         "Baseline only": "baseline",
         "Baseline + SC1 livestock transition": "sc1",
-        "Baseline + SC1 + SC2 opportunity analysis": "sc2",
+        "Baseline + SC1 + SC2 Colm/LPIS resource analysis": "sc2",
         "Full scientific chain: Baseline + SC1 + SC2 + SC3": "sc3",
     }[through]
 
@@ -267,18 +310,41 @@ def _interactive_study() -> None:
         )
         return
 
-    scenario_label = _choose("\nChoose a national GOBLIN pathway:", _scenario_options(config_path))
+    scenario_label = _choose(
+        "\nChoose a national GOBLIN pathway:",
+        _scenario_options(config_path),
+    )
     scenario = _scenario_id_from_label(scenario_label)
     allocation_rule = _choose(
         "\nChoose the spatial incidence rule:",
-        [(str(index + 1), policy) for index, policy in enumerate(PRINCIPAL_ALLOCATION_POLICIES)],
+        [
+            (str(index + 1), policy)
+            for index, policy in enumerate(PRINCIPAL_ALLOCATION_POLICIES)
+        ],
     )
 
     if through == "sc1":
-        baseline_year = int(_choose("\nChoose the scenario baseline year:", [("1", "2020"), ("2", "2025")]))
+        baseline_year = int(
+            _choose(
+                "\nChoose the scenario baseline year:",
+                [("1", "2020"), ("2", "2025")],
+            )
+        )
     else:
         baseline_year = 2020
-        print("\nSC2/SC3 use the validated frozen 2020 spatial context.")
+        print("\nSC2/SC3 use the validated frozen 2020 Colm+LPIS context.")
+
+    eligibility = None
+    rewetting = None
+    if through == "sc3":
+        eligibility = input(
+            "Path to the validated Colm eligibility-rule CSV: "
+        ).strip()
+        if not eligibility:
+            raise ValueError("SC3 requires a validated Colm eligibility-rule CSV")
+        rewetting = input(
+            "Path to the validated rewetting-capacity CSV, if required by pathway: "
+        ).strip() or None
 
     _run_study(
         config_path=config_path,
@@ -287,6 +353,8 @@ def _interactive_study() -> None:
         baseline_year=baseline_year,
         allocation_rule=allocation_rule,
         protection_strength=PRINCIPAL_PROTECTION_STRENGTH,
+        colm_eligibility_rules=eligibility,
+        rewetting_capacity=rewetting,
     )
 
 
@@ -319,6 +387,8 @@ def main() -> None:
             allocation_rule=args.allocation_rule,
             protection_strength=args.protection_strength,
             output_dir=args.output_dir,
+            colm_eligibility_rules=args.colm_eligibility_rules,
+            rewetting_capacity=args.rewetting_capacity,
         )
         return
 
@@ -337,7 +407,11 @@ def main() -> None:
 
     if args.command == "figures":
         database = Path(args.database).resolve()
-        out = Path(args.output_dir).resolve() if args.output_dir is not None else database.parent / "paper_figures"
+        out = (
+            Path(args.output_dir).resolve()
+            if args.output_dir is not None
+            else database.parent / "paper_figures"
+        )
         outputs = generate_paper_figures(database, out)
         for label, path in outputs.items():
             print(f"{label}: {path}")
@@ -357,7 +431,3 @@ def main() -> None:
         return
 
     raise ValueError(f"unknown command: {args.command}")
-
-
-if __name__ == "__main__":
-    main()
