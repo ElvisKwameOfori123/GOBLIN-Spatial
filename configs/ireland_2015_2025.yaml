@@ -27,16 +27,22 @@ files:
   standard_output_coefficients: data/controls/standard_output/IFS_SOC2020_IE_model_controls.csv
 
   # PRINCIPAL SCENARIO RUNTIME
-  # One repository-contained neutral 2020 control supplies the final model-ED
-  # 08B agricultural capability, independent 08C physical-soil evidence and
-  # LPIS 2020 context. SC1 uses only 08B. SC2/SC3 use LPIS/08C only after SC1.
+  # SC1 is soil-independent. It starts from the validated livestock/grassland/SO
+  # baseline and uses no 08B, Colm-soil or LPIS suitability input to move the
+  # livestock endpoint or the authoritative GOBLIN released-land quantity.
+  #
+  # SC2/SC3 use only the frozen Colm mapped physical-soil component (08C source)
+  # and LPIS 2020 component from this repository-contained context directory.
+  # The Colm-direct runtime reader deliberately ignores the legacy 08B component.
   land_context_2020: data/controls/land/ED_Land_Context_2020
   scenario_controls: data/controls/scenario/GOBLIN_Scenario_Controls.csv
   pasture_dm_controls: data/controls/pasture/GOBLIN_pasture_dm_2020_fixed.csv
 
-  # OPTIONAL FIRST-PRINCIPLES RECONSTRUCTION / PROVENANCE SOURCES
-  # Principal scenario execution never requires these files and never triggers
-  # their download or geospatial rebuilding automatically.
+  # OPTIONAL LEGACY / FIRST-PRINCIPLES RECONSTRUCTION / PROVENANCE SOURCES
+  # The 08B agricultural-capability representation is retained only as a legacy
+  # benchmark/sensitivity source. It is not part of the Colm-direct SC1-SC3
+  # production decision chain. Principal runs never auto-download or rebuild
+  # heavy spatial source data.
   agricultural_soil_source: data/inputs/spatial/08B_NFS_Agricultural_Soil_Capability.csv
   agricultural_soil_profile: data/controls/soil/ED_GOBLIN_soil_profile.csv.xz
   physical_soil_package: data/inputs/spatial/08C_IFS_Mapped_Physical_Soil_Package.zip

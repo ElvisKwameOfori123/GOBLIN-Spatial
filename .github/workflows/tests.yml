@@ -51,7 +51,7 @@ jobs:
       - name: Run full 2015-2025 historical regression
         run: pytest -q -s tests/test_full_baseline_regression.py
 
-      - name: Run principal scenario unit tests
+      - name: Run principal scenario and Colm-direct unit tests
         run: |
           pytest -q \
             tests/test_cli_study.py \
@@ -64,20 +64,22 @@ jobs:
             tests/test_principal_soil_context.py \
             tests/test_reporting.py \
             tests/test_study_reporting.py \
-            tests/test_paper_figures.py \
             tests/test_map_reporting.py \
             tests/test_publication_visuals.py \
             tests/test_sc1_comparison.py \
             tests/test_sc1_metrics.py \
+            tests/test_sc2_colm_direct.py \
             tests/test_sc2_context.py \
             tests/test_sc3_allocation.py \
+            tests/test_sc3_colm_allocation.py \
+            tests/test_sc3_feasible_geographies.py \
             tests/test_scenario_control_table.py \
             tests/test_scenario_preflight.py
 
       - name: Build canonical historical baseline
         run: goblin-spatial build --config configs/ireland_2015_2025.yaml
 
-      - name: Preflight standalone 2020 principal runtime
+      - name: Preflight standalone Colm-direct 2020 SC2 runtime
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -85,28 +87,36 @@ jobs:
           from goblin_spatial.scenario.preflight import assert_principal_ready
 
           cfg = load_config(Path("configs/ireland_2015_2025.yaml"))
-          report = assert_principal_ready(cfg, baseline_year=2020, stage="SC3")
+          report = assert_principal_ready(cfg, baseline_year=2020, stage="SC2")
           print(report.to_string(index=False))
           PY
 
-      - name: Run end-to-end SC1-SC3 smoke test
+      - name: Run end-to-end soil-independent SC1 smoke test
         run: |
           goblin-spatial-principal SI_SG \
             --baseline-year 2020 \
             --allocation-rule PRORATA \
-            --stage SC3 \
+            --stage SC1 \
             --output-dir data/processed/ci_principal_si_sg
 
-      - name: Build scientific reporting package
+      - name: Run end-to-end Colm plus LPIS SC2 physical-resource smoke test
         run: |
-          goblin-spatial-report data/processed/ci_principal_si_sg
+          goblin-spatial-principal SI_SG \
+            --baseline-year 2020 \
+            --allocation-rule PRORATA \
+            --stage SC2 \
+            --output-dir data/processed/ci_principal_si_sg
 
-      - name: Confirm standalone scenario and reporting outputs
+      - name: Confirm Colm-direct migration outputs
         run: |
           test -f data/processed/ci_principal_si_sg/sc1_ed_results.csv
+          test -f data/processed/ci_principal_si_sg/sc1_national_metrics.csv
+          test -f data/processed/ci_principal_si_sg/sc1_goblin_reconciliation.csv
           test -f data/processed/ci_principal_si_sg/sc2_ed_context.csv
-          test -f data/processed/ci_principal_si_sg/sc3_ed_results.csv
-          test -f data/processed/ci_principal_si_sg/sc3_national_summary.csv
-          test -f data/processed/ci_principal_si_sg/sc3_land_accounting_summary.csv
-          test -f data/processed/ci_principal_si_sg/sc3_scientific_validation.csv
-          test -f data/processed/ci_principal_si_sg/GOBLIN_Spatial_Scientific_Results.xlsx
+
+      - name: Note SC3 and manuscript-reporting promotion gates
+        run: |
+          echo "Real-path SC3 is intentionally not run until evidence-backed Colm eligibility and validated rewetting-capacity controls are supplied."
+          echo "The finite-resource SC3 engine is covered by tests/test_sc3_colm_allocation.py."
+          echo "The same-end-use spatial-flexibility layer is covered by tests/test_sc3_feasible_geographies.py."
+          echo "Paper-figure regeneration remains a separate promotion gate after Colm-direct reporting schemas are finalised."
