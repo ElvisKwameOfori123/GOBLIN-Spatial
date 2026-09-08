@@ -12,35 +12,32 @@ GOBLIN-Spatial does not determine the national future. National livestock endpoi
 
 > **GOBLIN determines the national pathway. GOBLIN-Spatial resolves the geography, incidence and spatial feasibility of that transition.**
 
-GOBLIN-Spatial is therefore a **place-based spatial stress-test of nationally coherent AFOLU pathways**, not a prediction of what individual farms, farmers or parcels will do.
+GOBLIN-Spatial is a **place-based spatial stress-test of nationally coherent AFOLU pathways**, not a prediction of what individual farms, farmers or parcels will do.
 
 ---
 
-## Current migration status
+## Production status
 
-The `colm-direct-production-architecture` branch contains the new scientific architecture described below.
+The Colm-direct SC1–SC3 architecture is the production scientific architecture of GOBLIN-Spatial.
 
-At present:
+The validated 2015–2025 historical reconstruction is retained. The scenario chain is now deliberately separated into three scientific stages:
 
-- the validated 2015–2025 historical baseline is unchanged;
-- SC1 is soil-independent and no longer uses 08B/G1–G3, Colm soil or LPIS to move livestock or released land;
-- SC2 characterises frozen SC1 release directly with the seven Colm physical-soil categories and retains LPIS as separate agricultural context;
-- the generic SC3 shared-resource optimiser is implemented and unit-tested;
-- the optional post-SC3 same-end-use feasible-geography analysis is implemented and tested;
-- production SC3 runs remain scientifically gated until the Stage-A eligibility matrix and rewetting-capacity control are evidence-backed;
-- the legacy 08B/G1–G3 implementation remains on `main` as a benchmark until the Colm-direct migration is fully promoted.
+- **SC1** spatialises the livestock transition and authoritative national livestock-land release without using soil suitability or LPIS to move livestock or released land;
+- **SC2** characterises frozen SC1 release directly using the seven mapped Colm physical-soil categories and retains LPIS as separate agricultural-use context;
+- **SC3** tests the explicit land-use requirements of the same GOBLIN pathway against finite released-land resource cells using complete, versioned, evidence-backed eligibility controls;
+- an optional **post-SC3 spatial-flexibility analysis** holds the realised national hectares of each end use fixed and searches for alternative feasible geographies.
 
-The latest CI on this branch passes the historical regression, Colm-direct unit tests, soil-independent SC1 smoke test and Colm+LPIS SC2 smoke test.
+Legacy 08B/G1–G3 code and data are retained only for provenance, comparison and sensitivity work. They are not part of the Colm-direct production decision chain.
 
-This README describes the **target Colm-direct architecture** and clearly marks the remaining production gates rather than presenting unresolved scientific assumptions as finished results.
+The model deliberately provides **no hidden default Stage-A suitability assumptions**. SC3 therefore requires an explicit eligibility-control file. A positive rewetting target also requires an explicit validated rewetting-capacity control. This is a scientific safeguard, not an incomplete fallback.
+
+Publication reporting, figure regeneration and manuscript-result replacement are downstream tasks. Existing legacy reporting assets must not be interpreted as Colm-direct results until the reporting layer is explicitly migrated and rerun from frozen Colm-direct outputs.
 
 ---
 
 # Scientific identity
 
-GOBLIN-Spatial is designed to support analysis of **spatial transition resilience**.
-
-Rather than collapsing resilience into a single composite score, the framework separates a sequence of observable and modelled dimensions:
+GOBLIN-Spatial supports analysis of **spatial transition resilience** without collapsing resilience into one composite score.
 
 ```text
 National AFOLU pathway
@@ -66,13 +63,11 @@ Which exposures, constraints and opportunities persist?
 
 These dimensions collectively inform the resilience of places to agricultural and land-use transition.
 
-GOBLIN-Spatial does not interpret resilience as recovery from a short-run shock and does not measure farmer willingness, psychological resistance or behavioural adoption.
+The framework does not measure farmer willingness, psychological resistance or behavioural adoption.
 
 ---
 
 # Model architecture
-
-The production architecture is deliberately sequential.
 
 ```text
                     NATIONAL GOBLIN
@@ -85,7 +80,7 @@ BASELINE
 ────────────────────────────────────────────
 historical agricultural reconstruction
 2015–2025
-2,857 agricultural Electoral Divisions
+2,857 EDs with recorded agricultural activity
 livestock + land + farm structure
 + fixed-2020 Standard Output
                           │
@@ -139,43 +134,23 @@ explicit eligibility
         ↓
 joint competition for land
         ↓
-REALISED spatial allocation
-        +
-UNMET national target
-        +
-RESIDUAL transition space
+REALISED allocation
++ UNMET target
++ RESIDUAL transition space
                           │
                           ▼
 ────────────────────────────────────────────
 POST-SC3   SAME-END-USE SPATIAL FLEXIBILITY
 ────────────────────────────────────────────
-hold the realised national hectares of each use fixed
+hold realised national hectares of each use fixed
         ↓
 search alternative feasible geographies
         ↓
 necessary / persistent geography
 vs flexible / interchangeable geography
-                          │
-                          ▼
-────────────────────────────────────────────
-CROSS-SCENARIO SYNTHESIS
-────────────────────────────────────────────
-pathway uncertainty
-×
-spatial implementation uncertainty
-×
-eligibility / response uncertainty
-        ↓
-robust exposure
-persistent constraint
-robust opportunity
-contingent geography
-spatial flexibility
 ```
 
-The stages answer different scientific questions and are deliberately prevented from silently altering one another.
-
-A useful shorthand is:
+The shorthand is:
 
 ```text
 SC1: Where does the transition fall?
@@ -190,33 +165,17 @@ Post-SC3: Could the same national end use fit in several different places?
 
 GOBLIN-Spatial reconstructs Irish agricultural activity from **2015 to 2025** across **2,857 Electoral Divisions with recorded agricultural activity**.
 
-The **2020 CSO Census of Agriculture** provides the principal ED-level spatial benchmark. Repeated annual CSO agricultural statistics provide higher-level temporal controls for the surrounding years.
+The **2020 CSO Census of Agriculture** provides the principal ED-level spatial benchmark. Annual county cattle controls and regional sheep controls constrain the surrounding years while preserving validated ED spatial structure.
 
-The reconstruction combines:
+The baseline includes:
 
-- cattle and sheep populations;
 - 21 cattle cohorts and 10 sheep cohorts;
-- grassland, cereals and other agricultural land;
-- selected farm-structure characteristics;
+- grassland, cereals and other agricultural land context;
+- selected farm-structure variables;
 - ED-specific livestock composition; and
 - fixed-2020 agricultural Standard Output.
 
-For cattle, annual county-level controls constrain the reconstruction. Sheep data are spatially coarser, so annual regional sheep totals and composition are reconciled through county to ED using the validated 2020 spatial structure.
-
-The surrounding years are therefore not produced by simply projecting the 2020 ED distribution forwards or backwards. Higher-level annual observations constrain the reconstruction while the validated local agricultural structure provides the spatial pattern.
-
-| Component | Representation |
-|---|---|
-| Spatial units | 2,857 EDs with recorded agricultural activity |
-| Historical period | 2015–2025 |
-| Principal ED benchmark | 2020 Census of Agriculture |
-| Cattle | 21 cohorts |
-| Sheep | 10 cohorts |
-| Agricultural land | Grassland, cereals and other agricultural context |
-| Farm structure | Holdings, holding size and selected demographic variables |
-| Economic exposure | Fixed-2020 Standard Output |
-
-The resulting baseline provides the common spatial system from which future GOBLIN pathways are evaluated.
+The surrounding years are hierarchically constrained reconstructions, not simple projections of the 2020 ED distribution.
 
 ---
 
@@ -226,9 +185,7 @@ SC1 asks:
 
 > **Where does a nationally defined agricultural transition fall, and where is the authoritative livestock-land release represented spatially?**
 
-National livestock quantities remain hard controls supplied by GOBLIN.
-
-GOBLIN-Spatial determines **where the adjustment occurs**, not how large the national adjustment should be.
+National livestock quantities remain hard controls supplied by GOBLIN. GOBLIN-Spatial determines **where the adjustment occurs**, not how large the national adjustment should be.
 
 ```text
 National GOBLIN livestock endpoint
@@ -250,11 +207,11 @@ Pasture-DM transition signal
 Authoritative national release spatialised across EDs
 ```
 
-### SC1 land boundary
+## SC1 land boundary
 
-SC1 is deliberately **soil-independent** in the Colm-direct architecture.
+SC1 is deliberately **soil-independent**.
 
-Colm soil, LPIS and the legacy 08B/G1–G3 capability structure do not determine:
+Colm soil, LPIS and legacy 08B/G1–G3 capability do not determine:
 
 - the national livestock pathway;
 - ED livestock allocation;
@@ -263,71 +220,46 @@ Colm soil, LPIS and the legacy 08B/G1–G3 capability structure do not determine
 
 The ED physical ceiling is `ALL_GRASSLAND`.
 
-The principal accounting identity is:
-
 ```text
 sum(GOBLIN_RELEASED_GRASSLAND_HA)
     = authoritative national GOBLIN release
 ```
 
-The pasture-DM land balance is retained separately as a diagnostic. In particular:
+The pasture-DM land balance remains a separate diagnostic:
 
 ```text
 GOBLIN_RELEASED_GRASSLAND_HA
     ≠ POTENTIAL_SPARED_GRASSLAND_HA by definition
 ```
 
-`POTENTIAL_SPARED_GRASSLAND_HA`, `SIGNED_GRASSLAND_BALANCE_HA` and `ADDITIONAL_GRASSLAND_REQUIRED_HA` are independent diagnostics and are not rescaled to the parent GOBLIN release.
+`POTENTIAL_SPARED_GRASSLAND_HA`, `SIGNED_GRASSLAND_BALANCE_HA` and `ADDITIONAL_GRASSLAND_REQUIRED_HA` are not rescaled to the parent GOBLIN release.
 
-If the primary livestock/pasture-pressure signal cannot spatially absorb the full parent release because local grassland ceilings bind, an explicit livestock-bearing grassland fallback is used and its hectares and national share are reported. The fallback is an accounting bridge, not a soil-suitability rule.
+If the primary livestock/pasture-pressure signal cannot absorb the full parent release because local grassland ceilings bind, a documented fallback reallocates the remainder across available livestock-bearing grassland. Fallback hectares and shares are reported explicitly.
 
-### Alternative spatial incidence principles
+## Alternative spatial incidence principles
 
-A fixed national pathway can be distributed under alternative implementation assumptions:
+The principal incidence rules are:
 
 - `PRORATA`
 - `DAIRY_PROTECTION`
 - `ECONOMIC_CAPACITY_PROTECTION`
 - `SOCIAL_VULNERABILITY_PROTECTION`
 
-These rules alter the **geography of adjustment**, not the nationally specified pathway.
+These alter the **geography of adjustment**, never the nationally specified pathway.
 
-`SOCIAL_VULNERABILITY_PROTECTION` should be interpreted as the model's explicit demographic/farm-structure proxy based on the variables coded in the SC1 baseline, not as a complete measure of social vulnerability.
+`SOCIAL_VULNERABILITY_PROTECTION` is a coded demographic/farm-structure proxy, not a complete measure of social vulnerability.
 
 ---
 
 # Transition pressure and structural dependence
 
-SC1 retains separate diagnostics rather than collapsing transition pressure into one opaque score.
+SC1 retains separate diagnostics for livestock adjustment, production-value exposure, structural dependence, pasture-demand pressure and distributional concentration.
 
-These include, where relevant:
-
-- livestock adjustment;
-- dairy and suckler dependence;
-- livestock concentration and specialisation;
-- production-value exposure;
-- pasture-demand pressure;
-- released-land geography; and
-- distributional concentration of adjustment.
-
-Fixed-2020 **Standard Output** is used as a production-value exposure measure.
-
-It is not interpreted as:
-
-- profit;
-- farm household income;
-- welfare;
-- compensation requirement;
-- land value; or
-- observed ability to absorb transition.
-
-Structural dependence may indicate potential transition constraint or lock-in, but it does not measure farmer attitudes or psychological resistance.
+Fixed-2020 **Standard Output** is used only as a production-value exposure measure. It is not interpreted as profit, household income, welfare, compensation requirement or land value.
 
 ---
 
 # Release, eligibility, opportunity, allocation and adoption are different quantities
-
-A central scientific rule is:
 
 ```text
 Release
@@ -343,49 +275,24 @@ Allocation
 Adoption
 ```
 
-### Release
-
-Land no longer required for livestock pressure under the parent pathway.
-
-It is a **transition-space budget**, not an assumed future land use.
-
-### Physical resource
-
-The physical composition of that released land as represented by the mapped Colm soil evidence.
-
-### Eligibility
-
-Whether a specific future use is physically permitted within the released resource under the stated evidence and rule set.
-
-### Opportunity
-
-How favourable an eligible location may be for a particular future use based on transparent agricultural or other contextual evidence.
-
-### Allocation
-
-The area assigned by SC3 when testing the national pathway's land-use requirements against finite spatial capacity.
-
-### Adoption
-
-An actual decision by a farmer or land manager.
-
-**Adoption is not modelled by GOBLIN-Spatial.**
+- **Release** is the frozen transition-space budget created by the parent pathway.
+- **Physical resource** is the mapped composition of that release.
+- **Eligibility** is whether a future use is permitted under an explicit evidence-backed rule.
+- **Opportunity** is how favourable an eligible location may be under transparent contextual evidence.
+- **Allocation** is the area assigned by SC3 when testing pathway compatibility.
+- **Adoption** is an actual land-manager decision and is not modelled.
 
 ---
 
 # SC2: Spatial response potential
 
-SC2 begins only after SC1 livestock and released-land geography are frozen.
+SC2 starts only after SC1 livestock and released-land geography are frozen.
 
 It asks:
 
 > **What physical agricultural resource has become transition space, and what future uses could that resource plausibly support?**
 
-SC2 does not change livestock numbers and does not create additional released land.
-
-## Colm physical soil
-
-The Colm-direct core retains seven physical categories directly:
+The Colm-direct core retains seven physical categories:
 
 ```text
 DEEP_WELL_DRAINED
@@ -397,44 +304,22 @@ PEAT
 MISCELLANEOUS
 ```
 
-No synthetic G1/G2/G3 reconstruction is required in the Colm-direct decision chain, and the legacy assumed farmed-peat fraction is not used to create the physical resource.
-
-The current ED-level attribution is:
+The ED-level physical attribution is:
 
 ```text
 COLM_RELEASED_<SOIL>_HA
-    = frozen SC1 released hectares
-      × Colm ED physical-soil share
+    = frozen SC1 released hectares × Colm ED physical-soil share
 ```
 
-or conceptually:
+This is a **proportional within-ED characterisation**, not a claim that the exact released parcels are observed.
 
-```text
-R_e → R_e,s
-```
+LPIS remains a separate agricultural-use and management context layer. It does not alter frozen SC1 release or the seven-category Colm physical partition.
 
-This is explicitly a **proportional within-ED physical-resource characterisation**. It does not claim that the exact released parcels or their parcel-level soil provenance have been observed.
-
-## LPIS evidence
-
-LPIS remains a **separate agricultural-use and management context layer**.
-
-The current compact controls do not contain a measured parcel-level Colm-soil × LPIS joint overlay. GOBLIN-Spatial therefore does not manufacture an independence-based cross-product that would imply the soil and LPIS attributes are observed on the same released hectare.
-
-LPIS:
-
-- does not change frozen SC1 release;
-- does not change the seven-category Colm physical partition;
-- can support transparent agricultural context and future use-specific opportunity; and
-- should enter hard eligibility only where the scientific rule can be implemented without inventing parcel-level joint provenance.
-
-A future validated Colm-soil × LPIS grassland overlay could tighten this boundary without changing the SC1 logic.
+The current controls do not contain a validated parcel-level Colm-soil × LPIS joint overlay, so the framework does not manufacture one by assuming statistical independence.
 
 ## Eligibility evidence
 
-Eligibility rules are treated as scientific assumptions and require explicit evidence.
-
-For every Stage-A future use and every Colm physical category, the production rule must be complete, versioned and documented.
+Every Stage-A use must have a complete, versioned and documented rule across all seven Colm categories.
 
 The preferred principal representation is:
 
@@ -443,17 +328,9 @@ The preferred principal representation is:
 1 = physically eligible under the stated screen
 ```
 
-Intermediate coefficients are used only where they have a defensible quantitative interpretation. A value such as `0.5` is never used merely to mean "uncertain" or to improve target closure.
+Intermediate coefficients are allowed only when they have a defensible quantitative interpretation. A value such as `0.5` is never used merely to mean uncertainty or to improve target closure.
 
-Scientific uncertainty should normally be handled through alternative documented rule sets rather than hidden inside arbitrary weights.
-
-## Response potential and adaptive capacity
-
-SC2 is best interpreted as measuring **spatial response potential**, representing an important biophysical and agricultural component of adaptive capacity.
-
-It does not claim to measure complete adaptive capacity. A fuller assessment could additionally require information on capital, infrastructure, processing, markets, skills, institutions, tenure, finance and behaviour.
-
-Those dimensions are outside the present GOBLIN-Spatial core.
+SC2 is interpreted as **spatial response potential**, an important biophysical and agricultural component of adaptive capacity, not complete adaptive capacity.
 
 ---
 
@@ -473,42 +350,32 @@ Additional tillage
 Forest
 ```
 
-For ED `e`, Colm soil category `s`, and future use `u`, let:
-
-```text
-x[e,s,u]
-```
-
-denote allocated hectares.
-
-The fundamental shared-land constraint is:
+For ED `e`, Colm soil category `s`, and future use `u`, the shared resource constraint is:
 
 ```text
 sum_u x[e,s,u] <= R[e,s]
 ```
 
-A hectare that is eligible for several alternatives remains **one hectare**. It cannot be independently allocated to forestry, willow and tillage.
+A hectare eligible for several alternatives remains one hectare.
 
-For every national land-use target:
+For every national target:
 
 ```text
 Realised_u + Unmet_u = Target_u^GOBLIN
 ```
 
-An unmet target is not treated as software failure. It is a substantive result showing that the national pathway cannot be fully accommodated under the stated spatial evidence and constraints.
+Unmet target is a substantive spatial-compatibility result, not software failure.
 
 The Stage-A optimiser is lexicographic:
 
 1. minimise total unmet national target;
-2. only when an explicit evidence-backed opportunity mapping is supplied, preserve that minimum shortfall and maximise opportunity fit.
+2. only when an explicit evidence-backed opportunity mapping is supplied, preserve minimum shortfall and maximise opportunity fit.
 
-Without such an opportunity mapping, the result is interpreted as a **feasibility solution**, not as a uniquely preferred or predicted future land-use map.
+Without an explicit opportunity mapping, the output is a **feasibility solution**, not a uniquely preferred or predicted future land-use map.
 
 ---
 
 # Rewetting: restoration requirement, not automatic livelihood opportunity
-
-Rewetting is treated separately because:
 
 ```text
 Mapped peat
@@ -518,145 +385,45 @@ Drained agricultural organic soil
 Rewettable capacity
 ```
 
-A positive rewetting target therefore requires an explicit, versioned and scientifically defensible estimate of drained agricultural organic-soil capacity.
+A positive rewetting target requires an explicit validated rewetting-capacity control. Mapped Colm peat or LPIS peat context alone is insufficient.
 
-Mapped Colm peat or LPIS peat context alone is insufficient to define rewettable land.
-
-Rewetting also has a different interpretation from the productive transition uses. In the present framework it is primarily an **environmental/restoration land requirement**, not an automatic alternative-income or livelihood opportunity.
-
-Accordingly:
-
-```text
-productive transition opportunity
-    ≠
-restoration capacity
-```
-
-An ED should not be classified as having strong productive diversification opportunity merely because substantial rewetting capacity exists there.
+Rewetting is treated primarily as an **environmental/restoration requirement**. It does not automatically increase productive diversification or alternative-income opportunity.
 
 ---
 
-# Same-end-use feasible geographies
+# Post-SC3: same-end-use spatial flexibility
 
-A single SC3 solution is not automatically interpreted as "the future".
+A single LP solution need not represent a uniquely necessary geography.
 
-The optional post-SC3 spatial-flexibility layer asks:
+The optional post-SC3 analysis therefore holds the national realised hectares of **each individual land use** fixed and searches for alternative feasible spatial allocations under the same frozen resource and eligibility constraints.
 
-> **Holding the realised national hectares of every land use fixed, what other spatial configurations could achieve the same national end-use outcome?**
+It provides:
 
-For each future use `u`:
+- sampled alternative feasible geographies for national flexibility summaries; and
+- exact minimum/maximum ED-use bounds for selected questions.
 
-```text
-sum_i AlternativeAllocation[i,u]
-    = sum_i ReferenceSC3Allocation[i,u]
-```
-
-The analysis therefore preserves the same realised national end-use vector rather than allowing the optimiser to substitute one use for another.
-
-It can produce:
-
-- sampled alternative feasible geographies;
-- sampled minimum and maximum ED allocation;
-- allocation ranges and variability;
-- allocation frequency across feasible solutions; and
-- exact minimum/maximum feasible allocation for selected ED-use questions.
-
-This supports a distinction between:
-
-```text
-narrow feasible range
-    → more spatially necessary / persistent geography
-
-wide feasible range
-    → more spatially flexible / interchangeable geography
-```
-
-This analysis does not create a new GOBLIN pathway and does not represent farmer adoption probability.
-
-See [`docs/sc3_feasible_geographies.md`](docs/sc3_feasible_geographies.md).
+This analysis distinguishes **necessary or persistent geography** from **flexible or interchangeable geography**. It does not create new pathways, change national targets or estimate adoption probabilities.
 
 ---
 
-# Spatial transition resilience
+# Scenario baseline years
 
-The full framework distinguishes four related questions:
+- **2020** is the principal complete SC1→SC2→SC3 spatial baseline.
+- **2025** may be used for SC1 livestock sensitivity only until a separately validated 2025 Colm+LPIS land-context bundle exists.
 
-```text
-SC1
-Where does pressure fall?
-
-SC2
-What response potential exists?
-
-SC3
-What transformation is spatially feasible?
-
-Post-SC3
-How spatially necessary or interchangeable is that feasible geography?
-```
-
-A simple place-based interpretation is:
-
-| Transition pressure | Productive response potential | Interpretation |
-|---|---|---|
-| High | Limited | Priority transition constraint |
-| High | Stronger | Prepared transition potential |
-| Lower / contingent | Stronger | Strategic transition opportunity |
-| Lower / contingent | Limited | Lower immediate pressure but limited diversification capacity |
-
-Rewetting/restoration capacity is reported separately from productive response potential unless a separate socioeconomic mechanism justifies treating it as a livelihood opportunity.
-
-The purpose is not to label places as winners and losers. It is to identify where **anticipatory and place-sensitive transition policy may need to differ**.
-
----
-
-# Cross-scenario robustness
-
-GOBLIN-Spatial does not assume that one scenario map represents the future.
-
-The resilience synthesis evaluates variation across:
-
-```text
-pathway
-× spatial implementation rule
-× evidence / eligibility sensitivity
-```
-
-This supports transparent classifications such as:
-
-### Robust exposure
-
-Areas that experience substantial transition pressure across many plausible pathway and implementation combinations.
-
-### Persistent constraint
-
-Areas where substantial exposure repeatedly coincides with limited productive response potential or spatial compatibility.
-
-### Robust opportunity
-
-Areas that repeatedly retain stronger productive transition-space opportunities.
-
-### Contingent geography
-
-Areas whose apparent exposure or opportunity depends strongly on the pathway, implementation assumption or eligibility evidence.
-
-### Spatial flexibility
-
-Areas that are interchangeable within multiple feasible configurations for the same realised national end-use outcome.
-
-This ensemble perspective is preferred to claiming one correct 2050 spatial allocation.
+The model never silently applies 2020 LPIS or soil context to a 2025 SC2/SC3 run.
 
 ---
 
 # Active national pathways
 
-The runtime reads active pathways from:
+Active pathway controls are read from:
 
 ```text
 data/controls/scenario/GOBLIN_Scenario_Controls.csv
 ```
 
-The current active 2050 pathways are:
+The current active pathways are:
 
 ```text
 SI_SG
@@ -664,240 +431,35 @@ BE_SG
 ALL_GAS_NZ
 ```
 
-GOBLIN supplies the pathway-specific livestock, land-release and land-use target quantities. GOBLIN-Spatial must preserve scenario isolation throughout the full chain.
-
-For example, `BE_SG` and `ALL_GAS_NZ` must never silently inherit livestock or land-use controls from one another.
-
-The principal resilience application can focus on `BE_SG` and `ALL_GAS_NZ` as contrasting transition stresses, while `SI_SG` remains available as an additional supported pathway and validation/sensitivity case.
+Scenario IDs must remain internally consistent. Livestock endpoints, released-land controls and future land-use targets for one pathway are never mixed with another pathway.
 
 ---
 
-# Sources of uncertainty
+# Running the scientific model
 
-GOBLIN-Spatial distinguishes uncertainty by mechanism rather than collapsing it into one score.
-
-### Pathway uncertainty
-
-How spatial outcomes change across nationally coherent GOBLIN futures.
-
-### Spatial implementation uncertainty
-
-How outcomes change under alternative incidence and protection principles.
-
-### Land-response uncertainty
-
-How eligibility and transformability change under alternative scientifically defensible land-response assumptions.
-
-### Feasible-geography uncertainty
-
-How many spatial configurations can deliver the same realised national end-use outcome after the pathway, incidence rule and eligibility evidence are fixed.
-
-The central foresight question is:
-
-> **Which spatial conclusions remain consequential despite these uncertainties?**
-
----
-
-# Reporting and scientific outputs
-
-GOBLIN-Spatial separates model execution from reporting.
-
-```text
-MODEL
-  ↓
-frozen scientific outputs
-  ↓
-REPORTING CODE
-  ├── maps
-  ├── graphs
-  ├── tables
-  ├── GIS exports
-  └── publication figures
-```
-
-The reporting layer consumes scientific outputs. It does not determine model mathematics and must not independently recalculate SC1, SC2 or SC3 results.
-
-Frozen outputs can be translated into:
-
-- transition-pressure maps;
-- protection-relief and displaced-exposure maps;
-- released-land maps;
-- Colm physical-resource maps;
-- productive-response-potential maps;
-- realised-allocation maps;
-- target-versus-realised-versus-unmet charts;
-- same-end-use spatial-flexibility maps;
-- robustness and persistence maps;
-- pathway and implementation comparisons;
-- GIS-ready outputs;
-- manuscript tables; and
-- publication figures.
-
-A useful reporting principle is:
-
-> **Maps explain where. Charts explain how much. Cross-scenario synthesis explains how robust the geography is.**
-
-Publication figures should be generated from frozen results rather than manually reconstructed in Excel or GIS software.
-
----
-
-# Reproducibility and evidence provenance
-
-Routine production execution is designed around repository-contained, versioned controls rather than silent external replacement of scientific inputs.
-
-Every major spatial evidence source should document:
-
-- source;
-- year;
-- native spatial resolution;
-- target spatial resolution;
-- aggregation method;
-- units;
-- scientific role;
-- model stage;
-- missing-data treatment;
-- version; and
-- integrity checksum where applicable.
-
-The Colm-direct Stage-A evidence register is maintained at:
-
-[`docs/colm_direct_eligibility_evidence_register.md`](docs/colm_direct_eligibility_evidence_register.md)
-
-The architecture contract is maintained at:
-
-[`docs/colm_direct_sc1_sc3_architecture.md`](docs/colm_direct_sc1_sc3_architecture.md)
-
-The core development rule is:
-
-> **Software structure may improve, but validated scientific mathematics must not change silently.**
-
-The model is designed to fail transparently when required evidence or capacity is unavailable rather than silently inventing substitutes.
-
----
-
-# Validation philosophy
-
-Key scientific invariants include:
-
-### National livestock closure
-
-For each pathway `p` and livestock category `k`:
-
-```text
-sum_e H[e,p,k] = H_GOBLIN[p,k]
-```
-
-### Spatial-incidence closure
-
-Alternative incidence principles redistribute the same national transition:
-
-```text
-sum_e DeltaH[e,p,r] = DeltaH[p]
-```
-
-### Released-land integrity
-
-```text
-0 <= R[e,p] <= ALL_GRASSLAND[e]
-```
-
-and:
-
-```text
-sum_e R[e,p] = authoritative GOBLIN gross release[p]
-```
-
-SC2 evidence must not change frozen SC1 release.
-
-### SC2 physical-resource closure
-
-```text
-sum_s R[e,s] = R[e]
-```
-
-for the seven Colm physical categories.
-
-### Eligibility consistency
-
-```text
-x[e,s,u] > 0  =>  E[e,s,u] > 0
-```
-
-### Shared land conservation
-
-```text
-sum_u x[e,s,u] <= R[e,s]
-```
-
-### Target accounting
-
-```text
-Target[p,u] = Realised[p,u] + Unmet[p,u]
-```
-
-### Final land accounting
-
-```text
-AllocatedLand[e] + ResidualLand[e] = FrozenRelease[e]
-```
-
-### Scenario isolation
-
-No pathway may silently inherit livestock or land-use controls from another pathway.
-
----
-
-# Running the model
-
-GOBLIN-Spatial can be run through a guided interface or with explicit staged commands.
-
-## Guided mode
-
-```bash
-goblin-spatial
-```
-
-In an interactive terminal, the model asks whether to stop after:
-
-```text
-1. Baseline
-2. SC1
-3. SC2
-4. SC3
-```
-
-SC1 supports the reconstructed 2020 and 2025 livestock baselines. Colm-direct SC2 and SC3 currently require the validated 2020 spatial context.
-
-## Verify repository inputs
+Verify repository-contained inputs:
 
 ```bash
 goblin-spatial fetch-data --verify-only
 ```
 
-## Build the historical baseline
+Build the historical baseline:
 
 ```bash
-goblin-spatial build \
-  --config configs/ireland_2015_2025.yaml
+goblin-spatial build --config configs/ireland_2015_2025.yaml
 ```
 
-## Baseline only
-
-```bash
-goblin-spatial study --through baseline
-```
-
-## Stop after SC1
+Run through SC1:
 
 ```bash
 goblin-spatial study \
   --through sc1 \
-  --scenario BE_SG \
+  --scenario SI_SG \
   --baseline-year 2020 \
   --allocation-rule PRORATA
 ```
 
-## Stop after SC2
+Run through SC2:
 
 ```bash
 goblin-spatial study \
@@ -907,11 +469,7 @@ goblin-spatial study \
   --allocation-rule PRORATA
 ```
 
-SC2 can run as physical-resource + LPIS context without applying unresolved future-use eligibility assumptions.
-
-## Full study through SC3
-
-SC3 deliberately has **no default suitability assumptions**. A validated Colm eligibility-rule control is required, and a validated rewetting-capacity control is also required whenever the selected pathway has a positive rewetting target.
+SC3 requires an explicit validated Colm eligibility-control file:
 
 ```bash
 goblin-spatial study \
@@ -923,180 +481,122 @@ goblin-spatial study \
   --rewetting-capacity path/to/validated_rewetting_capacity.csv
 ```
 
-Until those controls are scientifically approved, production SC3 scenario results remain gated even though the generic finite-resource allocator is implemented and tested.
-
-## Direct principal runner
-
-```bash
-goblin-spatial-principal SI_SG \
-  --baseline-year 2020 \
-  --allocation-rule PRORATA \
-  --stage SC2
-```
+The rewetting-capacity argument is required only where the selected pathway has a positive rewetting target.
 
 ---
 
-# Reporting commands
+# Validation philosophy
 
-Reporting is downstream of completed model runs.
+The development rule is:
 
-## Build the cross-run result package
+> **Software structure may improve, but scientific mathematics must not change silently.**
 
-```bash
-goblin-spatial report path/to/completed_study_root
+Production tests enforce, among other checks:
+
+```text
+sum_e livestock[e,k] = authoritative GOBLIN livestock endpoint[k]
 ```
 
-This builds the cross-run workbook/SQLite result package from completed principal runs. Development subsets can be processed with `--allow-partial`.
-
-## Generate publication figures
-
-```bash
-goblin-spatial figures \
-  path/to/GOBLIN_Spatial_Final_Results.sqlite
+```text
+sum_e released_land[e] = authoritative national GOBLIN release
 ```
 
-## Generate maps / GIS outputs
-
-```bash
-goblin-spatial maps path/to/final_results_directory
+```text
+released_land[e] <= ALL_GRASSLAND[e]
 ```
 
-The reporting code reads frozen outputs. It does not rerun or redefine the scientific model.
+```text
+sum_s ColmReleased[e,s] = released_land[e]
+```
+
+```text
+sum_u allocation[e,s,u] <= ColmReleased[e,s]
+```
+
+```text
+Realised_u + Unmet_u = Target_u^GOBLIN
+```
+
+SC1 also has invariance tests proving that changing Colm, LPIS or legacy 08B fields cannot change the SC1 release vector.
+
+The model deliberately fails when authoritative upstream controls are internally impossible, required scientific controls are absent, or accounting closure is violated.
 
 ---
 
-# Interpretation boundary
+# Reporting boundary
 
-GOBLIN-Spatial can identify:
+The scientific model and the reporting layer are separate:
 
-- where national transition pressure is spatially concentrated;
-- where existing agricultural systems are structurally more exposed;
-- where livestock contraction creates transition space;
-- what physical characteristics that released resource contains;
-- what alternative uses are scientifically eligible;
-- how national future land-use requirements compete for finite land;
-- where those requirements can or cannot be jointly accommodated;
-- where the same end use has narrow or broad feasible spatial alternatives; and
-- which spatial exposures, constraints and opportunities remain robust across plausible configurations.
+```text
+SC1 / SC2 / SC3
+        ↓
+validated frozen outputs
+        ↓
+reporting code
+        ├── maps
+        ├── charts
+        ├── tables
+        └── publication figures
+```
 
-GOBLIN-Spatial does **not** predict:
+Reporting code must **read frozen scientific outputs and never recalculate the model science**.
 
-- which individual farmer will exit or diversify;
-- farmer willingness to adopt;
-- parcel-level future decisions;
-- land prices;
-- compensation requirements;
-- farm household welfare;
-- endogenous national demand; or
-- the exact year-by-year path of land-system change.
-
-These questions require additional farm-level, behavioural, market or dynamic modelling and are outside the v1 framework.
+The legacy reporting modules and workflows remain available for provenance but are not yet the authoritative Colm-direct publication layer. They will be migrated only after the scientific engine and controls are frozen.
 
 ---
 
 # Relationship to the wider modelling ecosystem
 
-GOBLIN-Spatial occupies a specific position between national pathway modelling and downstream farm/environment analysis.
-
 ```text
-GOBLIN / OptiGob
-  │
-  │ WHAT NATIONAL FUTURE / HOW MUCH?
-  ▼
-GOBLIN-SPATIAL
-  │
-  │ WHERE, UNDER WHAT CONSTRAINTS,
-  │ AND WITH WHAT SPATIAL RESILIENCE?
-  ▼
-AGRISYN
-  │
-  │ optional synthetic-farm incidence within fixed ED endpoints
-  ▼
-farm-level structural analysis
+GOBLIN
+national pathway authority
+        ↓
+GOBLIN-Spatial
+ED transition incidence + land-system compatibility
+        ↓
+Agrisyn
+possible within-ED farm-structure incidence
 
-GOBLIN-SPATIAL
-  │
-  └──────────────→ GEOGOBLIN
-                    optional catchment/environmental consequences
-                    of the frozen spatial configuration
+and/or
+
+GOBLIN-Spatial spatial outputs
+        ↓
+GeoGOBLIN
+catchment/environmental consequence assessment
 ```
 
-Agrisyn and GeoGOBLIN are complementary downstream tools. They must not overwrite the national or ED endpoint accounting already fixed upstream by GOBLIN and GOBLIN-Spatial.
+GOBLIN-Spatial does not duplicate the national pathway role of GOBLIN, the farm-synthesis role of Agrisyn or the catchment environmental role of GeoGOBLIN.
 
 ---
 
-# When GOBLIN-Spatial v1.0 is complete
+# Interpretation boundary
 
-The Colm-direct framework is ready to freeze as v1.0 when:
+GOBLIN-Spatial analyses:
 
-1. the scientific transition-resilience question is fixed;
-2. the historical spatial baseline remains validated;
-3. national GOBLIN pathway authority is preserved;
-4. SC1 closes exactly and remains independent of SC2 evidence;
-5. all active SC2 Stage-A eligibility rules are evidence-backed and versioned;
-6. rewetting uses independently defensible drained-organic/agricultural capacity;
-7. SC3 conserves finite land and reports all realised, unmet and residual quantities;
-8. the agreed pathway × implementation matrix is rerun with the validated Colm-direct controls;
-9. the same-end-use feasible-geography analysis is run only on scientifically valid SC3 results;
-10. legacy 08B and Colm-direct results are compared and documented;
-11. cross-scenario robustness results are reproducible; and
-12. tests, maps, tables, README and manuscript report the same scientific architecture.
+> **transition exposure, structural dependence, spatial response potential, transformability, spatial flexibility and robustness.**
 
-At that point:
+It does **not** predict:
 
-```text
-GOBLIN-SPATIAL v1.0
-        ↓
-FROZEN SCIENTIFIC ARCHITECTURE
-        ↓
-publication
-        ↓
-future extensions become separate work
-```
+- individual farmer behaviour;
+- which individual parcel will convert;
+- future market prices;
+- farm household welfare;
+- the exact realised geography of future land-use change; or
+- complete socioeconomic adaptive capacity.
 
-The existence of additional interesting datasets or modelling methods is not, by itself, a reason to change the frozen v1 architecture.
+Its planning question is:
+
+> **If a nationally coherent agricultural transition occurred, where could adjustment pressure and response potential be concentrated, where would the same future face spatial constraints, and which places remain consequential across alternative plausible implementation conditions?**
 
 ---
 
 # Project context and contributors
 
-**GOBLIN-Spatial is developed at the University of Galway within the wider LandingZoNES and FORESIGHT research programmes and the GOBLIN modelling framework.** It extends national agricultural and land-use modelling to a finer spatial scale by reconstructing agricultural activity across Electoral Divisions and spatialising nationally defined transition pathways.
+GOBLIN-Spatial is developed at the University of Galway within the wider LandingZoNES and FORESIGHT research programmes and the GOBLIN modelling framework.
 
-GOBLIN-Spatial is developed by **Elvis Kwame Ofori** as part of his doctoral research at the University of Galway, under the supervision of **Professor David Styles** and **Professor Cathal O'Donoghue**.
+The framework is developed by **Elvis Kwame Ofori** as part of doctoral research at the University of Galway, under the supervision of **Professor David Styles** and **Professor Cathal O'Donoghue**.
 
-The framework builds on contributions from the wider modelling team. **Dr Daniel Henn** developed the detailed national cattle cohort representation that provides an important livestock-structure input to the reconstruction. **Dr Colm Duffy** contributes modelling, spatial-data and software-development expertise, including methodological review, soil and land-context integration, and development of the wider GOBLIN/GeoGOBLIN modelling ecosystem.
-
----
-
-# Summary
-
-The defining logic of GOBLIN-Spatial is:
-
-```text
-GOBLIN national future
-        ↓
-local transition incidence
-        ↓
-structural exposure
-        ↓
-released transition space
-        ↓
-physical and agricultural response potential
-        ↓
-joint spatial transformability
-        ↓
-realised + unmet + residual
-        ↓
-same-end-use spatial flexibility
-        ↓
-robust versus contingent geography
-        ↓
-PLACE-BASED SPATIAL TRANSITION RESILIENCE
-```
-
-The framework is built around one central principle:
-
-> **National pathways should remain nationally coherent, but their spatial consequences, constraints and possibilities must be made visible.**
+The wider modelling work also builds on contributions from **Dr Daniel Henn**, including national cattle cohort structure, and **Dr Colm Duffy**, including spatial-data, modelling and software-development contributions.
 
 ---
 
