@@ -1,31 +1,28 @@
-# Data Dictionary
+# GOBLIN-Spatial data dictionary
 
-This file documents the clean indicators exposed by the final GOBLIN-Spatial data workbook and the interpretation-safe scenario reporting layer.
+This document describes the principal variables exposed by the historical baseline and the final SC1-SC3 scientific engine. It focuses on interpretation-safe quantities rather than every internal diagnostic column.
 
 ## Core identifiers
 
 | Variable | Meaning |
 |---|---|
-| `YEAR` | Calendar year, 2015–2025 |
-| `CSOED` | Harmonised CSO Electoral Division identifier used by the workflow |
-| `EDID` | Electoral Division identifier where available |
-| `ED` | Electoral Division code/name field from the source data |
-| `EDNAME` | Electoral Division name |
+| `YEAR` | Calendar year in the historical 2015-2025 panel |
+| `CSOED` | Harmonised Electoral Division identifier used by the model |
+| `ED` / `EDNAME` | Electoral Division source code/name fields where available |
 | `County` | County |
-| `COUNTYNAME` | County name field retained from source data |
 
-## Farm structure and holder age
+## Farm structure
 
 | Variable | Meaning |
 |---|---|
 | `AGRICULTURAL_HOLDINGS` | Number of agricultural holdings represented in the ED-year |
-| `AVERAGE_SIZE_OF_HOLDINGS` | Average holding size in hectares |
-| `AVERAGE_AGE_OF_HOLDER` | Mean age of farm holder |
-| `MEDIAN_AGE_OF_HOLDER` | Median age of farm holder |
+| `AVERAGE_SIZE_OF_HOLDINGS` | Average holding size, hectares |
+| `AVERAGE_AGE_OF_HOLDER` | Mean holder age where reconstructed |
+| `MEDIAN_AGE_OF_HOLDER` | Median holder age |
 
-The 2020 values are the locked CSO ED baseline. Non-2020 values are reconstructed from official higher-level temporal controls.
+The 2020 ED values are the fixed local spatial anchor. Non-2020 values are reconstructed using official higher-level temporal controls.
 
-## Land
+## Historical land
 
 | Variable | Meaning |
 |---|---|
@@ -36,87 +33,163 @@ The 2020 values are the locked CSO ED baseline. Non-2020 values are reconstructe
 
 Accounting identity:
 
-`AREA_FARMED = ALL_GRASSLAND + TOTAL_CEREALS + OTHER_CROPS_HA`
+```text
+AREA_FARMED = ALL_GRASSLAND + TOTAL_CEREALS + OTHER_CROPS_HA
+```
 
-## Headline livestock
+## Historical livestock
 
 | Variable | Meaning |
 |---|---|
 | `DAIRY_COW` | Dairy cows |
-| `OTHER_COW` | Other cows / suckler-cow control |
-| `OTHER_CATTLE` | Cattle other than dairy cows and other cows |
+| `OTHER_COW` | Other/suckler cows |
+| `OTHER_CATTLE` | Other cattle |
 | `TOTAL_CATTLE` | Total cattle |
 | `TOTAL_SHEEP` | Total sheep |
-| `LSU` | Livestock unit indicator where retained in the source master |
 
-## GOBLIN cattle cohorts
+The GOBLIN livestock baseline contains 21 cattle cohorts and 10 sheep cohorts. These sum exactly to `TOTAL_CATTLE` and `TOTAL_SHEEP` respectively for every ED-year.
 
-The final GOBLIN cattle representation contains 21 cohorts:
-
-1. `dairy_cows`
-2. `suckler_cows`
-3. `DxD_calves_m`
-4. `DxD_calves_f`
-5. `DxB_calves_m`
-6. `DxB_calves_f`
-7. `BxB_calves_m`
-8. `BxB_calves_f`
-9. `DxD_heifers_less_2_yr`
-10. `DxD_steers_less_2_yr`
-11. `DxB_heifers_less_2_yr`
-12. `DxB_steers_less_2_yr`
-13. `BxB_heifers_less_2_yr`
-14. `BxB_steers_less_2_yr`
-15. `DxD_heifers_more_2_yr`
-16. `DxD_steers_more_2_yr`
-17. `DxB_heifers_more_2_yr`
-18. `DxB_steers_more_2_yr`
-19. `BxB_heifers_more_2_yr`
-20. `BxB_steers_more_2_yr`
-21. `bulls`
-
-For every ED-year, these cohorts sum exactly to `TOTAL_CATTLE`.
-
-## GOBLIN sheep cohorts
-
-The final GOBLIN sheep representation contains 10 cohorts:
-
-1. `Lowland ewes`
-2. `Upland ewes`
-3. `Lowland lamb_less_1_yr`
-4. `Lowland male_less_1_yr`
-5. `Lowland lamb_more_1_yr`
-6. `Lowland ram`
-7. `Upland lamb_less_1_yr`
-8. `Upland male_less_1_yr`
-9. `Upland lamb_more_1_yr`
-10. `Upland ram`
-
-The GOBLIN `Upland` naming is operationally represented by the DAFM Mountain + Mountain Cross type aggregate in the current spatialisation.
-
-For every ED-year, these cohorts sum exactly to `TOTAL_SHEEP`.
-
-## Scenario land-accounting reporting
-
-The scientific reporting layer intentionally separates parent pathway accounting from realised SC3 spatial feasibility.
+## Standard Output
 
 | Variable | Meaning |
 |---|---|
-| `GOBLIN_PARENT_AVAILABLE_TARGET_HA` | National parent-pathway `Available` residual calculated as gross livestock-land release minus the five Stage-A national targets. This is target accounting, not an ED-level realised allocation. |
-| `SC3_POST_STAGE_A_UNALLOCATED_RELEASE_HA` | Released land remaining after realised Stage-A allocation. This is a realised spatial-feasibility quantity. |
-| `STAGE_A_UNMET_HA` | Stage-A target hectares not spatially realised. Under the accounting identity, this equals `SC3_POST_STAGE_A_UNALLOCATED_RELEASE_HA - GOBLIN_PARENT_AVAILABLE_TARGET_HA` nationally. |
-| `SC3_REWETTING_FROM_RELEASED_LAND_HA` | Realised rewetting allocated from post-Stage-A released land, subject to the drained-organic-grassland stock constraint. |
-| `SC3_FINAL_UNALLOCATED_RELEASED_LAND_HA` | Strict physical residual after realised Stage-A allocation and realised rewetting. This must not be labelled as the parent GOBLIN `Available` category. |
-| `PARENT_TARGET_ACCOUNTING_CLOSURE_HA` | Parent target-accounting closure residual. Expected value is zero. |
-| `SPATIAL_STAGE_A_ACCOUNTING_CLOSURE_HA` | Realised Stage-A spatial accounting closure residual. Expected value is zero. |
-| `STRICT_SPATIAL_ACCOUNTING_CLOSURE_HA` | Strict post-rewetting spatial accounting closure residual. Expected value is zero. |
+| `SO_LIVESTOCK_2020_EUR` | Fixed-2020 livestock Standard Output associated with the represented ED livestock structure |
 
-The reporting identities are:
+Standard Output is used as a production-value exposure indicator. It is not profit, household income, welfare, compensation need or land value.
+
+## SC1: transition incidence
+
+Important SC1 fields include:
+
+| Variable | Meaning |
+|---|---|
+| `PATHWAY_NAME` | Selected GOBLIN scenario identifier |
+| `PATHWAY_BASELINE_YEAR` | Scenario starting baseline year |
+| `MILESTONE_YEAR` | Scenario endpoint/milestone year |
+| `PATHWAY_ALLOCATION_RULE` | Spatial incidence rule used for the run |
+| `SCENARIO_DAIRY_COW` | Scenario dairy cows allocated to the ED |
+| `SCENARIO_OTHER_COW` | Scenario other/suckler cows allocated to the ED |
+| `SCENARIO_TOTAL_CATTLE` | Scenario total cattle after cohort propagation |
+| `GOBLIN_RELEASED_GRASSLAND_HA` | Authoritative GOBLIN gross livestock-land release spatialised to the ED |
+| `GOBLIN_RELEASE_FALLBACK_HA` | Portion of ED release placed through the explicit capacity fallback, if any |
+| `SIGNED_GRASSLAND_BALANCE_HA` | Independent pasture-DM land-balance diagnostic |
+| `POTENTIAL_SPARED_GRASSLAND_HA` | Positive component of the independent pasture-DM diagnostic |
+| `ADDITIONAL_GRASSLAND_REQUIRED_HA` | Local additional grassland requirement from the independent diagnostic |
+
+`GOBLIN_RELEASED_GRASSLAND_HA` is the authoritative release quantity used downstream. The pasture-DM diagnostics are not rescaled to it.
+
+SC1 does not use mapped soil, LPIS or future-use suitability to determine the livestock solution or the ED released-land vector.
+
+## SC2: physical resource and eligibility
+
+The frozen 2020 runtime contains seven mapped physical-soil/drainage categories:
 
 ```text
-Gross release = Stage-A targets + GOBLIN parent Available target
-Gross release = realised Stage-A allocation + post-Stage-A unallocated release
-Gross release = realised Stage-A allocation + realised rewetting + final unallocated release
+DEEP_WELL_DRAINED
+SHALLOW_WELL_DRAINED
+POORLY_DRAINED
+POORLY_DRAINED_PEATY
+ALLUVIUM
+PEAT
+MISCELLANEOUS
 ```
 
-The reporting command retains the existing canonical SC3 columns for backward compatibility and adds explicit aliases in the workbook so scientific interpretation is unambiguous.
+Internal source-provenance fields may retain the `COLM_` prefix. Scientific interpretation should use the neutral concept **mapped physical soil/drainage class**.
+
+For every category, SC2 creates a released-resource quantity of the form:
+
+```text
+COLM_RELEASED_<CATEGORY>_HA
+```
+
+These sum to the frozen ED release:
+
+```text
+sum_s COLM_RELEASED_<s>_HA = GOBLIN_RELEASED_GRASSLAND_HA
+```
+
+Eligibility fields follow the internal form:
+
+```text
+COLM_DIRECT_<USE>_ELIGIBLE_HA
+```
+
+for explicitly supplied future-use rules. These are eligible capacities, not realised conversions.
+
+LPIS-derived SC2 fields are context descriptors, for example:
+
+- grass coverage;
+- low-input grass share;
+- peat-grass context;
+- commonage context;
+- organic grass context;
+- other agricultural-use/management descriptors available in the frozen profile.
+
+LPIS does not change frozen SC1 release or the physical-soil partition.
+
+## SC3: spatial transformability
+
+SC3 allocates five principal competing Stage-A uses:
+
+```text
+AD_GRASS
+BIOREFINERY_GRASS
+WILLOW
+ADDITIONAL_TILLAGE
+FOREST
+```
+
+The exact internal allocation-column names are generated by the SC3 allocator, but every run must preserve the following meanings:
+
+- allocated/realised hectares by use;
+- unmet national hectares by use;
+- residual released land;
+- finite shared-resource closure.
+
+For each national use:
+
+```text
+Realised_u + Unmet_u = Target_u
+```
+
+For each ED × physical-resource cell:
+
+```text
+sum_u Allocated[e,s,u] <= ReleasedResource[e,s]
+```
+
+A hectare can therefore be assigned to at most one competing use.
+
+## Rewetting
+
+Rewetting is a separate environmental/restoration requirement. Any SC3 rewetting allocation is constrained by an independently validated drained agricultural organic-soil capacity control.
+
+Mapped peat, LPIS peat context and rewettable capacity are not interchangeable quantities.
+
+Rewetting should not be interpreted automatically as productive diversification or alternative-income opportunity.
+
+## Post-SC3 spatial flexibility
+
+The flexibility module can hold realised national hectares of every use fixed while searching alternative feasible geographies.
+
+Its outputs can include:
+
+- reference ED-use allocation;
+- sampled minimum/maximum allocation;
+- sampled range and frequency;
+- exact minimum and maximum feasible allocation for selected ED-use pairs.
+
+A wide feasible range indicates spatial interchangeability. A positive lower bound indicates a more spatially necessary allocation under the same national outcome.
+
+## Interpretation sequence
+
+```text
+Release
+    != Physical resource
+    != Eligibility
+    != Opportunity
+    != Allocation
+    != Adoption
+```
+
+These terms must not be used interchangeably in analysis, figures or manuscript text.
