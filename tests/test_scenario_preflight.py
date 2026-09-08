@@ -54,7 +54,7 @@ def _write_stage08(cfg: SpatialConfig) -> None:
     pd.DataFrame(rows).to_csv(cfg.project_root / "processed/stage08.csv", index=False)
 
 
-def _write_controls(cfg: SpatialConfig) -> None:
+def _write_controls(cfg: SpatialConfig, *, rewetting_ha: float = 0.0) -> None:
     pd.DataFrame(
         [
             {
@@ -71,7 +71,7 @@ def _write_controls(cfg: SpatialConfig) -> None:
                 "WILLOW_HA": 0.0,
                 "ADDITIONAL_TILLAGE_HA": 0.0,
                 "ADDITIONAL_FOREST_HA": 0.0,
-                "REWETTING_HA": 0.0,
+                "REWETTING_HA": float(rewetting_ha),
             }
         ]
     ).to_csv(cfg.files["scenario_controls"], index=False)
@@ -83,9 +83,13 @@ def _mock_valid_colm_lpis_context(monkeypatch, cfg: SpatialConfig) -> None:
     monkeypatch.setattr(preflight, "read_colm_lpis_context", lambda path: frame)
 
 
-def _write_runtime_prerequisites(cfg: SpatialConfig) -> None:
+def _write_runtime_prerequisites(
+    cfg: SpatialConfig,
+    *,
+    rewetting_ha: float = 0.0,
+) -> None:
     _write_stage08(cfg)
-    _write_controls(cfg)
+    _write_controls(cfg, rewetting_ha=rewetting_ha)
 
 
 def test_sc2_preflight_accepts_frozen_2020_colm_lpis_runtime_contract(
@@ -112,6 +116,7 @@ def test_missing_land_context_does_not_block_sc1(tmp_path: Path) -> None:
 
     assert report["OK"].all(), report.to_dict("records")
     assert "COLM_LPIS_CONTEXT_2020" not in set(report["ITEM"])
+    assert "COLM_STAGE_A_ELIGIBILITY" not in set(report["ITEM"])
 
 
 def test_missing_colm_lpis_context_blocks_sc2(tmp_path: Path) -> None:
@@ -123,6 +128,49 @@ def test_missing_colm_lpis_context_blocks_sc2(tmp_path: Path) -> None:
 
     assert not bool(context["OK"])
     assert "missing repository-contained Colm physical-soil + LPIS control" in context["DETAIL"]
+
+
+def test_sc3_is_blocked_without_explicit_stage_a_eligibility(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    cfg = _cfg(tmp_path)
+    _write_runtime_prerequisites(cfg)
+    _mock_valid_colm_lpis_context(monkeypatch, cfg)
+
+    report = preflight.preflight_principal_inputs(
+        cfg,
+        baseline_year=2020,
+        stage="SC3",
+        scenario_id="TEST",
+    )
+    rules = report.set_index("ITEM").loc["COLM_STAGE_A_ELIGIBILITY"]
+    rewet = report.set_index("ITEM").loc["REWETTING_CAPACITY"]
+
+    assert not bool(rules["OK"])
+    assert "explicit evidence-backed" in rules["DETAIL"]
+    assert bool(rewet["OK"])
+    assert "not required" in rewet["DETAIL"]
+
+
+def test_sc3_positive_rewetting_requires_external_capacity(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    cfg = _cfg(tmp_path)
+    _write_runtime_prerequisites(cfg, rewetting_ha=10.0)
+    _mock_valid_colm_lpis_context(monkeypatch, cfg)
+
+    report = preflight.preflight_principal_inputs(
+        cfg,
+        baseline_year=2020,
+        stage="SC3",
+        scenario_id="TEST",
+    )
+    rewet = report.set_index("ITEM").loc["REWETTING_CAPACITY"]
+
+    assert not bool(rewet["OK"])
+    assert "drained-organic/agricultural" in rewet["DETAIL"]
 
 
 def test_2025_sc1_is_soil_independent(tmp_path: Path) -> None:
