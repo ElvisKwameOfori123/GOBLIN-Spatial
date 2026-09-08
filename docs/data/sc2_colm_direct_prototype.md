@@ -1,20 +1,27 @@
 # Colm-direct SC2 physical-resource prototype
 
-This prototype tests whether GOBLIN-Spatial can construct SC2 physical eligibility directly from Colm's mapped physical-soil evidence without requiring G1/G2/G3 as an intermediate classification.
+> **Status: historical prototype note.** This document records the first SC2-only Colm-direct experiment. The active migration has since expanded to a coherent SC1-SC3 architecture. The authoritative design for the migration branch is `docs/colm_direct_sc1_sc3_architecture.md`.
 
-It is intentionally parallel to the frozen production SC2 v3.1 path. It does not alter SC1, SC3 or the current manuscript results.
+This prototype originally tested whether GOBLIN-Spatial could construct SC2 physical eligibility directly from Colm's mapped physical-soil evidence without requiring G1/G2/G3 as an intermediate classification.
 
-## Scientific sequence
+The prototype's central scientific idea has been retained, but its original statement that SC1 and SC3 remain unchanged is no longer current. In the active Colm-direct migration:
+
+- SC1 is soil-independent and spatialises the authoritative national GOBLIN release from the solved livestock/pasture-DM transition subject only to `ALL_GRASSLAND` capacity;
+- SC2 characterises the frozen SC1 release using Colm physical soil plus LPIS agricultural context and applies only explicit, evidence-backed eligibility rules;
+- SC3 allocates explicit GOBLIN land-use targets jointly over finite ED x Colm-soil resource cells and reports realised, unmet and residual land;
+- legacy 08B/G1/G2/G3 remains available only as a benchmark/provenance implementation.
+
+## Prototype scientific sequence
 
 ```text
 frozen SC1 released land by ED
         -> Colm ED physical-soil shares
         -> proportional soil-resolved released-land resource
         -> explicit evidence-backed use-specific eligibility rules
-        -> future SC3 interface after validation
+        -> SC3 finite-resource allocation after validation
 ```
 
-The Stage-1 transformation is source-grounded:
+The physical-resource transformation remains:
 
 ```text
 COLM_RELEASED_<SOIL>_HA
@@ -22,11 +29,11 @@ COLM_RELEASED_<SOIL>_HA
       * IFS_MAP_<SOIL>_SHARE
 ```
 
-The resulting hectares are a proportional within-ED characterisation of the released-land resource. They do not identify observed released parcels.
+The resulting hectares are a proportional within-ED characterisation of the released-land resource. They do not identify observed released parcels or parcel-level soil provenance.
 
 ## No implicit capability classification
 
-The prototype does not derive or use G1/G2/G3. It retains the seven Colm mapped categories:
+The Colm-direct chain does not derive or use G1/G2/G3. It retains the seven mapped physical categories:
 
 - deep well drained
 - shallow well drained
@@ -36,31 +43,34 @@ The prototype does not derive or use G1/G2/G3. It retains the seven Colm mapped 
 - peat
 - miscellaneous
 
-The seven released-soil quantities must close exactly to the frozen SC1 released-land total in each ED.
+The seven released-soil quantities must close exactly to the frozen SC1 released-land total in every ED.
 
 ## Eligibility rules
 
-No tillage, willow, AD/biorefinery, forestry or rewetting rule is hard-coded at this stage.
+No tillage, willow, AD/biorefinery, forestry or rewetting suitability rule is silently hard-coded.
 
-A future-use rule must explicitly provide one coefficient in the range 0-1 for every Colm category. The rule application also requires a version identifier and evidence note. Missing categories, implicit defaults and out-of-range coefficients are rejected.
+A Stage-A future-use rule must explicitly provide a coefficient for every Colm category, with a version identifier and evidence note. Missing categories, implicit defaults and out-of-range coefficients are rejected. Rewetting is excluded from soil-only eligibility because mapped peat is not equivalent to drained agricultural organic soil or rewettable capacity.
 
-This design separates:
+The retained distinction is:
 
 ```text
-source evidence -> physical resource -> modelling rule -> eligible capacity
+potential release
+    != physical resource
+    != eligibility
+    != opportunity
+    != realised conversion
 ```
 
-and prevents a provisional scientific assumption from silently becoming part of the production model.
+## Current promotion criteria
 
-## Promotion criteria
+The Colm-direct SC1-SC3 branch should not replace the frozen legacy production results until:
 
-The Colm-direct path should not replace production SC2 until:
+1. full automated tests pass;
+2. SC1 soil-independence is verified;
+3. every Stage-A eligibility rule has a documented scientific basis;
+4. a validated drained-organic/agricultural rewetting-capacity control is supplied;
+5. Colm-direct outputs are compared with the frozen 08B benchmark;
+6. SC3 is rerun across the principal pathway/allocation matrix;
+7. reporting, figures and manuscript results are regenerated and independently checked.
 
-1. every use-specific soil rule has a documented scientific basis;
-2. rule coefficients and exclusions are reviewable in a versioned control table;
-3. national and ED-level capacity diagnostics are checked;
-4. LPIS and other non-soil opportunity evidence are integrated separately where required;
-5. results are compared with the frozen SC2 v3.1 benchmark;
-6. SC3 feasibility and headline manuscript outputs are revalidated.
-
-Until those conditions are met, the existing production SC1-SC3 path remains authoritative.
+For current architecture and invariants, use `docs/colm_direct_sc1_sc3_architecture.md` rather than this historical note.
