@@ -1,4 +1,4 @@
-"""Tests for the no-download principal scenario preflight contract."""
+"""Tests for the no-download Colm-direct principal preflight contract."""
 
 from __future__ import annotations
 
@@ -7,11 +7,6 @@ from pathlib import Path
 import pandas as pd
 
 from goblin_spatial.config import SpatialConfig
-from goblin_spatial.land.context import (
-    LAND_CONTEXT_CANONICAL_SHA256,
-    LAND_CONTEXT_EXPECTED_COLUMNS,
-    LAND_CONTEXT_EXPECTED_EDS,
-)
 import goblin_spatial.scenario.preflight as preflight
 
 
@@ -82,19 +77,10 @@ def _write_controls(cfg: SpatialConfig) -> None:
     ).to_csv(cfg.files["scenario_controls"], index=False)
 
 
-def _mock_valid_land_context(monkeypatch, cfg: SpatialConfig) -> None:
+def _mock_valid_colm_lpis_context(monkeypatch, cfg: SpatialConfig) -> None:
     cfg.files["land_context_2020"].mkdir(parents=True)
-    frame = pd.DataFrame(
-        0.0,
-        index=range(LAND_CONTEXT_EXPECTED_EDS),
-        columns=[f"C{i}" for i in range(LAND_CONTEXT_EXPECTED_COLUMNS)],
-    )
-    monkeypatch.setattr(preflight, "read_land_context_table", lambda path: frame)
-    monkeypatch.setattr(
-        preflight,
-        "land_context_sha256",
-        lambda path: LAND_CONTEXT_CANONICAL_SHA256,
-    )
+    frame = pd.DataFrame({"CSOED": ["1001", "1002"]})
+    monkeypatch.setattr(preflight, "read_colm_lpis_context", lambda path: frame)
 
 
 def _write_runtime_prerequisites(cfg: SpatialConfig) -> None:
@@ -102,48 +88,61 @@ def _write_runtime_prerequisites(cfg: SpatialConfig) -> None:
     _write_controls(cfg)
 
 
-def test_sc3_preflight_accepts_frozen_2020_runtime_contract(tmp_path: Path, monkeypatch) -> None:
+def test_sc2_preflight_accepts_frozen_2020_colm_lpis_runtime_contract(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
     cfg = _cfg(tmp_path)
     _write_runtime_prerequisites(cfg)
-    _mock_valid_land_context(monkeypatch, cfg)
+    _mock_valid_colm_lpis_context(monkeypatch, cfg)
 
-    report = preflight.preflight_principal_inputs(cfg, baseline_year=2020, stage="SC3")
+    report = preflight.preflight_principal_inputs(cfg, baseline_year=2020, stage="SC2")
 
     assert report["OK"].all(), report.to_dict("records")
-    context = report.set_index("ITEM").loc["FROZEN_LAND_CONTEXT_2020"]
-    assert f"rows={LAND_CONTEXT_EXPECTED_EDS:,}" in context["DETAIL"]
-    assert f"columns={LAND_CONTEXT_EXPECTED_COLUMNS}" in context["DETAIL"]
-    assert LAND_CONTEXT_CANONICAL_SHA256 in context["DETAIL"]
+    context = report.set_index("ITEM").loc["COLM_LPIS_CONTEXT_2020"]
+    assert "rows=2" in context["DETAIL"]
+    assert "legacy 08B not required" in context["DETAIL"]
 
 
-def test_missing_land_context_fails_without_rebuild(tmp_path: Path) -> None:
+def test_missing_land_context_does_not_block_sc1(tmp_path: Path) -> None:
     cfg = _cfg(tmp_path)
     _write_runtime_prerequisites(cfg)
 
     report = preflight.preflight_principal_inputs(cfg, baseline_year=2020, stage="SC1")
-    context = report.set_index("ITEM").loc["FROZEN_LAND_CONTEXT_2020"]
 
-    assert not bool(context["OK"])
-    assert "missing repository-contained runtime control" in context["DETAIL"]
+    assert report["OK"].all(), report.to_dict("records")
+    assert "COLM_LPIS_CONTEXT_2020" not in set(report["ITEM"])
 
 
-def test_2025_sc1_may_use_frozen_08b_reference(tmp_path: Path, monkeypatch) -> None:
+def test_missing_colm_lpis_context_blocks_sc2(tmp_path: Path) -> None:
     cfg = _cfg(tmp_path)
     _write_runtime_prerequisites(cfg)
-    _mock_valid_land_context(monkeypatch, cfg)
+
+    report = preflight.preflight_principal_inputs(cfg, baseline_year=2020, stage="SC2")
+    context = report.set_index("ITEM").loc["COLM_LPIS_CONTEXT_2020"]
+
+    assert not bool(context["OK"])
+    assert "missing repository-contained Colm physical-soil + LPIS control" in context["DETAIL"]
+
+
+def test_2025_sc1_is_soil_independent(tmp_path: Path) -> None:
+    cfg = _cfg(tmp_path)
+    _write_runtime_prerequisites(cfg)
 
     report = preflight.preflight_principal_inputs(cfg, baseline_year=2025, stage="SC1")
 
     assert report["OK"].all(), report.to_dict("records")
+    assert "COLM_LPIS_CONTEXT_2020" not in set(report["ITEM"])
 
 
-def test_2025_sc2_sc3_are_blocked_until_separate_context_exists(tmp_path: Path, monkeypatch) -> None:
+def test_2025_sc2_sc3_are_blocked_until_separate_context_exists(
+    tmp_path: Path,
+) -> None:
     cfg = _cfg(tmp_path)
     _write_runtime_prerequisites(cfg)
-    _mock_valid_land_context(monkeypatch, cfg)
 
     report = preflight.preflight_principal_inputs(cfg, baseline_year=2025, stage="SC3")
     support = report.set_index("ITEM").loc["SPATIAL_BASELINE_SUPPORT"]
 
     assert not bool(support["OK"])
-    assert "2020 land context only" in support["DETAIL"]
+    assert "2020 Colm+LPIS context only" in support["DETAIL"]
