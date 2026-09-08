@@ -1,31 +1,26 @@
-"""Stage-aware runner for the Colm-direct GOBLIN-Spatial scenario study.
+"""Stage-aware runner for the GOBLIN-Spatial scenario study.
 
 SC1
-    selected 2020/2025 Stage-08 livestock/grassland/SO baseline
+    selected 2020/2025 livestock/grassland/Standard Output baseline
     -> adult dairy/suckler endpoint allocation
-    -> Stage-09 21-cohort propagation
-    -> unchanged sheep
-    -> fixed-2020 Standard Output exposure
-    -> authoritative GOBLIN release spatialised from livestock/pasture-DM pressure
-       with ALL_GRASSLAND as the only land-capacity bound
-
-    No 08B, Colm soil or LPIS suitability evidence is loaded into SC1.
+    -> 21-cohort cattle propagation + unchanged sheep cohorts
+    -> production-value exposure
+    -> authoritative national release spatialised from livestock/pasture-DM
+       transition pressure, bounded only by ALL_GRASSLAND
 
 SC2 (2020 spatial baseline only)
     frozen SC1 release
-    -> Colm mapped physical soil + LPIS 2020
+    -> Colm mapped physical soil + LPIS 2020 context
     -> seven-category released physical-resource partition
     -> optional explicit, versioned, evidence-backed eligibility rules
 
 SC3 (2020 spatial baseline only)
-    explicit same-pathway national land-use targets
-    -> five Stage-A uses compete jointly for finite ED x Colm-soil resource cells
+    same-pathway national land-use targets
+    -> five productive/restoration-compatible Stage-A uses compete jointly for
+       finite ED x Colm-soil resource cells
     -> realised + unmet + residual land
-    -> rewetting only from an explicit validated drained-organic/agricultural
-       capacity control; mapped peat alone is never accepted as capacity
-
-The legacy 08B/G1-G2-G3 runtime remains available on the historical main branch
-as a benchmark but is not part of this Colm-direct decision chain.
+    -> rewetting only from an explicit validated drained-organic agricultural
+       capacity control
 """
 
 from __future__ import annotations
@@ -38,23 +33,14 @@ import pandas as pd
 from goblin_spatial.config import load_config
 from goblin_spatial.dynamics.baseline import select_baseline_year
 from goblin_spatial.land.colm_rules import load_colm_eligibility_control
-from goblin_spatial.land.rewetting_capacity import (
-    attach_rewetting_capacity,
-    load_rewetting_capacity_control,
-)
+from goblin_spatial.land.rewetting_capacity import attach_rewetting_capacity, load_rewetting_capacity_control
 from goblin_spatial.land.sc2_context import prepare_sc2_context
-from goblin_spatial.land.sc3_colm_allocation import (
-    allocate_colm_sc3_targets,
-    summarise_colm_sc3_allocation,
-)
+from goblin_spatial.land.sc3_colm_allocation import allocate_colm_sc3_targets, summarise_colm_sc3_allocation
 from goblin_spatial.pressure import load_pasture_dm_control
 from goblin_spatial.scenario.control_table import active_scenario_ids, load_scenario_controls
 from goblin_spatial.scenario.definition import AllocationRule
 from goblin_spatial.scenario.metrics import build_sc1_county_summary, build_sc1_national_metrics
-from goblin_spatial.scenario.principal_allocation import (
-    PRINCIPAL_ALLOCATION_POLICIES,
-    PRINCIPAL_PROTECTION_STRENGTH,
-)
+from goblin_spatial.scenario.principal_allocation import PRINCIPAL_ALLOCATION_POLICIES, PRINCIPAL_PROTECTION_STRENGTH
 from goblin_spatial.scenario.principal_endpoint import run_principal_goblin_endpoint
 from goblin_spatial.scenario.reconciliation import build_goblin_reconciliation
 
@@ -62,50 +48,18 @@ from goblin_spatial.scenario.reconciliation import build_goblin_reconciliation
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="goblin-spatial-principal",
-        description="Run an ACTIVE GOBLIN pathway through Colm-direct GOBLIN-Spatial.",
+        description="Run an ACTIVE GOBLIN pathway through GOBLIN-Spatial.",
     )
     parser.add_argument("scenario", help="SCENARIO_ID from the editable control CSV")
     parser.add_argument("--config", default="configs/ireland_2015_2025.yaml")
     parser.add_argument("--baseline-year", type=int, choices=(2020, 2025), default=2020)
     parser.add_argument("--scenario-controls", default=None)
-    parser.add_argument(
-        "--allocation-rule",
-        choices=PRINCIPAL_ALLOCATION_POLICIES,
-        default="PRORATA",
-        help="Validated principal SC1 incidence policy.",
-    )
-    parser.add_argument(
-        "--protection-strength",
-        type=float,
-        default=PRINCIPAL_PROTECTION_STRENGTH,
-        help="Principal protection strength lambda; default 0.50.",
-    )
+    parser.add_argument("--allocation-rule", choices=PRINCIPAL_ALLOCATION_POLICIES, default="PRORATA", help="Validated principal SC1 incidence policy.")
+    parser.add_argument("--protection-strength", type=float, default=PRINCIPAL_PROTECTION_STRENGTH, help="Principal protection strength lambda; default 0.50.")
     parser.add_argument("--baseline-master", default=None)
-    parser.add_argument(
-        "--land-context",
-        default=None,
-        help=(
-            "Colm physical-soil + LPIS context source used only by SC2/SC3. "
-            "The default repository directory may still contain 08B, but the "
-            "Colm-direct reader ignores it."
-        ),
-    )
-    parser.add_argument(
-        "--colm-eligibility-rules",
-        default=None,
-        help=(
-            "Versioned Stage-A use x seven-Colm-soil eligibility CSV. Optional "
-            "for SC2 physical-resource inspection; required for SC3."
-        ),
-    )
-    parser.add_argument(
-        "--rewetting-capacity",
-        default=None,
-        help=(
-            "Versioned ED-level validated drained-organic/agricultural rewetting "
-            "capacity control. Required by SC3 when the pathway rewetting target is positive."
-        ),
-    )
+    parser.add_argument("--land-context", default=None, help="Frozen Colm physical-soil + LPIS context used only by SC2/SC3.")
+    parser.add_argument("--colm-eligibility-rules", default=None, help="Versioned Stage-A use x seven-Colm-soil eligibility CSV. Optional for SC2 and required for SC3.")
+    parser.add_argument("--rewetting-capacity", default=None, help="Versioned ED-level drained-organic agricultural rewetting-capacity control, required when the pathway has a positive rewetting target.")
     parser.add_argument("--output-dir", default=None)
     parser.add_argument("--stage", choices=("SC1", "SC2", "SC3"), default="SC1")
     return parser
@@ -131,10 +85,7 @@ def _configured_path(cfg, key: str, override: str | None = None) -> Path:
 def _required_path(cfg, key: str, override: str | None = None) -> Path:
     path = _configured_path(cfg, key, override)
     if not path.exists():
-        raise FileNotFoundError(
-            f"required repository/input control not found for {key}: {path}. "
-            "Principal scenario runs never auto-download or rebuild spatial sources."
-        )
+        raise FileNotFoundError(f"required control not found for {key}: {path}")
     return path
 
 
@@ -156,27 +107,17 @@ def _output_dir(args, cfg) -> Path:
     return cfg.processed_dir / "principal" / name
 
 
-def _validate_stage08_baseline(
-    panel: pd.DataFrame,
-    *,
-    baseline_year: int,
-    expected_eds: int,
-) -> pd.DataFrame:
+def _validate_stage08_baseline(panel: pd.DataFrame, *, baseline_year: int, expected_eds: int) -> pd.DataFrame:
     baseline = select_baseline_year(panel, baseline_year, expected_eds=expected_eds)
     required = {
-        "CSOED",
-        "County",
-        "ALL_GRASSLAND",
-        "AGRICULTURAL_HOLDINGS",
-        "AVERAGE_SIZE_OF_HOLDINGS",
-        "MEDIAN_AGE_OF_HOLDER",
-        "SO_LIVESTOCK_2020_EUR",
+        "CSOED", "County", "ALL_GRASSLAND", "AGRICULTURAL_HOLDINGS",
+        "AVERAGE_SIZE_OF_HOLDINGS", "MEDIAN_AGE_OF_HOLDER", "SO_LIVESTOCK_2020_EUR",
     }
     missing = sorted(required - set(baseline.columns))
     if missing:
         raise ValueError(
-            "principal SC1 must start from the Stage-08 Standard Output-enriched "
-            f"baseline; missing columns={missing}"
+            "principal SC1 must start from the Standard Output-enriched baseline; "
+            f"missing columns={missing}"
         )
     return baseline
 
@@ -189,38 +130,20 @@ def _national_livestock_summary(ed: pd.DataFrame) -> pd.DataFrame:
         "PATHWAY_ALLOCATION_RULE": str(ed["PATHWAY_ALLOCATION_RULE"].iloc[0]),
         "PROTECTION_STRENGTH_LAMBDA": float(ed["PROTECTION_STRENGTH_LAMBDA"].iloc[0]),
         "NATIONAL_COHORT_TARGET_SOURCE": str(ed["NATIONAL_COHORT_TARGET_SOURCE"].iloc[0]),
-        "SCENARIO_DAIRY_COW": int(
-            pd.to_numeric(ed["SCENARIO_DAIRY_COW"], errors="raise").sum()
-        ),
-        "SCENARIO_SUCKLER_COW": int(
-            pd.to_numeric(ed["SCENARIO_OTHER_COW"], errors="raise").sum()
-        ),
-        "SCENARIO_TOTAL_CATTLE": int(
-            pd.to_numeric(ed["SCENARIO_TOTAL_CATTLE"], errors="raise").sum()
-        ),
-        "BASE_TOTAL_CATTLE": int(
-            pd.to_numeric(ed["BASE_TOTAL_CATTLE"], errors="raise").sum()
-        ),
+        "SCENARIO_DAIRY_COW": int(pd.to_numeric(ed["SCENARIO_DAIRY_COW"], errors="raise").sum()),
+        "SCENARIO_SUCKLER_COW": int(pd.to_numeric(ed["SCENARIO_OTHER_COW"], errors="raise").sum()),
+        "SCENARIO_TOTAL_CATTLE": int(pd.to_numeric(ed["SCENARIO_TOTAL_CATTLE"], errors="raise").sum()),
+        "BASE_TOTAL_CATTLE": int(pd.to_numeric(ed["BASE_TOTAL_CATTLE"], errors="raise").sum()),
     }
     row["TOTAL_CATTLE_CHANGE"] = row["SCENARIO_TOTAL_CATTLE"] - row["BASE_TOTAL_CATTLE"]
-    row["TOTAL_CATTLE_CHANGE_PCT"] = (
-        0.0
-        if row["BASE_TOTAL_CATTLE"] == 0
-        else 100.0 * row["TOTAL_CATTLE_CHANGE"] / row["BASE_TOTAL_CATTLE"]
-    )
+    row["TOTAL_CATTLE_CHANGE_PCT"] = 0.0 if row["BASE_TOTAL_CATTLE"] == 0 else 100.0 * row["TOTAL_CATTLE_CHANGE"] / row["BASE_TOTAL_CATTLE"]
     if "GOBLIN_RELEASED_GRASSLAND_HA" in ed.columns:
-        row["GOBLIN_RELEASED_GRASSLAND_HA"] = float(
-            pd.to_numeric(ed["GOBLIN_RELEASED_GRASSLAND_HA"], errors="raise").sum()
-        )
+        row["GOBLIN_RELEASED_GRASSLAND_HA"] = float(pd.to_numeric(ed["GOBLIN_RELEASED_GRASSLAND_HA"], errors="raise").sum())
         for system in ("DAIRY", "BEEF", "SHEEP"):
             column = f"GOBLIN_RELEASED_{system}_LAND_HA"
             if column in ed.columns:
                 row[column] = float(pd.to_numeric(ed[column], errors="raise").sum())
-    for column in (
-        "SIGNED_GRASSLAND_BALANCE_HA",
-        "POTENTIAL_SPARED_GRASSLAND_HA",
-        "ADDITIONAL_GRASSLAND_REQUIRED_HA",
-    ):
+    for column in ("SIGNED_GRASSLAND_BALANCE_HA", "POTENTIAL_SPARED_GRASSLAND_HA", "ADDITIONAL_GRASSLAND_REQUIRED_HA"):
         if column in ed.columns:
             row[column] = float(pd.to_numeric(ed[column], errors="raise").sum())
     return pd.DataFrame([row])
@@ -232,41 +155,26 @@ def main() -> None:
 
     if args.stage in {"SC2", "SC3"} and int(args.baseline_year) != 2020:
         raise ValueError(
-            "Colm-direct SC2/SC3 currently require the frozen 2020 spatial baseline. "
-            "A validated 2025 Colm+LPIS context has not yet been supplied."
+            "SC2/SC3 currently require the frozen 2020 spatial baseline. "
+            "A validated 2025 Colm+LPIS context has not been supplied."
         )
 
     baseline_path = (
         _configured_path(cfg, "_override", args.baseline_master)
         if args.baseline_master is not None
-        else _configured_output(
-            cfg,
-            "standard_output_master",
-            "data/processed/08_GOBLIN_Spatial_Standard_Output_2015_2025.csv",
-        )
+        else _configured_output(cfg, "standard_output_master", "data/processed/08_GOBLIN_Spatial_Standard_Output_2015_2025.csv")
     )
     if not baseline_path.exists():
-        raise FileNotFoundError(
-            f"Stage-08 Standard Output baseline not found: {baseline_path}. "
-            "Run the validated historical baseline first."
-        )
+        raise FileNotFoundError(f"Standard Output baseline not found: {baseline_path}. Run the historical baseline first.")
 
     panel = pd.read_csv(baseline_path, low_memory=False)
-    baseline = _validate_stage08_baseline(
-        panel,
-        baseline_year=int(args.baseline_year),
-        expected_eds=int(cfg.expected_eds),
-    )
-    baseline_grassland_ha = float(
-        pd.to_numeric(baseline["ALL_GRASSLAND"], errors="raise").sum()
-    )
+    baseline = _validate_stage08_baseline(panel, baseline_year=int(args.baseline_year), expected_eds=int(cfg.expected_eds))
+    baseline_grassland_ha = float(pd.to_numeric(baseline["ALL_GRASSLAND"], errors="raise").sum())
 
     controls_path = _required_path(cfg, "scenario_controls", args.scenario_controls)
     active_ids = active_scenario_ids(controls_path)
     if args.scenario not in active_ids:
-        raise ValueError(
-            f"scenario {args.scenario!r} is not ACTIVE; available scenarios={active_ids}"
-        )
+        raise ValueError(f"scenario {args.scenario!r} is not ACTIVE; available scenarios={active_ids}")
     selection = load_scenario_controls(
         controls_path,
         scenario_id=args.scenario,
@@ -285,8 +193,6 @@ def main() -> None:
     mapping = str(_required_path(cfg, "standard_output_mapping"))
     coefficients = str(_required_path(cfg, "standard_output_coefficients"))
 
-    # SC1 receives the validated historical panel directly. No land-context file
-    # is read or attached here, which makes soil/LPIS independence executable.
     ed = run_principal_goblin_endpoint(
         panel,
         controls,
@@ -314,28 +220,22 @@ def main() -> None:
     controls_summary_path = outdir / "sc1_control_summary.csv"
     reconciliation_path = outdir / "sc1_goblin_reconciliation.csv"
 
-    control_summary = pd.DataFrame(
-        [
-            {
-                "SCENARIO_NO": selection.scenario_no,
-                "SCENARIO_ID": selection.scenario_id,
-                "SCENARIO_NAME": selection.scenario_name,
-                "RUN_START_YEAR": selection.baseline_year,
-                "TARGET_YEAR": selection.target_year,
-                "ALLOCATION_POLICY": args.allocation_rule,
-                "PROTECTION_STRENGTH_LAMBDA": float(args.protection_strength),
-                "BASELINE_GRASSLAND_HA": selection.baseline_grassland_ha,
-                "TARGET_LIVESTOCK_LAND_HA": selection.target_livestock_land_ha,
-                "RUN_GROSS_RELEASE_HA": selection.gross_release_ha,
-                "STAGE_A_TARGET_HA": selection.stage_a_target_ha,
-                "GOBLIN_PARENT_AVAILABLE_BEFORE_REWETTING_HA": (
-                    selection.stage_a_available_before_rewetting_ha
-                ),
-                "REWETTING_TARGET_HA": selection.rewetting_target_ha,
-                "SC1_SOIL_OR_LPIS_USED": False,
-            }
-        ]
-    )
+    control_summary = pd.DataFrame([{
+        "SCENARIO_NO": selection.scenario_no,
+        "SCENARIO_ID": selection.scenario_id,
+        "SCENARIO_NAME": selection.scenario_name,
+        "RUN_START_YEAR": selection.baseline_year,
+        "TARGET_YEAR": selection.target_year,
+        "ALLOCATION_POLICY": args.allocation_rule,
+        "PROTECTION_STRENGTH_LAMBDA": float(args.protection_strength),
+        "BASELINE_GRASSLAND_HA": selection.baseline_grassland_ha,
+        "TARGET_LIVESTOCK_LAND_HA": selection.target_livestock_land_ha,
+        "RUN_GROSS_RELEASE_HA": selection.gross_release_ha,
+        "STAGE_A_TARGET_HA": selection.stage_a_target_ha,
+        "GOBLIN_PARENT_AVAILABLE_BEFORE_REWETTING_HA": selection.stage_a_available_before_rewetting_ha,
+        "REWETTING_TARGET_HA": selection.rewetting_target_ha,
+        "SC1_SPATIAL_LAND_CONTEXT_USED": False,
+    }])
 
     ed.to_csv(ed_path, index=False)
     _national_livestock_summary(ed).to_csv(livestock_summary_path, index=False)
@@ -352,15 +252,11 @@ def main() -> None:
     print(f"SC1 GOBLIN reconciliation: {reconciliation_path}")
 
     if args.stage == "SC1":
-        print("SC1 completed and frozen. No soil or LPIS context was loaded.")
+        print("SC1 completed and frozen.")
         return
 
     land_context_path = _required_path(cfg, "land_context_2020", args.land_context)
-    rule_path = _user_path(
-        cfg,
-        args.colm_eligibility_rules,
-        label="Colm eligibility rule control",
-    )
+    rule_path = _user_path(cfg, args.colm_eligibility_rules, label="Colm eligibility rule control")
     rules = None
     rule_version = None
     evidence_note = None
@@ -381,41 +277,28 @@ def main() -> None:
 
     if args.stage == "SC2":
         if rules is None:
-            print(
-                "SC2 completed as physical-resource + LPIS context only; "
-                "no unvalidated eligibility assumptions were applied."
-            )
+            print("SC2 completed as physical-resource + LPIS context only; no eligibility assumptions were applied.")
         else:
             print(f"SC2 completed with explicit eligibility rule version {rule_version}.")
         return
 
     if rules is None:
-        raise ValueError(
-            "SC3 requires --colm-eligibility-rules. No default land-use "
-            "suitability assumptions are permitted in the Colm-direct architecture."
-        )
+        raise ValueError("SC3 requires --colm-eligibility-rules. No default land-use suitability assumptions are permitted.")
 
     milestone = controls.milestone(target_year)
     targets = dict(milestone.land_use_targets_ha)
-
     rewetting_mapping = None
-    rewetting_path = _user_path(
-        cfg,
-        args.rewetting_capacity,
-        label="rewetting capacity control",
-    )
+    rewetting_path = _user_path(cfg, args.rewetting_capacity, label="rewetting capacity control")
     if float(targets.get("REWETTING", 0.0)) > 1e-7:
         if rewetting_path is None:
             raise ValueError(
                 "this pathway has a positive REWETTING target, so SC3 requires "
-                "--rewetting-capacity. Colm mapped peat alone is not treated as "
-                "drained agricultural organic-soil capacity."
+                "--rewetting-capacity. Mapped peat alone is not treated as drained "
+                "agricultural organic-soil capacity."
             )
-        rewet_control, rewetting_mapping, rewet_version, rewet_evidence = (
-            load_rewetting_capacity_control(
-                rewetting_path,
-                expected_eds=int(cfg.expected_eds),
-            )
+        rewet_control, rewetting_mapping, rewet_version, rewet_evidence = load_rewetting_capacity_control(
+            rewetting_path,
+            expected_eds=int(cfg.expected_eds),
         )
         sc2 = attach_rewetting_capacity(sc2, rewet_control)
         sc2["SC3_REWETTING_CAPACITY_VERSION"] = rewet_version
@@ -432,12 +315,9 @@ def main() -> None:
     sc3_summary_path = outdir / "sc3_national_summary.csv"
     sc3.to_csv(sc3_path, index=False)
     summarise_colm_sc3_allocation(sc3).to_csv(sc3_summary_path, index=False)
-    print(f"SC3 Colm-resource ED results: {sc3_path}")
+    print(f"SC3 ED results: {sc3_path}")
     print(f"SC3 national realised/unmet/residual summary: {sc3_summary_path}")
-    print(
-        "SC3 completed as a joint finite-resource feasibility test. No arbitrary "
-        "opportunity ranking was applied."
-    )
+    print("SC3 completed as a joint finite-resource feasibility test.")
 
 
 if __name__ == "__main__":

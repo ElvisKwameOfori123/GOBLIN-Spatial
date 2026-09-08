@@ -1,22 +1,18 @@
-"""SC2 Colm-direct released-land characterisation after a frozen SC1 result.
+"""SC2 spatial response-potential context after a frozen SC1 result.
 
 SC2 never recomputes livestock and never changes the authoritative ED released-
-land vector produced by SC1. The legacy 08B/G1-G2-G3 capability representation
-is not part of the new production decision chain.
+land vector produced by SC1. It attaches two distinct 2020 evidence layers:
 
-SC2 attaches two distinct baseline evidence layers:
+* Colm mapped physical soil, describing the released physical resource;
+* LPIS, describing current agricultural-use and management context.
 
-* Colm mapped physical soil: physical resource evidence;
-* LPIS 2020: current agricultural-use and management context.
+The frozen SC1 release is proportionally characterised across the seven physical
+soil categories. Optional future-use eligibility rules are applied only when
+they are explicit, complete, versioned and evidence-backed. Opportunity remains
+conceptually separate from eligibility and no arbitrary composite score is
+created here.
 
-The frozen SC1 release is then proportionally characterised across Colm's seven
-physical-soil categories. Optional future-use eligibility rules may be applied,
-but only when they are explicit, complete, versioned and evidence-backed.
-Opportunity is kept conceptually separate from eligibility. This module exposes
-transparent LPIS context and does not create arbitrary composite opportunity
-scores.
-
-``PotentialRelease != PhysicalResource != Eligibility != Opportunity != RealisedConversion``.
+Release != PhysicalResource != Eligibility != Opportunity != Allocation != Adoption.
 """
 
 from __future__ import annotations
@@ -28,17 +24,18 @@ import numpy as np
 import pandas as pd
 
 from goblin_spatial.land.colm_lpis_context import (
+    LAND_CONTEXT_YEAR,
+    PHYSICAL_AREA_COLUMNS,
     attach_colm_physical_context,
     read_colm_lpis_context,
 )
-from goblin_spatial.land.context import LAND_CONTEXT_YEAR, PHYSICAL_AREA_COLUMNS
 from goblin_spatial.land.lpis import add_ed_lpis_context
 from goblin_spatial.land.sc2_colm_direct import (
     COLM_RELEASED_AREA_COLUMNS,
     build_colm_direct_sc2_physical,
 )
 
-SC2_CONTEXT_VERSION = "COLM_DIRECT_1.1"
+SC2_CONTEXT_VERSION = "COLM_DIRECT_1.2"
 
 
 def _numeric(frame: pd.DataFrame, column: str) -> np.ndarray:
@@ -60,7 +57,7 @@ def _assert_release_invariant(
     if not np.array_equal(release_before, release_after):
         raise AssertionError("SC2 changed the frozen SC1 release vector")
     if not all(column in frame.columns for column in COLM_RELEASED_AREA_COLUMNS):
-        raise AssertionError("SC2 Colm physical-resource partition is incomplete")
+        raise AssertionError("SC2 physical-resource partition is incomplete")
     partition = (
         frame[list(COLM_RELEASED_AREA_COLUMNS)]
         .apply(pd.to_numeric, errors="raise")
@@ -68,7 +65,7 @@ def _assert_release_invariant(
         .to_numpy(dtype=float)
     )
     if not np.allclose(partition, release_before, atol=1e-7):
-        raise AssertionError("SC2 Colm physical-resource partition no longer closes to SC1")
+        raise AssertionError("SC2 physical-resource partition no longer closes to SC1")
 
 
 def prepare_sc2_context(
@@ -80,21 +77,14 @@ def prepare_sc2_context(
     eligibility_rules: Mapping[str, Mapping[str, float]] | None = None,
     rule_version: str | None = None,
     evidence_note: str | None = None,
-    apply_opportunity_science: bool | None = None,
 ) -> pd.DataFrame:
-    """Build Colm-direct SC2 from a frozen SC1 ED result.
-
-    ``apply_opportunity_science`` is retained only as a compatibility argument
-    for old callers. The Colm-direct architecture does not apply the legacy
-    composite Opportunity-v2 equations. LPIS and other context remain explicit
-    until a future-use opportunity rule has a documented evidence base.
-    """
+    """Build SC2 from a frozen SC1 ED result and frozen 2020 land context."""
 
     baseline_year = int(baseline_year)
     if baseline_year != LAND_CONTEXT_YEAR:
         raise ValueError(
-            "Colm-direct SC2 is currently supported only for baseline_year=2020. "
-            "A validated frozen 2025 LPIS/physical-soil context has not been supplied."
+            "SC2 is currently supported only for baseline_year=2020. "
+            "A validated frozen 2025 land context has not been supplied."
         )
 
     required = {"CSOED", "County", "ALL_GRASSLAND", release_column}
@@ -102,7 +92,7 @@ def prepare_sc2_context(
     if missing:
         raise ValueError(f"SC2 context missing frozen SC1 columns: {missing}")
     if sc1_ed["CSOED"].duplicated().any():
-        raise ValueError("SC2 endpoint context requires one row per ED")
+        raise ValueError("SC2 context requires one row per ED")
 
     release_before = _numeric(sc1_ed, release_column).copy()
     grass = _numeric(sc1_ed, "ALL_GRASSLAND")
@@ -116,11 +106,8 @@ def prepare_sc2_context(
     out = sc1_ed.copy()
     out["SC2_POTENTIAL_RELEASE_HA"] = release_before
 
-    # LPIS is current agricultural-use context only. It never changes release.
     lpis_columns = [
-        column
-        for column in context.columns
-        if column == "CSOED" or column.startswith("LPIS_")
+        column for column in context.columns if column == "CSOED" or column.startswith("LPIS_")
     ]
     out = add_ed_lpis_context(
         out,
@@ -131,12 +118,8 @@ def prepare_sc2_context(
     if not lpis_year.eq(LAND_CONTEXT_YEAR).all():
         raise AssertionError("SC2 LPIS context does not match the frozen 2020 runtime")
 
-    # Colm physical soil is attached directly as its seven mapped categories.
-    # Do not call the legacy 08C helper here because that helper additionally
-    # derives synthetic SG1/SG2/SG3 classes and a farmed-peat fraction.
     physical_context = context[["CSOED", *PHYSICAL_AREA_COLUMNS]].copy()
     out = attach_colm_physical_context(out, physical_context)
-
     out = build_colm_direct_sc2_physical(
         out,
         rules=eligibility_rules,
@@ -145,8 +128,6 @@ def prepare_sc2_context(
         release_column=release_column,
     )
 
-    # Transparent LPIS evidence. These are context descriptors, not realised
-    # conversion and not composite opportunity scores.
     if "LPIS_CLAIMED_GRASS_TO_MODEL_GRASS_RATIO" in out.columns:
         out["SC2_LPIS_GRASS_COVERAGE_RATIO"] = pd.to_numeric(
             out["LPIS_CLAIMED_GRASS_TO_MODEL_GRASS_RATIO"], errors="coerce"
@@ -168,12 +149,9 @@ def prepare_sc2_context(
     ).fillna(False).astype(bool)
     out["SC2_LAND_CONTEXT_YEAR"] = LAND_CONTEXT_YEAR
     out["SC2_LAND_CONTEXT_ROLE"] = "COLM_PHYSICAL_SOIL_PLUS_LPIS_BASELINE_EVIDENCE"
-    out["SC2_G1_G2_G3_USED"] = False
-    out["SC2_SYNTHETIC_SOIL_GROUPS_USED"] = False
-    out["SC2_FARMED_PEAT_FRACTION_ASSUMPTION_USED"] = False
     out["SC2_OPPORTUNITY_STATUS"] = "CONTEXT_EVIDENCE_ONLY_NO_ARBITRARY_COMPOSITE"
     out["SC2_REWETTING_CAPACITY_STATUS"] = (
-        "NOT_DERIVED_FROM_SOIL_ALONE_REQUIRES_VALIDATED_DRAINED_ORGANIC_AG_EVIDENCE"
+        "REQUIRES_VALIDATED_DRAINED_ORGANIC_AGRICULTURAL_EVIDENCE"
     )
     out["SC2_CONTEXT_VERSION"] = SC2_CONTEXT_VERSION
 

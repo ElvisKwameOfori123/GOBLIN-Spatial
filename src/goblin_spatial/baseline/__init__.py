@@ -1,12 +1,9 @@
 """Historical baseline interface for GOBLIN-Spatial v1.
 
-The historical baseline is complete after cattle, sheep, livestock merge,
-land and farm-structure/SE enrichment, clean validation/export, fixed-2020
-Standard Output (Stage 08), and frozen ED cohort signatures (Stage 09).
-
-Agricultural soil capability (08B) and mapped physical soil (08C) are not part
-of the historical reconstruction. They are downstream spatial context layers
-used when preparing the completed baseline for scenario analysis.
+The historical baseline is complete after cattle, sheep, livestock merge, land
+and farm-structure enrichment, clean validation/export, fixed-2020 Standard
+Output, and frozen ED cohort signatures. Spatial soil and LPIS evidence enter
+only after a scenario has completed SC1 and advances to SC2.
 """
 
 from .cattle import build_cattle_baseline

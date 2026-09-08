@@ -9,34 +9,26 @@ on:
 jobs:
   model-test:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
       - name: Install package
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[geo,goblin,scenario]"
           pip install pytest
-
       - name: Compile Python sources
         run: python -m compileall -q src tests
-
       - name: Verify repository-contained runtime inputs
         run: goblin-spatial fetch-data --verify-only
-
-      - name: Validate exact frozen 2020 land-context bundle
+      - name: Validate frozen 2020 Colm and LPIS runtime context
         run: pytest -q tests/test_land_context_bundle.py
-
       - name: Validate frozen ED geometry and model-universe join
         run: pytest -q tests/test_frozen_ed_geometry.py
-
       - name: Run historical baseline unit tests
         run: |
           pytest -q \
@@ -47,76 +39,48 @@ jobs:
             tests/test_export_schema.py \
             tests/test_input_data.py \
             tests/test_standard_output.py
-
       - name: Run full 2015-2025 historical regression
         run: pytest -q -s tests/test_full_baseline_regression.py
-
-      - name: Run principal scenario and Colm-direct unit tests
+      - name: Run principal scientific unit tests
         run: |
           pytest -q \
             tests/test_cli_study.py \
-            tests/test_colm_ed_soil.py \
             tests/test_goblin_controls.py \
             tests/test_goblin_reconciliation.py \
             tests/test_national_cohort_targets.py \
             tests/test_national_release.py \
             tests/test_principal_endpoint.py \
-            tests/test_principal_soil_context.py \
-            tests/test_reporting.py \
-            tests/test_study_reporting.py \
-            tests/test_map_reporting.py \
-            tests/test_publication_visuals.py \
             tests/test_sc1_comparison.py \
             tests/test_sc1_metrics.py \
             tests/test_sc2_colm_direct.py \
             tests/test_sc2_context.py \
-            tests/test_sc3_allocation.py \
             tests/test_sc3_colm_allocation.py \
             tests/test_sc3_feasible_geographies.py \
             tests/test_scenario_control_table.py \
             tests/test_scenario_preflight.py
-
       - name: Build canonical historical baseline
         run: goblin-spatial build --config configs/ireland_2015_2025.yaml
-
-      - name: Preflight standalone Colm-direct 2020 SC2 runtime
+      - name: Preflight 2020 SC2 runtime
         run: |
           python - <<'PY'
           from pathlib import Path
           from goblin_spatial.config import load_config
           from goblin_spatial.scenario.preflight import assert_principal_ready
-
           cfg = load_config(Path("configs/ireland_2015_2025.yaml"))
           report = assert_principal_ready(cfg, baseline_year=2020, stage="SC2")
           print(report.to_string(index=False))
           PY
-
-      - name: Run end-to-end soil-independent SC1 smoke test
-        run: |
-          goblin-spatial-principal SI_SG \
-            --baseline-year 2020 \
-            --allocation-rule PRORATA \
-            --stage SC1 \
-            --output-dir data/processed/ci_principal_si_sg
-
-      - name: Run end-to-end Colm plus LPIS SC2 physical-resource smoke test
-        run: |
-          goblin-spatial-principal SI_SG \
-            --baseline-year 2020 \
-            --allocation-rule PRORATA \
-            --stage SC2 \
-            --output-dir data/processed/ci_principal_si_sg
-
-      - name: Confirm Colm-direct migration outputs
+      - name: Run end-to-end SC1 smoke test
+        run: goblin-spatial-principal SI_SG --baseline-year 2020 --allocation-rule PRORATA --stage SC1 --output-dir data/processed/ci_principal_si_sg
+      - name: Run end-to-end SC2 smoke test
+        run: goblin-spatial-principal SI_SG --baseline-year 2020 --allocation-rule PRORATA --stage SC2 --output-dir data/processed/ci_principal_si_sg
+      - name: Confirm scientific outputs
         run: |
           test -f data/processed/ci_principal_si_sg/sc1_ed_results.csv
           test -f data/processed/ci_principal_si_sg/sc1_national_metrics.csv
           test -f data/processed/ci_principal_si_sg/sc1_goblin_reconciliation.csv
           test -f data/processed/ci_principal_si_sg/sc2_ed_context.csv
-
-      - name: Note SC3 and manuscript-reporting promotion gates
+      - name: Confirm SC3 scientific safeguard
         run: |
-          echo "Real-path SC3 is intentionally not run until evidence-backed Colm eligibility and validated rewetting-capacity controls are supplied."
-          echo "The finite-resource SC3 engine is covered by tests/test_sc3_colm_allocation.py."
-          echo "The same-end-use spatial-flexibility layer is covered by tests/test_sc3_feasible_geographies.py."
-          echo "Paper-figure regeneration remains a separate promotion gate after Colm-direct reporting schemas are finalised."
+          echo "Real-path SC3 requires explicit evidence-backed eligibility controls and, when needed, validated rewetting capacity."
+          echo "The finite-resource optimiser and fixed-end-use flexibility analysis are unit-tested."

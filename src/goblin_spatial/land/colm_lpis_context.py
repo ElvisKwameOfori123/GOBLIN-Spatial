@@ -1,37 +1,47 @@
-"""Runtime reader and direct attachment for Colm physical soil + LPIS evidence.
+"""Frozen 2020 Colm physical-soil and LPIS runtime context.
 
-The Colm-direct architecture does not require the legacy 08B capability file.
-This module loads only the frozen 08C physical-soil component and LPIS 2020
-component from the repository land-context directory, verifies their published
-checksums, normalises ED identifiers and merges them one-to-one.
+SC1 does not read this module. SC2 reads the frozen ED-level physical-soil and
+agricultural-use context only after livestock transition incidence and released
+land have been fixed. The context contains two independent evidence layers:
 
-The direct physical attachment deliberately retains Colm's seven mapped physical
-categories. It does not derive synthetic SG1/SG2/SG3 groups, a farmed-peat
-fraction, or any land-use suitability class. Those transformations belonged to
-the legacy dual-soil implementation and are outside the Colm-direct core.
+* seven mapped Colm physical-soil area categories;
+* LPIS 2020 agricultural-use and management context.
+
+The repository-directory reader verifies checksums and the exact ED universe.
+DataFrame inputs remain useful for unit testing and are validated structurally.
+No future land use, suitability, opportunity or adoption is inferred here.
 """
 
 from __future__ import annotations
 
 import hashlib
+import re
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-from goblin_spatial.land.context import (
-    LAND_CONTEXT_COMPONENT_FILES,
-    LAND_CONTEXT_COMPONENT_SHA256,
-    LAND_CONTEXT_YEAR,
-    PHYSICAL_AREA_COLUMNS,
+LAND_CONTEXT_YEAR = 2020
+LAND_CONTEXT_EXPECTED_EDS = 2857
+LAND_CONTEXT_EXPECTED_COLUMNS = 26
+
+COLM_PHYSICAL_FILE = "ED_Colm_Physical_Soil_2020.csv"
+LPIS_CONTEXT_FILE = "ED_LPIS_Context_2020.csv"
+COLM_PHYSICAL_SHA256 = "9892059c3f67c92d04427ad48220aa7565325df0251be6d53090388046b6bae4"
+LPIS_CONTEXT_SHA256 = "c8a6b66c9166ea3da0121def6225698037951d3022af02e5b42f2b54f4f13b2b"
+
+PHYSICAL_AREA_COLUMNS = (
+    "IFS_MAP_DEEP_WELL_DRAINED_HA",
+    "IFS_MAP_SHALLOW_WELL_DRAINED_HA",
+    "IFS_MAP_POORLY_DRAINED_HA",
+    "IFS_MAP_POORLY_DRAINED_PEATY_HA",
+    "IFS_MAP_ALLUVIUM_HA",
+    "IFS_MAP_PEAT_HA",
+    "IFS_MAP_MISCELLANEOUS_HA",
 )
-from goblin_spatial.soil.overlay import canonical_csoed
-
-
 COLM_PHYSICAL_SHARE_COLUMNS = tuple(
     column.replace("_HA", "_SHARE") for column in PHYSICAL_AREA_COLUMNS
 )
-
 REQUIRED_LPIS_COLUMNS = (
     "LPIS_YEAR",
     "LPIS_CLAIMED_AG_HA",
@@ -54,6 +64,25 @@ REQUIRED_LPIS_COLUMNS = (
 )
 
 
+def canonical_csoed(value: object) -> str:
+    """Return a compound-aware canonical Electoral Division identifier."""
+    if value is None or pd.isna(value):
+        return ""
+    text = str(value).strip()
+    if not text or text.lower() in {"nan", "none"}:
+        return ""
+    parts = [part.strip() for part in re.split(r"[/;,]", text) if part.strip()]
+    normalised: list[str] = []
+    for part in parts:
+        part = re.sub(r"\.0$", "", part)
+        if part[:1].upper() == "E" and part[1:].isdigit():
+            part = part[1:]
+        if part.isdigit():
+            part = part.lstrip("0") or "0"
+        normalised.append(part)
+    return "/".join(normalised)
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -67,40 +96,48 @@ def _keyed(frame: pd.DataFrame, *, label: str) -> pd.DataFrame:
     if key not in frame.columns:
         raise ValueError(f"{label} missing CSOED join key")
     out = frame.copy()
-    out["_COLM_LPIS_KEY"] = out[key].map(canonical_csoed)
-    if out["_COLM_LPIS_KEY"].eq("").any() or out["_COLM_LPIS_KEY"].duplicated().any():
+    out["_CONTEXT_KEY"] = out[key].map(canonical_csoed)
+    if out["_CONTEXT_KEY"].eq("").any() or out["_CONTEXT_KEY"].duplicated().any():
         raise ValueError(f"{label} CSOED keys must be non-empty and unique")
     return out
 
 
-def _validate(frame: pd.DataFrame) -> pd.DataFrame:
+def validate_colm_lpis_context(frame: pd.DataFrame) -> pd.DataFrame:
+    """Validate a merged Colm physical-soil + LPIS context table."""
     required = {"CSOED", *PHYSICAL_AREA_COLUMNS, *REQUIRED_LPIS_COLUMNS}
     missing = sorted(required - set(frame.columns))
     if missing:
         raise ValueError(f"Colm+LPIS runtime context missing columns: {missing}")
-    out = frame.copy()
+
+    out = frame[["CSOED", *PHYSICAL_AREA_COLUMNS, *REQUIRED_LPIS_COLUMNS]].copy()
     out["CSOED"] = out["CSOED"].map(canonical_csoed)
     if out["CSOED"].eq("").any() or out["CSOED"].duplicated().any():
         raise ValueError("Colm+LPIS runtime context must contain unique ED keys")
 
     years = pd.to_numeric(out["LPIS_YEAR"], errors="raise").astype(int)
     if not years.eq(LAND_CONTEXT_YEAR).all():
-        raise ValueError("Colm+LPIS runtime context must use LPIS_YEAR=2020")
+        raise ValueError(f"Colm+LPIS runtime context must use LPIS_YEAR={LAND_CONTEXT_YEAR}")
 
     physical = out[list(PHYSICAL_AREA_COLUMNS)].apply(
         pd.to_numeric, errors="raise"
-    ).to_numpy(float)
+    ).to_numpy(dtype=float)
     if (~np.isfinite(physical)).any() or (physical < -1e-9).any():
         raise ValueError("Colm physical-soil areas must be finite and non-negative")
     if (physical.sum(axis=1) <= 0).any():
-        raise ValueError("every ED requires positive Colm mapped physical-soil area")
+        raise ValueError("every ED requires positive mapped physical-soil area")
 
     for column in REQUIRED_LPIS_COLUMNS:
         if column == "LPIS_YEAR":
             continue
-        values = pd.to_numeric(out[column], errors="coerce").to_numpy(float)
+        values = pd.to_numeric(out[column], errors="coerce").to_numpy(dtype=float)
         if np.isfinite(values).any() and np.nanmin(values) < -1e-9:
             raise ValueError(f"{column} cannot be negative")
+
+    if len(out.columns) != LAND_CONTEXT_EXPECTED_COLUMNS:
+        raise AssertionError(
+            f"runtime context column contract changed: expected "
+            f"{LAND_CONTEXT_EXPECTED_COLUMNS}, found={len(out.columns)}"
+        )
     return out.sort_values("CSOED", kind="stable").reset_index(drop=True)
 
 
@@ -109,32 +146,33 @@ def read_colm_lpis_context(
     *,
     verify_sha256: bool = True,
 ) -> pd.DataFrame:
-    """Read only Colm physical soil and LPIS context, with no 08B dependency."""
-
+    """Read the frozen two-file Colm+LPIS runtime context."""
     if isinstance(source, pd.DataFrame):
-        return _validate(source)
+        return validate_colm_lpis_context(source)
 
     path = Path(source)
     if path.is_dir():
-        physical_path = path / LAND_CONTEXT_COMPONENT_FILES["08C"]
-        lpis_path = path / LAND_CONTEXT_COMPONENT_FILES["LPIS_2020"]
+        physical_path = path / COLM_PHYSICAL_FILE
+        lpis_path = path / LPIS_CONTEXT_FILE
         missing = [str(item) for item in (physical_path, lpis_path) if not item.is_file()]
         if missing:
             raise FileNotFoundError(
-                "Colm-direct runtime context is incomplete; missing: " + ", ".join(missing)
+                "Colm+LPIS runtime context is incomplete; missing: " + ", ".join(missing)
             )
         if verify_sha256:
-            for label, component in (("08C", physical_path), ("LPIS_2020", lpis_path)):
-                expected = LAND_CONTEXT_COMPONENT_SHA256[label]
+            for label, component, expected in (
+                ("Colm physical soil", physical_path, COLM_PHYSICAL_SHA256),
+                ("LPIS 2020", lpis_path, LPIS_CONTEXT_SHA256),
+            ):
                 actual = _sha256(component)
                 if actual != expected:
                     raise AssertionError(
-                        f"{label} context SHA256 mismatch; expected={expected}, actual={actual}"
+                        f"{label} SHA256 mismatch; expected={expected}, actual={actual}"
                     )
 
-        physical = _keyed(pd.read_csv(physical_path, low_memory=False), label="Colm 08C")
+        physical = _keyed(pd.read_csv(physical_path, low_memory=False), label="Colm physical soil")
         lpis = _keyed(pd.read_csv(lpis_path, low_memory=False), label="LPIS 2020")
-        if set(physical["_COLM_LPIS_KEY"]) != set(lpis["_COLM_LPIS_KEY"]):
+        if set(physical["_CONTEXT_KEY"]) != set(lpis["_CONTEXT_KEY"]):
             raise AssertionError("Colm physical soil and LPIS do not share the same ED universe")
 
         physical_missing = sorted(set(PHYSICAL_AREA_COLUMNS) - set(physical.columns))
@@ -144,42 +182,25 @@ def read_colm_lpis_context(
         if lpis_missing:
             raise ValueError(f"LPIS context missing columns: {lpis_missing}")
 
-        merged = physical[["_COLM_LPIS_KEY", *PHYSICAL_AREA_COLUMNS]].merge(
-            lpis[["_COLM_LPIS_KEY", *REQUIRED_LPIS_COLUMNS]],
-            on="_COLM_LPIS_KEY",
+        merged = physical[["_CONTEXT_KEY", *PHYSICAL_AREA_COLUMNS]].merge(
+            lpis[["_CONTEXT_KEY", *REQUIRED_LPIS_COLUMNS]],
+            on="_CONTEXT_KEY",
             how="inner",
             validate="one_to_one",
-        )
-        merged = merged.rename(columns={"_COLM_LPIS_KEY": "CSOED"})
-        return _validate(merged)
+        ).rename(columns={"_CONTEXT_KEY": "CSOED"})
+        out = validate_colm_lpis_context(merged)
+        if len(out) != LAND_CONTEXT_EXPECTED_EDS:
+            raise ValueError(
+                f"repository runtime context must contain {LAND_CONTEXT_EXPECTED_EDS} EDs; "
+                f"found={len(out)}"
+            )
+        return out
 
-    frame = pd.read_csv(path, low_memory=False)
-    # A merged legacy 40-column context is accepted for compatibility, but only
-    # the Colm physical and LPIS columns are retained.
-    key = "CSOED_CANONICAL" if "CSOED_CANONICAL" in frame.columns else "CSOED"
-    if key not in frame.columns:
-        raise ValueError("Colm+LPIS context file missing CSOED")
-    frame = frame.rename(columns={key: "CSOED"}) if key != "CSOED" else frame
-    keep = ["CSOED", *PHYSICAL_AREA_COLUMNS, *REQUIRED_LPIS_COLUMNS]
-    missing = sorted(set(keep) - set(frame.columns))
-    if missing:
-        raise ValueError(f"Colm+LPIS context file missing columns: {missing}")
-    return _validate(frame[keep].copy())
+    return validate_colm_lpis_context(pd.read_csv(path, low_memory=False))
 
 
-def attach_colm_physical_context(
-    frame: pd.DataFrame,
-    physical_context: pd.DataFrame,
-) -> pd.DataFrame:
-    """Attach the seven Colm physical categories directly to model EDs.
-
-    The input is already a frozen ED-level mapped physical-soil profile. The
-    attachment therefore performs only an exact ED join and area-to-share
-    conversion. It intentionally does not call the legacy 08C helper because
-    that helper also derives synthetic three-group soil classes and a farmed-peat
-    assumption that are not part of the Colm-direct architecture.
-    """
-
+def attach_colm_physical_context(frame: pd.DataFrame, physical_context: pd.DataFrame) -> pd.DataFrame:
+    """Attach the seven mapped physical-soil categories to model EDs."""
     if "CSOED" not in frame.columns:
         raise ValueError("Colm physical attachment requires CSOED")
     missing = sorted(set(("CSOED", *PHYSICAL_AREA_COLUMNS)) - set(physical_context.columns))
@@ -203,9 +224,8 @@ def attach_colm_physical_context(
             f"examples={missing_eds[:10]}"
         )
 
-    attach = right.drop(columns="CSOED")
     out = left.merge(
-        attach,
+        right.drop(columns="CSOED"),
         on="_COLM_PHYSICAL_KEY",
         how="left",
         validate="many_to_one",
@@ -213,7 +233,7 @@ def attach_colm_physical_context(
 
     physical = out[list(PHYSICAL_AREA_COLUMNS)].apply(
         pd.to_numeric, errors="raise"
-    ).to_numpy(float)
+    ).to_numpy(dtype=float)
     if (~np.isfinite(physical)).any() or (physical < -1e-9).any():
         raise ValueError("attached Colm physical areas must be finite and non-negative")
     totals = physical.sum(axis=1)
@@ -222,13 +242,10 @@ def attach_colm_physical_context(
 
     shares = physical / totals[:, None]
     if not np.allclose(shares.sum(axis=1), 1.0, atol=1e-10):
-        raise AssertionError("direct Colm physical shares do not close to one")
+        raise AssertionError("Colm physical shares do not close to one")
     for index, column in enumerate(COLM_PHYSICAL_SHARE_COLUMNS):
         out[column] = shares[:, index]
 
     out["IFS_MAP_AG_SOIL_HA"] = totals
     out["COLM_PHYSICAL_PROFILE_SOURCE"] = "FROZEN_ED_MAPPED_PHYSICAL_SOIL"
-    out["COLM_PHYSICAL_CONTEXT_ROLE"] = "SEVEN_CATEGORY_DIRECT_NO_SYNTHETIC_SOIL_GROUPS"
-    out["COLM_PHYSICAL_SYNTHETIC_SG_USED"] = False
-    out["COLM_PHYSICAL_FARMED_PEAT_ASSUMPTION_USED"] = False
     return out

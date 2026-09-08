@@ -1,60 +1,18 @@
-# ED_Land_Context_2020
+# Frozen 2020 Colm + LPIS runtime context
 
-This directory is the authoritative compact spatial input bundle for the normal 2020 GOBLIN-Spatial scenario runtime.
+This directory is the complete spatial context used by GOBLIN-Spatial SC2 and SC3.
+SC1 does not read it.
 
-It contains three validated ED-level CSV controls:
+It contains exactly two scientific controls:
 
-- `ED_Soil_Capability_08B.csv` — 08B agricultural capability used in SC1 released-land capacity and SC2 capability/eligibility context.
-- `ED_Physical_Soil_08C.csv` — independent mapped physical-soil context used only after SC1 is frozen.
-- `ED_LPIS_Context_2020_RUNTIME.csv` — neutral 2020 LPIS evidence/context used by SC2.
+- `ED_Colm_Physical_Soil_2020.csv` — seven mapped physical-soil area categories for each of the 2,857 model EDs.
+- `ED_LPIS_Context_2020.csv` — neutral LPIS 2020 agricultural-use and management context for the same ED universe.
 
-All three controls cover the same 2,857 model EDs. Their exact SHA256 checksums and validation tolerances are recorded in `manifest.json`.
+The runtime reader verifies both SHA-256 checksums, canonicalises ED identifiers,
+requires an exact one-to-one ED universe, and joins the two controls in memory.
+The resulting contract has 2,857 rows and 26 fields.
 
-## Runtime boundary
-
-A normal model run is repository-contained:
-
-```text
-historical Stage 01-09
-        -> frozen ED_Land_Context_2020
-        -> SC1
-        -> SC2
-        -> SC3
-```
-
-Normal SC1/SC2/SC3 execution must not download LPIS parcels, soil packages, ED shapefiles or run GIS intersections.
-
-Large first-principles spatial sources are retained only as optional provenance/reconstruction inputs. They are not runtime dependencies.
-
-## Scientific separation
-
-The three files share one runtime directory but remain distinct evidence layers.
-
-### 08B agricultural capability
-
-- 2,820 direct ED profiles
-- 37 county-fallback profiles
-- Class 1-6 shares close to one
-- Class1 + Class2 = G1
-- Class3 + Class4 = G2
-- Class5 + Class6 = G3
-
-08B may constrain the geography of released grassland in SC1.
-
-### 08C mapped physical soil
-
-08C is independent physical-soil context. It must not alter SC1 livestock allocation or released-land hectares and must not be blended into the 08B capability signal.
-
-### LPIS 2020
-
-LPIS is evidence/context only. It does not replace `ALL_GRASSLAND`, allocate livestock, create released land, or directly choose realised SC3 hectares.
-
-The runtime LPIS control was recovered from mature 2020 SC2 output and cross-validated between SI_SG and BE_SG across all four allocation policies.
-
-## Interpretation rule
-
-```text
-PotentialRelease != Opportunity != RealisedConversion
-```
-
-GOBLIN establishes the national livestock and land-use transition. GOBLIN-Spatial resolves its geography.
+Colm soil describes physical resource composition. LPIS describes agricultural
+context. Neither layer changes the frozen SC1 livestock solution or released-land
+vector. Future-use eligibility is supplied separately through explicit versioned
+scientific controls.

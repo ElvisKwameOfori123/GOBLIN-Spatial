@@ -1,9 +1,8 @@
-"""Neutral ED x SIS soil-association overlay utilities.
+"""Neutral Electoral Division geometry and soil-association overlay utilities.
 
-This module deliberately stops before interpreting SIS associations as GOBLIN
-soil groups or future land uses. The authoritative livestock baseline defines
-which Electoral Divisions are in scope; the ED shapefile supplies geometry;
-and the SIS shapefile supplies raw soil-association polygons.
+These helpers prepare source-level spatial evidence only. They do not alter the
+GOBLIN-Spatial livestock pathway, released-land quantity, future-use eligibility
+or SC3 allocation.
 """
 from __future__ import annotations
 
@@ -17,7 +16,7 @@ import pandas as pd
 try:
     import geopandas as gpd
     from shapely.validation import make_valid
-except ImportError as exc:  # pragma: no cover - import guard only
+except ImportError as exc:  # pragma: no cover
     gpd = None
     make_valid = None
     _GEO_IMPORT_ERROR = exc
@@ -27,8 +26,6 @@ else:
 
 @dataclass(frozen=True)
 class SoilOverlayDiagnostics:
-    """Headline validation statistics for one ED x SIS overlay run."""
-
     baseline_rows: int
     baseline_unique_keys: int
     ed_rows_available: int
@@ -48,29 +45,18 @@ class SoilOverlayDiagnostics:
 def _require_geo() -> None:
     if gpd is None:
         raise ImportError(
-            "Soil overlay requires the optional geospatial dependencies. "
+            "Spatial overlay requires optional geospatial dependencies. "
             "Install with: pip install 'goblin-spatial[geo]'"
         ) from _GEO_IMPORT_ERROR
 
 
 def canonical_csoed(value: object) -> str:
-    """Return a compound-aware canonical CSO Electoral Division key.
-
-    Examples
-    --------
-    ``01001`` -> ``1001``
-    ``08045/08046`` -> ``8045/8046``
-
-    Leading-zero removal is applied to every compound member separately.
-    """
-
+    """Return a compound-aware canonical CSO Electoral Division key."""
     if value is None or pd.isna(value):
         return ""
-
     text = str(value).strip()
     if text == "" or text.lower() in {"nan", "none"}:
         return ""
-
     parts = [part.strip() for part in re.split(r"[/;,]", text) if part.strip()]
     normalised: list[str] = []
     for part in parts:
@@ -80,204 +66,99 @@ def canonical_csoed(value: object) -> str:
         if part.isdigit():
             part = part.lstrip("0") or "0"
         normalised.append(part)
-
     return "/".join(normalised)
 
 
-def _with_canonical_key(
-    df: pd.DataFrame,
-    key_col: str,
-    out_col: str = "CSOED_CANONICAL",
-) -> pd.DataFrame:
+def _with_canonical_key(df: pd.DataFrame, key_col: str, out_col: str = "CSOED_CANONICAL") -> pd.DataFrame:
     if key_col not in df.columns:
-        raise KeyError(f"Missing ED key column: {key_col}")
-
+        raise ValueError(f"missing ED key column: {key_col}")
     out = df.copy()
     out[out_col] = out[key_col].map(canonical_csoed)
-
-    if (out[out_col] == "").any():
-        raise ValueError(f"Blank canonical ED keys found in {key_col}")
-
-    duplicates = out.loc[out[out_col].duplicated(keep=False), out_col].unique().tolist()
-    if duplicates:
-        raise ValueError(f"Duplicate canonical ED keys found: {duplicates[:10]}")
-
+    if out[out_col].eq("").any():
+        raise ValueError(f"{key_col} contains blank ED identifiers")
     return out
 
 
 def select_baseline_ed_geometries(
     baseline: pd.DataFrame,
-    ed_gdf,
+    ed_geometries,
     *,
-    baseline_key_col: str = "CSOED",
-    ed_key_col: str = "CSOED",
+    baseline_key: str = "CSOED",
+    ed_key: str = "CSOED",
 ):
-    """Filter the national ED geography to exactly the baseline ED universe.
-
-    The baseline is authoritative: extra ED polygons are ignored and every
-    baseline ED must have exactly one polygon record after canonicalisation.
-    """
-
+    """Select exactly the model ED universe from a geometry layer."""
     _require_geo()
-    baseline_keyed = _with_canonical_key(baseline, baseline_key_col)
-    ed_keyed = _with_canonical_key(ed_gdf, ed_key_col)
-
-    baseline_keys = set(baseline_keyed["CSOED_CANONICAL"])
-    selected = ed_keyed.loc[ed_keyed["CSOED_CANONICAL"].isin(baseline_keys)].copy()
-    selected_keys = set(selected["CSOED_CANONICAL"])
-
-    missing = sorted(baseline_keys - selected_keys)
+    base = _with_canonical_key(baseline[[baseline_key]].drop_duplicates(), baseline_key)
+    if base["CSOED_CANONICAL"].duplicated().any():
+        raise ValueError("baseline contains duplicate canonical ED identifiers")
+    eds = _with_canonical_key(ed_geometries, ed_key)
+    if eds["CSOED_CANONICAL"].duplicated().any():
+        raise ValueError("geometry contains duplicate canonical ED identifiers")
+    selected = eds.loc[eds["CSOED_CANONICAL"].isin(set(base["CSOED_CANONICAL"]))].copy()
+    missing = sorted(set(base["CSOED_CANONICAL"]) - set(selected["CSOED_CANONICAL"]))
     if missing:
-        raise ValueError(
-            f"ED shapefile is missing {len(missing)} baseline CSOED keys; "
-            f"examples: {missing[:10]}"
-        )
-
-    if len(selected) != len(baseline_keyed):
-        raise ValueError(
-            "Baseline-to-ED geometry selection is not one-to-one: "
-            f"baseline rows={len(baseline_keyed)}, selected ED rows={len(selected)}"
-        )
-
-    return baseline_keyed, selected
-
-
-def _repair_polygon_geometries(gdf):
-    _require_geo()
-    out = gdf.loc[gdf.geometry.notna() & ~gdf.geometry.is_empty].copy()
-    invalid = ~out.geometry.is_valid
-
-    if invalid.any():
-        out.loc[invalid, "geometry"] = out.loc[invalid, "geometry"].map(make_valid)
-
-    out = out.explode(index_parts=False, ignore_index=True)
-    out = out.loc[out.geometry.geom_type.isin(["Polygon", "MultiPolygon"])].copy()
-    return out
+        raise ValueError(f"geometry is missing {len(missing)} model EDs; examples={missing[:10]}")
+    return selected
 
 
 def overlay_soil_associations(
     baseline: pd.DataFrame,
-    ed_gdf,
-    soil_gdf,
+    ed_geometries,
+    soil_geometries,
     *,
-    baseline_key_col: str = "CSOED",
-    ed_key_col: str = "CSOED",
-    association_col: str = "Associatio",
-    target_crs: str = "EPSG:2157",
-    min_intersection_ha: float = 0.01,
-    carry_ed_columns: Iterable[str] = ("EDNAME", "COUNTYNAME", "COUNTY"),
+    baseline_key: str = "CSOED",
+    ed_key: str = "CSOED",
+    soil_association_column: str = "ASSOCIATION",
 ):
-    """Build a neutral long-form ED x SIS soil-association profile.
-
-    No functional soil class, GOBLIN G1/G2/G3 class, grass-yield factor or
-    future land-use suitability is inferred here.  The returned association
-    shares describe the mapped SIS composition of each selected ED and are not
-    yet restricted to agricultural grassland.
-    """
-
+    """Build a neutral long-form ED x soil-association area profile."""
     _require_geo()
+    if soil_association_column not in soil_geometries.columns:
+        raise ValueError(f"soil geometry missing {soil_association_column}")
 
-    if association_col not in soil_gdf.columns:
-        raise KeyError(f"Missing SIS association column: {association_col}")
-    if ed_gdf.crs is None or soil_gdf.crs is None:
-        raise ValueError("Both ED and SIS layers must have a defined CRS")
+    selected = select_baseline_ed_geometries(
+        baseline, ed_geometries, baseline_key=baseline_key, ed_key=ed_key
+    ).copy()
+    soil = soil_geometries.copy()
+    if selected.crs is None or soil.crs is None:
+        raise ValueError("ED and soil geometry must have defined CRS")
+    if selected.crs != soil.crs:
+        soil = soil.to_crs(selected.crs)
 
-    baseline_keyed, ed_selected = select_baseline_ed_geometries(
-        baseline,
-        ed_gdf,
-        baseline_key_col=baseline_key_col,
-        ed_key_col=ed_key_col,
-    )
-
-    ed_selected = _repair_polygon_geometries(ed_selected).to_crs(target_crs)
-    soil = _repair_polygon_geometries(soil_gdf).to_crs(target_crs)
-
-    keep_ed = ["CSOED_CANONICAL", "geometry"]
-    for col in carry_ed_columns:
-        if col in ed_selected.columns and col not in keep_ed:
-            keep_ed.append(col)
-
-    ed_overlay = ed_selected[keep_ed].copy()
-    soil_overlay = soil[[association_col, "geometry"]].copy()
-    soil_overlay[association_col] = soil_overlay[association_col].astype(str).str.strip()
-
-    ed_area = ed_overlay[["CSOED_CANONICAL"]].copy()
-    ed_area["ED_AREA_HA"] = ed_overlay.geometry.area / 10_000.0
-    ed_area = ed_area.groupby("CSOED_CANONICAL", as_index=False)["ED_AREA_HA"].sum()
-
-    intersection = gpd.overlay(
-        ed_overlay,
-        soil_overlay,
+    selected["geometry"] = selected.geometry.map(make_valid)
+    soil["geometry"] = soil.geometry.map(make_valid)
+    ed_area = selected.set_index("CSOED_CANONICAL").geometry.area / 10000.0
+    intersect = gpd.overlay(
+        selected[["CSOED_CANONICAL", "geometry"]],
+        soil[[soil_association_column, "geometry"]],
         how="intersection",
-        keep_geom_type=True,
+        keep_geom_type=False,
     )
-    intersection["INTERSECTION_HA"] = intersection.geometry.area / 10_000.0
-    intersection = intersection.loc[
-        intersection["INTERSECTION_HA"] >= float(min_intersection_ha)
-    ].copy()
-
-    group_cols = ["CSOED_CANONICAL", association_col]
-    for col in carry_ed_columns:
-        if col in intersection.columns and col not in group_cols:
-            group_cols.append(col)
-
-    long = (
-        intersection.groupby(group_cols, dropna=False, as_index=False)["INTERSECTION_HA"]
+    intersect["AREA_HA"] = intersect.geometry.area / 10000.0
+    grouped = (
+        intersect.groupby(["CSOED_CANONICAL", soil_association_column], as_index=False)["AREA_HA"]
         .sum()
-        .rename(columns={association_col: "SIS_ASSOCIATION"})
+        .sort_values(["CSOED_CANONICAL", soil_association_column], kind="stable")
+    )
+    totals = grouped.groupby("CSOED_CANONICAL")["AREA_HA"].transform("sum")
+    grouped["ASSOCIATION_SHARE"] = np.divide(
+        grouped["AREA_HA"], totals, out=np.zeros(len(grouped)), where=totals.to_numpy() > 0
     )
 
-    totals = (
-        long.groupby("CSOED_CANONICAL", as_index=False)["INTERSECTION_HA"]
-        .sum()
-        .rename(columns={"INTERSECTION_HA": "MAPPED_SOIL_HA"})
-        .merge(ed_area, on="CSOED_CANONICAL", how="left", validate="one_to_one")
-    )
-    totals["SOIL_COVERAGE_FRAC"] = np.where(
-        totals["ED_AREA_HA"] > 0,
-        totals["MAPPED_SOIL_HA"] / totals["ED_AREA_HA"],
-        np.nan,
-    )
-
-    long = long.merge(
-        totals,
-        on="CSOED_CANONICAL",
-        how="left",
-        validate="many_to_one",
-    )
-    long["ASSOCIATION_SHARE_WITHIN_MAPPED_SOIL"] = np.where(
-        long["MAPPED_SOIL_HA"] > 0,
-        long["INTERSECTION_HA"] / long["MAPPED_SOIL_HA"],
-        0.0,
-    )
-
-    missing_profile = set(baseline_keyed["CSOED_CANONICAL"]) - set(long["CSOED_CANONICAL"])
-    if missing_profile:
-        raise ValueError(
-            f"{len(missing_profile)} baseline EDs have no SIS soil overlap; "
-            f"examples: {sorted(missing_profile)[:10]}"
-        )
-
+    coverage = grouped.groupby("CSOED_CANONICAL")["AREA_HA"].sum().div(ed_area).dropna()
     diagnostics = SoilOverlayDiagnostics(
-        baseline_rows=len(baseline_keyed),
-        baseline_unique_keys=baseline_keyed["CSOED_CANONICAL"].nunique(),
-        ed_rows_available=len(ed_gdf),
-        ed_rows_selected=ed_selected["CSOED_CANONICAL"].nunique(),
-        ed_unique_keys_selected=ed_selected["CSOED_CANONICAL"].nunique(),
+        baseline_rows=int(len(baseline)),
+        baseline_unique_keys=int(baseline[baseline_key].map(canonical_csoed).nunique()),
+        ed_rows_available=int(len(ed_geometries)),
+        ed_rows_selected=int(len(selected)),
+        ed_unique_keys_selected=int(selected["CSOED_CANONICAL"].nunique()),
         missing_baseline_keys=0,
-        soil_polygons=len(soil_gdf),
-        soil_associations=soil_overlay[association_col].nunique(dropna=True),
-        intersect_rows=len(intersection),
-        eds_with_soil=long["CSOED_CANONICAL"].nunique(),
-        total_ed_area_ha=float(ed_area["ED_AREA_HA"].sum()),
-        total_intersect_area_ha=float(long["INTERSECTION_HA"].sum()),
-        mean_soil_coverage=float(totals["SOIL_COVERAGE_FRAC"].mean()),
-        median_soil_coverage=float(totals["SOIL_COVERAGE_FRAC"].median()),
+        soil_polygons=int(len(soil)),
+        soil_associations=int(soil[soil_association_column].nunique()),
+        intersect_rows=int(len(intersect)),
+        eds_with_soil=int(grouped["CSOED_CANONICAL"].nunique()),
+        total_ed_area_ha=float(ed_area.sum()),
+        total_intersect_area_ha=float(grouped["AREA_HA"].sum()),
+        mean_soil_coverage=float(coverage.mean()) if not coverage.empty else float("nan"),
+        median_soil_coverage=float(coverage.median()) if not coverage.empty else float("nan"),
     )
-
-    long = long.sort_values(
-        ["CSOED_CANONICAL", "INTERSECTION_HA"],
-        ascending=[True, False],
-    ).reset_index(drop=True)
-
-    return long, diagnostics
+    return grouped.reset_index(drop=True), diagnostics
