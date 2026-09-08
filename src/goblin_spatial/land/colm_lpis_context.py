@@ -1,9 +1,14 @@
-"""Runtime reader for the Colm physical-soil + LPIS evidence bundle.
+"""Runtime reader and direct attachment for Colm physical soil + LPIS evidence.
 
 The Colm-direct architecture does not require the legacy 08B capability file.
-This reader loads only the frozen 08C physical-soil component and LPIS 2020
+This module loads only the frozen 08C physical-soil component and LPIS 2020
 component from the repository land-context directory, verifies their published
 checksums, normalises ED identifiers and merges them one-to-one.
+
+The direct physical attachment deliberately retains Colm's seven mapped physical
+categories. It does not derive synthetic SG1/SG2/SG3 groups, a farmed-peat
+fraction, or any land-use suitability class. Those transformations belonged to
+the legacy dual-soil implementation and are outside the Colm-direct core.
 """
 
 from __future__ import annotations
@@ -22,6 +27,10 @@ from goblin_spatial.land.context import (
 )
 from goblin_spatial.soil.overlay import canonical_csoed
 
+
+COLM_PHYSICAL_SHARE_COLUMNS = tuple(
+    column.replace("_HA", "_SHARE") for column in PHYSICAL_AREA_COLUMNS
+)
 
 REQUIRED_LPIS_COLUMNS = (
     "LPIS_YEAR",
@@ -156,3 +165,70 @@ def read_colm_lpis_context(
     if missing:
         raise ValueError(f"Colm+LPIS context file missing columns: {missing}")
     return _validate(frame[keep].copy())
+
+
+def attach_colm_physical_context(
+    frame: pd.DataFrame,
+    physical_context: pd.DataFrame,
+) -> pd.DataFrame:
+    """Attach the seven Colm physical categories directly to model EDs.
+
+    The input is already a frozen ED-level mapped physical-soil profile. The
+    attachment therefore performs only an exact ED join and area-to-share
+    conversion. It intentionally does not call the legacy 08C helper because
+    that helper also derives synthetic three-group soil classes and a farmed-peat
+    assumption that are not part of the Colm-direct architecture.
+    """
+
+    if "CSOED" not in frame.columns:
+        raise ValueError("Colm physical attachment requires CSOED")
+    missing = sorted(set(("CSOED", *PHYSICAL_AREA_COLUMNS)) - set(physical_context.columns))
+    if missing:
+        raise ValueError(f"Colm physical attachment missing columns: {missing}")
+
+    left = frame.copy()
+    left["_COLM_PHYSICAL_KEY"] = left["CSOED"].map(canonical_csoed)
+    if left["_COLM_PHYSICAL_KEY"].eq("").any():
+        raise ValueError("model frame contains blank ED keys")
+
+    right = physical_context[["CSOED", *PHYSICAL_AREA_COLUMNS]].copy()
+    right["_COLM_PHYSICAL_KEY"] = right["CSOED"].map(canonical_csoed)
+    if right["_COLM_PHYSICAL_KEY"].eq("").any() or right["_COLM_PHYSICAL_KEY"].duplicated().any():
+        raise ValueError("Colm physical context requires unique non-empty ED keys")
+
+    missing_eds = sorted(set(left["_COLM_PHYSICAL_KEY"]) - set(right["_COLM_PHYSICAL_KEY"]))
+    if missing_eds:
+        raise ValueError(
+            f"Colm physical context is missing {len(missing_eds)} model EDs; "
+            f"examples={missing_eds[:10]}"
+        )
+
+    attach = right.drop(columns="CSOED")
+    out = left.merge(
+        attach,
+        on="_COLM_PHYSICAL_KEY",
+        how="left",
+        validate="many_to_one",
+    ).drop(columns="_COLM_PHYSICAL_KEY")
+
+    physical = out[list(PHYSICAL_AREA_COLUMNS)].apply(
+        pd.to_numeric, errors="raise"
+    ).to_numpy(float)
+    if (~np.isfinite(physical)).any() or (physical < -1e-9).any():
+        raise ValueError("attached Colm physical areas must be finite and non-negative")
+    totals = physical.sum(axis=1)
+    if (totals <= 0).any():
+        raise ValueError("attached Colm physical context has zero mapped area")
+
+    shares = physical / totals[:, None]
+    if not np.allclose(shares.sum(axis=1), 1.0, atol=1e-10):
+        raise AssertionError("direct Colm physical shares do not close to one")
+    for index, column in enumerate(COLM_PHYSICAL_SHARE_COLUMNS):
+        out[column] = shares[:, index]
+
+    out["IFS_MAP_AG_SOIL_HA"] = totals
+    out["COLM_PHYSICAL_PROFILE_SOURCE"] = "FROZEN_ED_MAPPED_PHYSICAL_SOIL"
+    out["COLM_PHYSICAL_CONTEXT_ROLE"] = "SEVEN_CATEGORY_DIRECT_NO_SYNTHETIC_SOIL_GROUPS"
+    out["COLM_PHYSICAL_SYNTHETIC_SG_USED"] = False
+    out["COLM_PHYSICAL_FARMED_PEAT_ASSUMPTION_USED"] = False
+    return out
