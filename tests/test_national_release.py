@@ -1,4 +1,4 @@
-"""Tests for the principal authoritative released-land spatialisation route."""
+"""Tests for soil-independent authoritative SC1 released-land spatialisation."""
 
 from __future__ import annotations
 
@@ -12,8 +12,6 @@ from goblin_spatial.sheep.cohorts import GOBLIN_SHEEP_10
 
 
 def _profile() -> dict[str, float]:
-    """Small deterministic pasture-DM fixture with all systems represented."""
-
     return {cohort: 1.0 for cohort in (*FINAL_21_COHORTS, *GOBLIN_SHEEP_10)}
 
 
@@ -35,12 +33,6 @@ def _frame(*, years=(2050,), grass=(1000.0, 1000.0)) -> pd.DataFrame:
                 "PATHWAY_BASELINE_YEAR": 2020,
                 "MILESTONE_YEAR": int(year),
                 "ALL_GRASSLAND": float(grass[index]),
-                "GOBLIN_SOIL_G1_SHARE": 0.50,
-                "GOBLIN_SOIL_G2_SHARE": 0.30,
-                "GOBLIN_SOIL_G3_SHARE": 0.20,
-                "GOBLIN_SOIL_G1_GRASSLAND_HA": float(grass[index]) * 0.50,
-                "GOBLIN_SOIL_G2_GRASSLAND_HA": float(grass[index]) * 0.30,
-                "GOBLIN_SOIL_G3_GRASSLAND_HA": float(grass[index]) * 0.20,
             }
 
             for cohort in FINAL_21_COHORTS:
@@ -53,67 +45,47 @@ def _frame(*, years=(2050,), grass=(1000.0, 1000.0)) -> pd.DataFrame:
                 row[f"BASE_COHORT_{cohort}"] = base
                 row[f"SCENARIO_COHORT_{cohort}"] = scenario
 
-            # Sheep are deliberately fixed in the current principal cattle study.
             for cohort in GOBLIN_SHEEP_10:
                 row[f"BASE_SHEEP_COHORT_{cohort}"] = 5
                 row[f"SCENARIO_SHEEP_COHORT_{cohort}"] = 5
-
             rows.append(row)
 
     return pd.DataFrame(rows)
 
 
-def test_principal_release_closes_to_authoritative_national_total() -> None:
+def test_principal_release_closes_to_authoritative_national_total_without_soil() -> None:
     profiles = {2020: _profile(), 2050: _profile()}
-    out = allocate_national_goblin_land_release(
-        _frame(),
-        {2050: 500.0},
-        profiles,
-    )
+    out = allocate_national_goblin_land_release(_frame(), {2050: 500.0}, profiles)
 
     assert out["GOBLIN_RELEASED_GRASSLAND_HA"].sum() == pytest.approx(500.0)
     assert out["GOBLIN_NATIONAL_RELEASE_ACTUAL_HA"].iloc[0] == pytest.approx(500.0)
     assert np.allclose(out["GOBLIN_NATIONAL_RELEASE_DIFFERENCE_HA"], 0.0)
     assert set(out["GOBLIN_RELEASE_ACCOUNTING_ROLE"]) == {
-        "AUTHORITATIVE_RUNTIME_TOTAL_SPATIALISED_WITH_08B_CAPACITY"
+        "AUTHORITATIVE_RUNTIME_TOTAL_SPATIALISED_FROM_LIVESTOCK_PRESSURE"
     }
-    assert set(out["GOBLIN_RELEASE_SYSTEM_SPLIT_SOURCE"]) == {
-        "DERIVED_ACTUAL_DM_WEIGHT_ROUTE_RESCALED_ALL_PATHWAYS"
+    assert set(out["GOBLIN_RELEASE_SPATIALISATION_SOURCE"]) == {
+        "SOLVED_LIVESTOCK_PASTURE_DM_PRESSURE_WITH_ALL_GRASSLAND_CAP"
     }
+    assert not out["GOBLIN_RELEASE_SOIL_USED"].any()
     assert not out["GOBLIN_RELEASE_08C_USED"].any()
+    assert not any(column.startswith("GOBLIN_RELEASED_G") for column in out.columns)
 
 
-def test_principal_release_respects_ed_and_08b_soil_capacity() -> None:
+def test_release_respects_only_ed_all_grassland_capacity() -> None:
     profiles = {2020: _profile(), 2050: _profile()}
     out = allocate_national_goblin_land_release(
-        _frame(),
+        _frame(grass=(150.0, 1000.0)),
         {2050: 500.0},
         profiles,
     )
 
-    released_groups = out[
-        ["GOBLIN_RELEASED_G1_HA", "GOBLIN_RELEASED_G2_HA", "GOBLIN_RELEASED_G3_HA"]
-    ].sum(axis=1)
-    assert np.allclose(released_groups, out["GOBLIN_RELEASED_GRASSLAND_HA"])
     assert (out["GOBLIN_RELEASED_GRASSLAND_HA"] <= out["ALL_GRASSLAND"] + 1e-8).all()
-
-    for group in (1, 2, 3):
-        assert (
-            out[f"GOBLIN_RELEASED_G{group}_HA"]
-            <= out[f"GOBLIN_SOIL_G{group}_GRASSLAND_HA"] + 1e-8
-        ).all()
-        target = out[f"GOBLIN_NATIONAL_RELEASE_G{group}_TARGET_HA"].iloc[0]
-        actual = out[f"GOBLIN_RELEASED_G{group}_HA"].sum()
-        assert actual == pytest.approx(target)
+    assert out["GOBLIN_RELEASED_GRASSLAND_HA"].sum() == pytest.approx(500.0)
 
 
 def test_system_attribution_is_accounting_only_and_closes_to_same_release() -> None:
     profiles = {2020: _profile(), 2050: _profile()}
-    out = allocate_national_goblin_land_release(
-        _frame(),
-        {2050: 500.0},
-        profiles,
-    )
+    out = allocate_national_goblin_land_release(_frame(), {2050: 500.0}, profiles)
 
     system_sum = out[
         [
@@ -128,6 +100,44 @@ def test_system_attribution_is_accounting_only_and_closes_to_same_release() -> N
         target = out[f"GOBLIN_DERIVED_SYSTEM_RELEASE_TARGET_{system}_HA"].iloc[0]
         actual = out[f"GOBLIN_RELEASED_{system}_LAND_HA"].sum()
         assert actual == pytest.approx(target)
+
+
+def test_independent_dm_diagnostic_is_not_rescaled_to_parent_release() -> None:
+    profiles = {2020: _profile(), 2050: _profile()}
+    out = allocate_national_goblin_land_release(_frame(), {2050: 600.0}, profiles)
+
+    assert out["GOBLIN_RELEASED_GRASSLAND_HA"].sum() == pytest.approx(600.0)
+    diagnostic_net = out["SIGNED_GRASSLAND_BALANCE_HA"].sum()
+    assert out["POTENTIAL_SPARED_GRASSLAND_HA"].sum() - out[
+        "ADDITIONAL_GRASSLAND_REQUIRED_HA"
+    ].sum() == pytest.approx(diagnostic_net)
+    assert out["DM_DIAGNOSTIC_NET_RELEASE_NATIONAL_HA"].iloc[0] == pytest.approx(
+        diagnostic_net
+    )
+    assert out["GOBLIN_MINUS_DM_DIAGNOSTIC_NET_RELEASE_HA"].iloc[0] == pytest.approx(
+        600.0 - diagnostic_net
+    )
+    assert set(out["DM_DIAGNOSTIC_ACCOUNTING_ROLE"]) == {
+        "INDEPENDENT_PASTURE_DM_REQUIREMENT_NOT_RESCALED_TO_GOBLIN_RELEASE"
+    }
+
+
+def test_dm_diagnostic_preserves_local_additional_grassland_requirement() -> None:
+    frame = _frame()
+    e1 = frame["CSOED"].eq("E1")
+    e2 = frame["CSOED"].eq("E2")
+
+    frame.loc[e1, "SCENARIO_COHORT_dairy_cows"] = 120
+    frame.loc[e1, "SCENARIO_COHORT_suckler_cows"] = 50
+    frame.loc[e2, "SCENARIO_COHORT_dairy_cows"] = 0
+    frame.loc[e2, "SCENARIO_COHORT_suckler_cows"] = 50
+
+    profiles = {2020: _profile(), 2050: _profile()}
+    out = allocate_national_goblin_land_release(frame, {2050: 450.0}, profiles)
+
+    assert out["ADDITIONAL_GRASSLAND_REQUIRED_HA"].sum() > 0
+    assert out.loc[out["CSOED"].eq("E1"), "ADDITIONAL_GRASSLAND_REQUIRED_HA"].iloc[0] > 0
+    assert out["GOBLIN_RELEASED_GRASSLAND_HA"].sum() == pytest.approx(450.0)
 
 
 def test_targets_must_match_milestones_and_cannot_fall() -> None:
