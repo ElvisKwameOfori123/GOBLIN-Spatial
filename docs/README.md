@@ -1,6 +1,6 @@
 # GOBLIN-Spatial documentation
 
-The public repository README is the entry point. These documents provide the deeper scientific and operational detail for the frozen v1 engine.
+The public repository README is the entry point. These documents provide the deeper scientific and operational detail for the frozen v1 engine and its downstream reporting layer.
 
 | Document | Purpose |
 |---|---|
@@ -10,6 +10,7 @@ The public repository README is the entry point. These documents provide the dee
 | `SCIENTIFIC_ASSUMPTIONS.md` | Scientific assumptions and interpretation limits |
 | `soil_eligibility_evidence_register.md` | Evidence gate for Stage-A soil/drainage eligibility rules |
 | `sc3_feasible_geographies.md` | Same-end-use spatial-flexibility analysis |
+| `reporting_architecture.md` | Frozen-results synthesis, report-data, figures, GIS and future explorer architecture |
 | `validation.md` | Accounting, invariance and CI validation rules |
 | `data_dictionary.md` | Interpretation-safe output variables |
 | `ENGINE_FREEZE.md` | v1 scientific-engine completion boundary |

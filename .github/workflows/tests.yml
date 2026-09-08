@@ -19,7 +19,7 @@ jobs:
       - name: Install package
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[geo,goblin,scenario]"
+          pip install -e ".[geo,goblin,scenario,reporting]"
           pip install pytest
       - name: Compile Python sources
         run: python -m compileall -q src tests
@@ -58,6 +58,12 @@ jobs:
             tests/test_sc3_feasible_geographies.py \
             tests/test_scenario_control_table.py \
             tests/test_scenario_preflight.py
+      - name: Run reporting architecture tests
+        run: |
+          pytest -q \
+            tests/test_reporting_boundary.py \
+            tests/test_reporting_synthesis.py \
+            tests/test_reporting_build.py
       - name: Build canonical historical baseline
         run: goblin-spatial build --config configs/ireland_2015_2025.yaml
       - name: Preflight 2020 SC2 runtime
@@ -74,12 +80,20 @@ jobs:
         run: goblin-spatial-principal SI_SG --baseline-year 2020 --allocation-rule PRORATA --stage SC1 --output-dir data/processed/ci_principal_si_sg
       - name: Run end-to-end SC2 smoke test
         run: goblin-spatial-principal SI_SG --baseline-year 2020 --allocation-rule PRORATA --stage SC2 --output-dir data/processed/ci_principal_si_sg
-      - name: Confirm scientific outputs
+      - name: Build downstream report data from frozen smoke-test outputs
+        run: |
+          goblin-spatial-report-data \
+            --principal-root data/processed/ci_principal_si_sg \
+            --output-root reporting/report_data_ci
+      - name: Confirm scientific and downstream reporting outputs
         run: |
           test -f data/processed/ci_principal_si_sg/sc1_ed_results.csv
           test -f data/processed/ci_principal_si_sg/sc1_national_metrics.csv
           test -f data/processed/ci_principal_si_sg/sc1_goblin_reconciliation.csv
           test -f data/processed/ci_principal_si_sg/sc2_ed_context.csv
+          test -f reporting/report_data_ci/sc1/ed_results.parquet
+          test -f reporting/report_data_ci/sc1/robust_exposure.parquet
+          test -f reporting/report_data_ci/report_data_manifest.json
       - name: Confirm SC3 scientific safeguard
         run: |
           echo "Real-path SC3 requires explicit evidence-backed eligibility controls and, when needed, validated rewetting capacity."

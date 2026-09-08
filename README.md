@@ -343,6 +343,7 @@ The model is therefore a **spatial foresight and transition-incidence framework*
 | [`docs/methodology.md`](docs/methodology.md) | Scientific methodology and model architecture |
 | [`docs/goblin_pathway_authority.md`](docs/goblin_pathway_authority.md) | National GOBLIN authority and transition accounting |
 | [`docs/sc3_feasible_geographies.md`](docs/sc3_feasible_geographies.md) | Post-SC3 spatial-flexibility analysis |
+| [`docs/reporting_architecture.md`](docs/reporting_architecture.md) | Frozen-results synthesis, report-data and publication reporting architecture |
 | [`docs/SCIENTIFIC_ASSUMPTIONS.md`](docs/SCIENTIFIC_ASSUMPTIONS.md) | Scientific assumptions and interpretation boundaries |
 | [`docs/validation.md`](docs/validation.md) | Validation and reproducibility checks |
 | [`docs/data_dictionary.md`](docs/data_dictionary.md) | Main model variables and interpretation |
