@@ -37,6 +37,7 @@ jobs:
             tests/test_cli_data_boundary.py \
             tests/test_data_fetch.py \
             tests/test_export_schema.py \
+            tests/test_historical_validation.py \
             tests/test_input_data.py \
             tests/test_standard_output.py
       - name: Run full 2015-2025 historical regression
@@ -68,6 +69,35 @@ jobs:
         run: pytest -q tests/test_catchment_bridge.py
       - name: Build canonical historical baseline
         run: goblin-spatial build --config configs/ireland_2015_2025.yaml
+      - name: Run historical validation diagnostics
+        run: python scripts/run_historical_validation.py
+      - name: Confirm historical validation outputs
+        run: |
+          test -f data/processed/validation/historical/historical_validation_overview.csv
+          test -f data/processed/validation/historical/dafm_county_sheep_diagnostics.csv
+          test -f data/processed/validation/historical/sheep_composition_holdout_2022.csv
+          test -f data/processed/validation/historical/achill_ed_2020_diagnostics.csv
+          test -f data/processed/validation/historical/temporal_rank_stability.csv
+          python - <<'PY'
+          import pandas as pd
+
+          dafm = pd.read_csv("data/processed/validation/historical/dafm_county_sheep_diagnostics.csv")
+          holdout = pd.read_csv("data/processed/validation/historical/sheep_composition_holdout_2022.csv")
+          achill = pd.read_csv("data/processed/validation/historical/achill_ed_2020_diagnostics.csv")
+          stability = pd.read_csv("data/processed/validation/historical/temporal_rank_stability.csv")
+          overview = pd.read_csv("data/processed/validation/historical/historical_validation_overview.csv")
+
+          assert len(dafm) == 26 * 4
+          assert set(dafm["YEAR"]) == {2015, 2020, 2022, 2025}
+          assert dafm["County"].nunique() == 26
+          assert len(holdout) == 26 * 3 * 4
+          assert len(achill) == 23 * 4
+          assert achill["ERROR"].abs().max() == 0
+          assert len(stability) == 10 * 7
+          assert overview["VALUE"].notna().all()
+
+          print(overview.to_string(index=False))
+          PY
       - name: Build 2015-2025 WFD catchment baseline
         run: python scripts/build_catchment_baseline.py
       - name: Validate catchment baseline outputs
