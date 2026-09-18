@@ -98,3 +98,41 @@ def test_crosswalk_preserves_wfd_units_and_aggregation_closes():
     c2020 = colm.loc[colm["YEAR"] == 2020].set_index("COLM_CATCHMENT")
     assert c2020.loc["Blackwater (Munster)", "TOTAL_CATTLE"] == pytest.approx(100.0)
     assert c2020.loc["Upper Shannon", "TOTAL_CATTLE"] == pytest.approx(200.0)
+
+
+def test_non_intersecting_ed_uses_explicit_nearest_fallback():
+    gpd = pytest.importorskip("geopandas")
+    shapely_geometry = pytest.importorskip("shapely.geometry")
+    box = shapely_geometry.box
+
+    master = pd.DataFrame({
+        "YEAR": [2020, 2020],
+        "CSOED": ["001", "002"],
+        "County": ["A", "A"],
+        "TOTAL_CATTLE": [100.0, 50.0],
+    })
+    eds = gpd.GeoDataFrame(
+        {"CSOED": ["001", "002"]},
+        geometry=[box(0, 0, 10, 10), box(20, 0, 30, 10)],
+        crs="EPSG:2157",
+    )
+    catchments = gpd.GeoDataFrame(
+        {
+            "CATCHMENTI": ["018"],
+            "NAME": ["Blackwater (Munster)"],
+        },
+        geometry=[box(0, 0, 10, 10)],
+        crs="EPSG:2157",
+    )
+
+    crosswalk = build_ed_catchment_crosswalk(
+        master,
+        eds,
+        catchments,
+        expected_wfd_catchments=None,
+    )
+    fallback = crosswalk.loc[crosswalk["CSOED"] == "002"].iloc[0]
+    assert fallback["ASSIGNMENT_METHOD"] == "nearest_catchment_fallback"
+    assert fallback["ED_CATCHMENT_WEIGHT"] == pytest.approx(1.0)
+    assert fallback["ED_COVERAGE_SHARE"] == pytest.approx(0.0)
+    assert fallback["NEAREST_DISTANCE_M"] == pytest.approx(10.0)
