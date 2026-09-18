@@ -28,6 +28,14 @@ ACHILL_VARIABLE_MAP = {
     "TOTAL_SHEEP": "Sheep total",
 }
 
+ACHILL_LAND_VARIABLE_MAP = {
+    "AGRICULTURAL_HOLDINGS": "Holdings total",
+    "AVERAGE_SIZE_OF_HOLDINGS": "Average holding size",
+    "AREA_FARMED": "Area farmed total ha",
+    "TOTAL_CEREALS": "Cereals total ha",
+    "ALL_GRASSLAND": "Grassland total ha",
+}
+
 
 def _normalise_text(value: object) -> str:
     if value is None or pd.isna(value):
@@ -362,6 +370,107 @@ def validate_achill_benchmark(
         animal_diagnostics.sort_values(["VARIABLE", "Electoral Division"]).reset_index(drop=True),
         summary.reset_index(drop=True),
         spatial.reset_index(drop=True),
+    )
+
+
+def validate_achill_land_benchmark(
+    master: pd.DataFrame,
+    benchmark_path: str | Path,
+    *,
+    county: str = "Mayo",
+    year: int = 2020,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Compare broad 2020 land/farm structure with the Achill North benchmark.
+
+    Like the livestock comparison, this is a reproducibility/application test
+    because both sources ultimately use Census of Agriculture 2020.
+    """
+    benchmark = pd.read_csv(benchmark_path)
+    required_benchmark = {"Electoral Division", *ACHILL_LAND_VARIABLE_MAP.values()}
+    missing = sorted(required_benchmark - set(benchmark.columns))
+    if missing:
+        raise ValueError(f"Achill land benchmark missing columns: {missing}")
+
+    name_col = _find_ed_name_column(master)
+    required_master = {"YEAR", "County", name_col, *ACHILL_LAND_VARIABLE_MAP}
+    missing_master = sorted(required_master - set(master.columns))
+    if missing_master:
+        raise ValueError(
+            f"historical master missing Achill land comparison columns: {missing_master}"
+        )
+
+    years = pd.to_numeric(master["YEAR"], errors="raise").astype(int)
+    model = master.loc[years == year, list(required_master)].copy()
+    model = model.loc[
+        model["County"].map(_normalise_county) == _normalise_county(county)
+    ].copy()
+    model["_ED_KEY"] = model[name_col].map(_normalise_text)
+    if model["_ED_KEY"].duplicated().any():
+        dup = model.loc[model["_ED_KEY"].duplicated(keep=False), name_col].tolist()
+        raise AssertionError(f"duplicate ED names within {county}: {dup}")
+
+    bench = benchmark.copy()
+    bench["_ED_KEY"] = bench["Electoral Division"].map(_normalise_text)
+    merged = bench.merge(
+        model[["_ED_KEY", name_col, *ACHILL_LAND_VARIABLE_MAP]],
+        on="_ED_KEY",
+        how="left",
+        validate="one_to_one",
+    )
+    if merged[name_col].isna().any():
+        missing_names = merged.loc[
+            merged[name_col].isna(), "Electoral Division"
+        ].tolist()
+        raise AssertionError(
+            f"Achill land EDs not matched to GOBLIN-Spatial {county} baseline: {missing_names}"
+        )
+
+    diagnostics = []
+    summary_rows = []
+    for model_column, benchmark_column in ACHILL_LAND_VARIABLE_MAP.items():
+        part = merged[["Electoral Division", benchmark_column, model_column]].copy()
+        part["VARIABLE"] = model_column
+        part = part.rename(
+            columns={
+                benchmark_column: "BENCHMARK_VALUE",
+                model_column: "MODEL_VALUE",
+            }
+        )
+        part["ERROR"] = (
+            pd.to_numeric(part["MODEL_VALUE"], errors="raise")
+            - pd.to_numeric(part["BENCHMARK_VALUE"], errors="raise")
+        )
+        diagnostics.append(part)
+
+        stats = error_summary(
+            part,
+            observed="BENCHMARK_VALUE",
+            predicted="MODEL_VALUE",
+        ).iloc[0].to_dict()
+        stats["VALIDATION"] = "ACHILL_ED_LAND_2020"
+        stats["VARIABLE"] = model_column
+        summary_rows.append(stats)
+
+    diagnostic_frame = pd.concat(diagnostics, ignore_index=True)
+    summary = pd.DataFrame(summary_rows)[
+        [
+            "VALIDATION",
+            "VARIABLE",
+            "N",
+            "OBSERVED_TOTAL",
+            "PREDICTED_TOTAL",
+            "BIAS",
+            "MAE",
+            "RMSE",
+            "MAPE_PCT",
+            "SPEARMAN_RHO",
+        ]
+    ]
+    return (
+        diagnostic_frame.sort_values(
+            ["VARIABLE", "Electoral Division"]
+        ).reset_index(drop=True),
+        summary.reset_index(drop=True),
     )
 
 
