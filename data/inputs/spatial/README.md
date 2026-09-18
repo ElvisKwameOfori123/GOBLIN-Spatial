@@ -47,3 +47,18 @@ The mapping stage writes:
 - `GOBLIN_Spatial_Map_Manifest.csv` recording the mapping choices and source geometry.
 
 QGIS can open the same output GeoPackage for visual inspection and publication polishing, but QGIS is not required to reproduce the numerical model or the Python reference maps.
+
+
+## WFD catchment geometry
+
+`WFD_Catchments_Frozen.gpkg` is an optional downstream aggregation input used by the catchment bridge. It does not enter baseline, SC1, SC2 or SC3 calculations.
+
+Source: Environmental Protection Agency, Water Framework Directive Water Catchments, CC BY 4.0.
+
+https://data.gov.ie/dataset/water-framework-directive-water-catchments
+
+Expected path:
+
+`data/inputs/spatial/WFD_Catchments_Frozen.gpkg`
+
+The bridge uses the frozen ED geometry and this catchment geometry to construct a static ED-to-catchment crosswalk. Catchment weights are normalised within ED so additive livestock, land and Standard Output quantities preserve national totals exactly. See `docs/catchment_bridge.md`.
