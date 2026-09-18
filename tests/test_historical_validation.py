@@ -18,6 +18,7 @@ from goblin_spatial.validation.historical import (
     spearman_rank,
     temporal_rank_stability,
     validate_achill_benchmark,
+    validate_achill_land_benchmark,
     validate_dafm_sheep_counties,
 )
 
@@ -62,6 +63,30 @@ def test_achill_benchmark_matches_repository_2020_anchor():
     assert len(explicit) >= 15
     assert float(explicit["CATTLE_AREA_ERROR"].abs().max()) <= 2.0
     assert float(explicit["SHEEP_AREA_ERROR"].abs().max()) <= 6.0
+
+
+def test_achill_land_benchmark_matches_repository_2020_anchor():
+    master = pd.read_csv(
+        "data/inputs/baseline/01_CSO_ED_Agricultural_Baseline_2020.csv"
+    )
+    diagnostics, summary = validate_achill_land_benchmark(
+        master,
+        "data/validation/external/achill_north/ED_Land_2020.csv",
+        county="Mayo",
+        year=2020,
+    )
+
+    assert len(diagnostics) == 23 * 5
+    assert set(summary["VARIABLE"]) == {
+        "AGRICULTURAL_HOLDINGS",
+        "AVERAGE_SIZE_OF_HOLDINGS",
+        "AREA_FARMED",
+        "TOTAL_CEREALS",
+        "ALL_GRASSLAND",
+    }
+    assert diagnostics["MODEL_VALUE"].notna().all()
+    assert diagnostics["BENCHMARK_VALUE"].notna().all()
+    assert float(diagnostics["ERROR"].abs().max()) == 0.0
 
 
 def test_dafm_county_sheep_validation_covers_all_2020_counties():
