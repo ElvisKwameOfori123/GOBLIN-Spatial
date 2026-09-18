@@ -50,6 +50,33 @@ def _normalise_county(value: object) -> str:
     return text.title()
 
 
+def _normalise_csoed(value: object) -> str:
+    if value is None or pd.isna(value):
+        return ""
+    text = str(value).strip()
+    if re.fullmatch(r"\d+\.0", text):
+        text = text[:-2]
+    return text
+
+
+def _load_achill_ed_crosswalk(benchmark_path: str | Path) -> pd.DataFrame:
+    path = Path(benchmark_path).with_name("ED_Name_Crosswalk.csv")
+    if not path.exists():
+        raise FileNotFoundError(
+            f"Achill ED identifier crosswalk is required beside the benchmark: {path}"
+        )
+    crosswalk = pd.read_csv(path, dtype={"MODEL_CSOED": str})
+    required = {"Electoral Division", "GOBLIN ED label", "MODEL_CSOED"}
+    missing = sorted(required - set(crosswalk.columns))
+    if missing:
+        raise ValueError(f"Achill ED crosswalk missing columns: {missing}")
+    if crosswalk["Electoral Division"].duplicated().any():
+        raise AssertionError("Achill ED crosswalk contains duplicate survey labels")
+    if crosswalk["MODEL_CSOED"].map(_normalise_csoed).duplicated().any():
+        raise AssertionError("Achill ED crosswalk contains duplicate model CSOED identifiers")
+    return crosswalk
+
+
 def spearman_rank(observed: pd.Series, predicted: pd.Series) -> float:
     """Return Spearman's rho without requiring scipy."""
     x = pd.to_numeric(observed, errors="raise").astype(float)
@@ -300,29 +327,42 @@ def validate_achill_benchmark(
 
     years = pd.to_numeric(master["YEAR"], errors="raise").astype(int)
     model = master.loc[years == year, list(required_master)].copy()
-    model = model.loc[model["County"].map(_normalise_county) == _normalise_county(county)].copy()
-    model["_ED_KEY"] = model[name_col].map(_normalise_text)
+    model = model.loc[
+        model["County"].map(_normalise_county) == _normalise_county(county)
+    ].copy()
+    model["_CSOED_KEY"] = model["CSOED"].map(_normalise_csoed)
 
     bench = benchmark.copy()
-    bench["_ED_KEY"] = bench["Electoral Division"].map(_normalise_text)
-    if bench["_ED_KEY"].duplicated().any():
-        raise AssertionError("Achill benchmark contains duplicate ED names")
+    crosswalk = _load_achill_ed_crosswalk(benchmark_path)
+    bench = bench.merge(
+        crosswalk[["Electoral Division", "GOBLIN ED label", "MODEL_CSOED"]],
+        on="Electoral Division",
+        how="left",
+        validate="one_to_one",
+    )
+    if bench["MODEL_CSOED"].isna().any():
+        missing_names = bench.loc[
+            bench["MODEL_CSOED"].isna(), "Electoral Division"
+        ].tolist()
+        raise AssertionError(f"Achill crosswalk missing benchmark EDs: {missing_names}")
+    bench["_CSOED_KEY"] = bench["MODEL_CSOED"].map(_normalise_csoed)
 
-    # ED names are not globally unique even within a county. Restrict the model
-    # to the named EDs in the external benchmark before enforcing one-to-one
-    # matching, so unrelated duplicate names elsewhere in Mayo do not block the
-    # application comparison.
-    model = model.loc[model["_ED_KEY"].isin(set(bench["_ED_KEY"]))].copy()
-    if model["_ED_KEY"].duplicated().any():
+    model = model.loc[
+        model["_CSOED_KEY"].isin(set(bench["_CSOED_KEY"]))
+    ].copy()
+    if model["_CSOED_KEY"].duplicated().any():
         dup = model.loc[
-            model["_ED_KEY"].duplicated(keep=False), [name_col, "CSOED"]
+            model["_CSOED_KEY"].duplicated(keep=False), [name_col, "CSOED"]
         ].to_dict("records")
-        raise AssertionError(
-            f"Achill benchmark ED names are ambiguous in {county}: {dup}"
-        )
+        raise AssertionError(f"duplicate model CSOED values in {county}: {dup}")
 
-    keep_model = ["_ED_KEY", name_col, *ACHILL_VARIABLE_MAP]
-    merged = bench.merge(model[keep_model], on="_ED_KEY", how="left", validate="one_to_one")
+    keep_model = ["_CSOED_KEY", "CSOED", name_col, *ACHILL_VARIABLE_MAP]
+    merged = bench.merge(
+        model[keep_model],
+        on="_CSOED_KEY",
+        how="left",
+        validate="one_to_one",
+    )
     if merged[name_col].isna().any():
         missing_names = merged.loc[merged[name_col].isna(), "Electoral Division"].tolist()
         raise AssertionError(f"Achill EDs not matched to GOBLIN-Spatial {county} baseline: {missing_names}")
@@ -423,25 +463,39 @@ def validate_achill_land_benchmark(
     model = model.loc[
         model["County"].map(_normalise_county) == _normalise_county(county)
     ].copy()
-    model["_ED_KEY"] = model[name_col].map(_normalise_text)
+    model["_CSOED_KEY"] = model["CSOED"].map(_normalise_csoed)
 
     bench = benchmark.copy()
-    bench["_ED_KEY"] = bench["Electoral Division"].map(_normalise_text)
-    if bench["_ED_KEY"].duplicated().any():
-        raise AssertionError("Achill land benchmark contains duplicate ED names")
-
-    model = model.loc[model["_ED_KEY"].isin(set(bench["_ED_KEY"]))].copy()
-    if model["_ED_KEY"].duplicated().any():
-        dup = model.loc[
-            model["_ED_KEY"].duplicated(keep=False), [name_col, "CSOED"]
-        ].to_dict("records")
+    crosswalk = _load_achill_ed_crosswalk(benchmark_path)
+    bench = bench.merge(
+        crosswalk[["Electoral Division", "GOBLIN ED label", "MODEL_CSOED"]],
+        on="Electoral Division",
+        how="left",
+        validate="one_to_one",
+    )
+    if bench["MODEL_CSOED"].isna().any():
+        missing_names = bench.loc[
+            bench["MODEL_CSOED"].isna(), "Electoral Division"
+        ].tolist()
         raise AssertionError(
-            f"Achill land benchmark ED names are ambiguous in {county}: {dup}"
+            f"Achill land crosswalk missing benchmark EDs: {missing_names}"
         )
+    bench["_CSOED_KEY"] = bench["MODEL_CSOED"].map(_normalise_csoed)
+
+    model = model.loc[
+        model["_CSOED_KEY"].isin(set(bench["_CSOED_KEY"]))
+    ].copy()
+    if model["_CSOED_KEY"].duplicated().any():
+        dup = model.loc[
+            model["_CSOED_KEY"].duplicated(keep=False), [name_col, "CSOED"]
+        ].to_dict("records")
+        raise AssertionError(f"duplicate model CSOED values in {county}: {dup}")
 
     merged = bench.merge(
-        model[["_ED_KEY", name_col, *ACHILL_LAND_VARIABLE_MAP]],
-        on="_ED_KEY",
+        model[
+            ["_CSOED_KEY", "CSOED", name_col, *ACHILL_LAND_VARIABLE_MAP]
+        ],
+        on="_CSOED_KEY",
         how="left",
         validate="one_to_one",
     )
