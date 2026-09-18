@@ -243,17 +243,12 @@ def main() -> None:
     # 4. Adjacent-year spatial-rank stability for counts and transparent signatures.
     stability = temporal_rank_stability(master)
     stability.to_csv(output_dir / "temporal_rank_stability.csv", index=False)
-    stability_summary = (
-        stability.groupby("INDICATOR", as_index=False)["SPEARMAN_RHO"]
-        .agg(["min", "median", "max"])
-        .reset_index()
-        .rename(
-            columns={
-                "min": "MIN_RHO",
-                "median": "MEDIAN_RHO",
-                "max": "MAX_RHO",
-            }
-        )
+    stability_summary = stability.groupby(
+        "INDICATOR", as_index=False
+    ).agg(
+        MIN_RHO=("SPEARMAN_RHO", "min"),
+        MEDIAN_RHO=("SPEARMAN_RHO", "median"),
+        MAX_RHO=("SPEARMAN_RHO", "max"),
     )
     stability_summary.to_csv(
         output_dir / "temporal_rank_stability_summary.csv",
