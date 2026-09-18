@@ -42,7 +42,7 @@ def test_crosswalk_preserves_wfd_units_and_aggregation_closes():
     )
     catchments = gpd.GeoDataFrame(
         {
-            "CATCHMENTI": ["001", "026A", "026B"],
+            "CATCHMENTI": ["018", "026A", "026B"],
             "NAME": ["Blackwater (Munster)", "Upper Shannon 26A", "Upper Shannon 26B"],
         },
         geometry=[
