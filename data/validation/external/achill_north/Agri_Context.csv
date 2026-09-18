@@ -1,0 +1,15 @@
+Theme,Extracted value / statement,Type,Suggested GOBLIN use,Source reference
+Contributing catchment area,704.57,km²,Reproduce bespoke target geography if polygon/subbasins are available.,Section 2.3.1
+Number of contributing sub-basins,28,count,Potential future ED -> subbasin / contributing-catchment aggregation.,Section 2.3.1
+EDs overlapping contributing catchment,23,count,Validation subset.,Section 2.5.3.1
+Farmed share of contributing catchment,27.64,%,Check whether GOBLIN/LPIS agricultural area gives comparable catchment context.,Section 2.5.3.1
+Agricultural land overlapping 'Extreme' or 'Rock at/near Surface' vulnerability,1058.8,ha (reported as ~100% of assessed agricultural land),"Future pathway/susceptibility layer, not livestock validation.",Section 2.5.3.1
+EPA-mapped rivers flowing through agricultural land before BMPA,34,count,Potential source-pathway connectivity indicator.,Section 2.5.3.1
+Dominant livestock,Sheep,qualitative,Expected livestock-system signature for Achill North.,Section 2.5.3.1
+Key livestock-source EDs,Ballycroy South; Ballycroy North; Sheskin; Knocknalower,qualitative,Check spatial rank consistency.,Section 2.5.3.1
+Cereal farming,Absent across listed EDs; farmland described as grassland-dominated.,qualitative,Supports grazing-system interpretation and grassland weighting.,Section 2.5.3.1
+Nitrates Action Programme zone,Zone B,regulatory,Context only for later environmental study.,Section 2.5.3.1
+Slurry spreading closed period,1 October to 15 January inclusive,seasonal/regulatory,Context for seasonal pressure interpretation.,Section 2.5.3.1
+Soiled-water closed period,December,seasonal/regulatory,Context for seasonal pressure interpretation.,Section 2.5.3.1
+Agricultural risk seasonality,Higher during summer grazing and after heavy rainfall; survey also discusses first-flush effects after dry periods.,qualitative,"Motivates future monthly/seasonal pressure work, but current annual GOBLIN baseline should not claim this temporal resolution.",Sections 2.5.3.1 and 2.6
+Agricultural spreading risk window,"Mid-January to September inclusive, assuming compliance with regulatory restrictions.",qualitative,Context for later source-pressure model.,Section 2.5.3.1
