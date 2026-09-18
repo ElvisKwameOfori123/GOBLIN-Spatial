@@ -18,7 +18,9 @@ Use the Environmental Protection Agency Water Framework Directive Catchments pol
 
 https://data.gov.ie/dataset/water-framework-directive-water-catchments
 
-The EPA dataset is licensed CC BY 4.0. Freeze the downloaded geometry used for a release at:
+The EPA dataset is licensed CC BY 4.0. The current metadata identifies the catchments as polygon features in TM65 / Irish Grid (EPSG:29902), with the dataset page updated on 2 July 2026. The EPA download portal currently lists the **Catchments Data Package - April 2026** under Water / Water Framework Directive / General Information.
+
+Freeze the downloaded geometry used for a release at:
 
 ```text
 data/inputs/spatial/WFD_Catchments_Frozen.gpkg
