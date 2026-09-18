@@ -290,7 +290,7 @@ def validate_achill_benchmark(
         raise ValueError(f"Achill benchmark missing columns: {missing}")
 
     name_col = _find_ed_name_column(master)
-    required_master = {"YEAR", "County", name_col, *ACHILL_VARIABLE_MAP}
+    required_master = {"YEAR", "County", "CSOED", name_col, *ACHILL_VARIABLE_MAP}
     missing_master = sorted(required_master - set(master.columns))
     if missing_master:
         raise ValueError(f"historical master missing Achill comparison columns: {missing_master}")
@@ -402,7 +402,13 @@ def validate_achill_land_benchmark(
         raise ValueError(f"Achill land benchmark missing columns: {missing}")
 
     name_col = _find_ed_name_column(master)
-    required_master = {"YEAR", "County", name_col, *ACHILL_LAND_VARIABLE_MAP}
+    required_master = {
+        "YEAR",
+        "County",
+        "CSOED",
+        name_col,
+        *ACHILL_LAND_VARIABLE_MAP,
+    }
     missing_master = sorted(required_master - set(master.columns))
     if missing_master:
         raise ValueError(
