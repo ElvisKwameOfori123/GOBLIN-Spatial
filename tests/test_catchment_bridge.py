@@ -18,7 +18,8 @@ def test_wfd_names_are_preserved_and_colm_mapping_is_secondary():
     assert to_colm_catchment_name("Blackwater") == "Blackwater (Munster)"
     assert to_colm_catchment_name("Lower Shannon 25A") == "Lower Shannon"
     assert to_colm_catchment_name("Upper Shannon 26G") == "Upper Shannon"
-    assert to_colm_catchment_name("Liffey & Dublin Bay") == "Liffey and Dublin Bay"\n    assert to_colm_catchment_name("Sligo Bay & Drowse 35") == "Sligo Bay"
+    assert to_colm_catchment_name("Liffey & Dublin Bay") == "Liffey and Dublin Bay"
+    assert to_colm_catchment_name("Sligo Bay & Drowse 35") == "Sligo Bay"
 
 
 def test_crosswalk_preserves_wfd_units_and_aggregation_closes():
