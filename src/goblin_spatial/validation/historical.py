@@ -299,14 +299,24 @@ def validate_achill_benchmark(
     model = master.loc[years == year, list(required_master)].copy()
     model = model.loc[model["County"].map(_normalise_county) == _normalise_county(county)].copy()
     model["_ED_KEY"] = model[name_col].map(_normalise_text)
-    if model["_ED_KEY"].duplicated().any():
-        dup = model.loc[model["_ED_KEY"].duplicated(keep=False), name_col].tolist()
-        raise AssertionError(f"duplicate ED names within {county}: {dup}")
 
     bench = benchmark.copy()
     bench["_ED_KEY"] = bench["Electoral Division"].map(_normalise_text)
     if bench["_ED_KEY"].duplicated().any():
         raise AssertionError("Achill benchmark contains duplicate ED names")
+
+    # ED names are not globally unique even within a county. Restrict the model
+    # to the named EDs in the external benchmark before enforcing one-to-one
+    # matching, so unrelated duplicate names elsewhere in Mayo do not block the
+    # application comparison.
+    model = model.loc[model["_ED_KEY"].isin(set(bench["_ED_KEY"]))].copy()
+    if model["_ED_KEY"].duplicated().any():
+        dup = model.loc[
+            model["_ED_KEY"].duplicated(keep=False), [name_col, "CSOED"]
+        ].to_dict("records")
+        raise AssertionError(
+            f"Achill benchmark ED names are ambiguous in {county}: {dup}"
+        )
 
     keep_model = ["_ED_KEY", name_col, *ACHILL_VARIABLE_MAP]
     merged = bench.merge(model[keep_model], on="_ED_KEY", how="left", validate="one_to_one")
@@ -405,12 +415,21 @@ def validate_achill_land_benchmark(
         model["County"].map(_normalise_county) == _normalise_county(county)
     ].copy()
     model["_ED_KEY"] = model[name_col].map(_normalise_text)
-    if model["_ED_KEY"].duplicated().any():
-        dup = model.loc[model["_ED_KEY"].duplicated(keep=False), name_col].tolist()
-        raise AssertionError(f"duplicate ED names within {county}: {dup}")
 
     bench = benchmark.copy()
     bench["_ED_KEY"] = bench["Electoral Division"].map(_normalise_text)
+    if bench["_ED_KEY"].duplicated().any():
+        raise AssertionError("Achill land benchmark contains duplicate ED names")
+
+    model = model.loc[model["_ED_KEY"].isin(set(bench["_ED_KEY"]))].copy()
+    if model["_ED_KEY"].duplicated().any():
+        dup = model.loc[
+            model["_ED_KEY"].duplicated(keep=False), [name_col, "CSOED"]
+        ].to_dict("records")
+        raise AssertionError(
+            f"Achill land benchmark ED names are ambiguous in {county}: {dup}"
+        )
+
     merged = bench.merge(
         model[["_ED_KEY", name_col, *ACHILL_LAND_VARIABLE_MAP]],
         on="_ED_KEY",
