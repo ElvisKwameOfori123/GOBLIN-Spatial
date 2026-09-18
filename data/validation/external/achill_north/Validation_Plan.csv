@@ -1,0 +1,11 @@
+Test,Benchmark from PDF,GOBLIN-Spatial variable/output,Statistic / check,What it validates,Important limitation,Priority
+ED total cattle,Table 2-8 cattle total for 23 EDs,2020 ED total cattle,"Difference, MAE, Spearman rank",Broad abundance geography,"Same underlying CSO system, so not fully independent",High
+ED sheep,Table 2-8 sheep total for 23 EDs,2020 ED total sheep,"Difference, MAE, Spearman rank, top-ED overlap",Sheep geography and signature,Same underlying CSO system,High
+ED dairy cows,Table 2-8 reports zero dairy cows across listed EDs,2020 ED dairy cows,Presence/absence and total,Negative-control geography / local signature,Definition alignment still required,High
+Other cows,Table 2-8 'other cows',Candidate suckler/adult beef-cow variable,Only after definition mapping,Category correspondence,Do not equate labels until CSO definition is verified,Medium
+Area-weighted corrected counts,Published corrected cattle/sheep values,ED x bespoke catchment polygon area weights,Row-level reproduction error,Spatial-transfer implementation,Survey assumes uniform distribution within ED,High
+Grassland-weighted corrected counts,No direct survey benchmark,ED x catchment grassland/LPIS weights,Difference vs area weighting,Sensitivity / improvement beyond survey,Requires suitable land layer,High
+Hotspot ordering,"Ballycroy S/N, Sheskin, Knocknalower highlighted",Corrected livestock / signature ranks,Rank consistency,Applied plausibility,"Hotspot conclusion also depends on pathways, not animals alone",High
+Catchment signature,"Sheep-dominated, dairy absent",Aggregated GOBLIN signature,Composition shares / qualitative concordance,Functional livestock-system representation,Not independent cohort validation,High
+2015-2025 dynamics,Not available in survey,GOBLIN longitudinal trajectories,No direct Achill validation,Model extension only,Do not claim survey validates annual dynamics,Do not validate
+DxD/DxB/BxB and age-sex cohorts,Not available in survey,31-cohort GOBLIN system,No direct Achill validation,None,Needs other data sources,Do not validate
