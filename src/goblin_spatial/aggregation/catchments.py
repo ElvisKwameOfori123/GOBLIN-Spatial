@@ -2,6 +2,11 @@
 
 This module does not change baseline science. It creates alternative reporting
 geographies from the validated ED x year master table.
+
+The authoritative hydrological output preserves the official 46 EPA WFD
+catchments. A second, optional compatibility view collapses the detailed Upper
+and Lower Shannon units to the 37-name system used by
+GOBLIN-Proj/catchment_data_api.
 """
 from __future__ import annotations
 
@@ -15,6 +20,8 @@ from goblin_spatial.cattle.cohorts import FINAL_21_COHORTS
 from goblin_spatial.export.workbook import CSO_LIVESTOCK
 from goblin_spatial.sheep.cohorts import GOBLIN_SHEEP_10
 from goblin_spatial.soil.overlay import canonical_csoed, select_baseline_ed_geometries
+
+EXPECTED_WFD_CATCHMENTS = 46
 
 COLM_CATCHMENTS = (
     "Ballyteigue-Bannow", "Bandon-Ilen", "Barrow", "Blacksod-Broadhaven",
@@ -58,8 +65,15 @@ _COLM_BY_KEY = {_name_key(name): name for name in COLM_CATCHMENTS}
 _COLM_BY_KEY["blackwater"] = "Blackwater (Munster)"
 
 
-def canonical_catchment_name(value: object) -> str:
-    """Map common EPA/Colm catchment name variants to the 37-name Colm system."""
+def canonical_wfd_catchment_name(value: object) -> str:
+    """Preserve the official WFD catchment name, trimming only whitespace."""
+    if value is None or pd.isna(value):
+        return ""
+    return " ".join(str(value).strip().split())
+
+
+def to_colm_catchment_name(value: object) -> str:
+    """Map official WFD catchment names to Colm Duffy's 37-name compatibility system."""
     key = _name_key(value)
     if not key:
         return ""
@@ -67,7 +81,14 @@ def canonical_catchment_name(value: object) -> str:
         return "Lower Shannon"
     if "upper shannon" in key:
         return "Upper Shannon"
-    return _COLM_BY_KEY.get(key, str(value).strip())
+    mapped = _COLM_BY_KEY.get(key)
+    if mapped is None:
+        raise ValueError(f"No Colm catchment mapping for WFD catchment: {value!r}")
+    return mapped
+
+
+# Backward-compatible public name from the first bridge implementation.
+canonical_catchment_name = to_colm_catchment_name
 
 
 def _infer_catchment_column(frame: pd.DataFrame) -> str:
@@ -81,6 +102,14 @@ def _infer_catchment_column(frame: pd.DataFrame) -> str:
     raise ValueError(
         "Could not infer catchment-name field. Pass catchment_name_col explicitly."
     )
+
+
+def _infer_catchment_id_column(frame: pd.DataFrame) -> str | None:
+    candidates = (
+        "CATCHMENTI", "CATCHMENT_ID", "CatchmentID", "catchment_id",
+        "CATCH_ID", "ID", "Id", "id",
+    )
+    return next((column for column in candidates if column in frame.columns), None)
 
 
 def _existing_additive(master: pd.DataFrame, columns: Iterable[str] | None) -> list[str]:
@@ -99,11 +128,14 @@ def build_ed_catchment_crosswalk(
     baseline_key: str = "CSOED",
     ed_key: str = "CSOED",
     catchment_name_col: str | None = None,
+    catchment_id_col: str | None = None,
+    expected_wfd_catchments: int | None = EXPECTED_WFD_CATCHMENTS,
 ):
-    """Build a conservative ED-to-catchment fractional-area crosswalk.
+    """Build a conservative ED-to-WFD-catchment fractional-area crosswalk.
 
-    Weights are normalised within each model ED so every ED contributes exactly
-    100% of its additive quantities to the catchment system.
+    The official WFD catchment units are preserved. Weights are normalised
+    within each model ED so every ED contributes exactly 100% of each additive
+    quantity to the hydrological geography.
     """
     try:
         import geopandas as gpd
@@ -120,10 +152,23 @@ def build_ed_catchment_crosswalk(
     ).copy()
 
     name_col = catchment_name_col or _infer_catchment_column(catchment_geometries)
-    catchments = catchment_geometries[[name_col, "geometry"]].copy()
-    catchments["CATCHMENT"] = catchments[name_col].map(canonical_catchment_name)
-    if catchments["CATCHMENT"].eq("").any():
+    id_col = catchment_id_col or _infer_catchment_id_column(catchment_geometries)
+    keep = [name_col, "geometry"] + ([id_col] if id_col else [])
+    catchments = catchment_geometries[keep].copy()
+    catchments["WFD_CATCHMENT"] = catchments[name_col].map(canonical_wfd_catchment_name)
+    if catchments["WFD_CATCHMENT"].eq("").any():
         raise ValueError("Catchment geometry contains blank catchment names.")
+
+    if id_col:
+        catchments["WFD_CATCHMENT_ID"] = catchments[id_col].astype(str).str.strip()
+    else:
+        catchments["WFD_CATCHMENT_ID"] = catchments["WFD_CATCHMENT"]
+
+    source_count = int(catchments["WFD_CATCHMENT_ID"].nunique())
+    if expected_wfd_catchments is not None and source_count != expected_wfd_catchments:
+        raise ValueError(
+            f"Expected {expected_wfd_catchments} WFD catchments, found {source_count}."
+        )
 
     if selected.crs is None or catchments.crs is None:
         raise ValueError("ED and catchment geometries must both have a defined CRS.")
@@ -135,12 +180,14 @@ def build_ed_catchment_crosswalk(
 
     selected["geometry"] = selected.geometry.map(make_valid)
     catchments["geometry"] = catchments.geometry.map(make_valid)
-    catchments = catchments.dissolve(by="CATCHMENT", as_index=False)
+    catchments = catchments.dissolve(
+        by=["WFD_CATCHMENT_ID", "WFD_CATCHMENT"], as_index=False
+    )
 
     selected["_ED_AREA_HA"] = selected.geometry.area / 10000.0
     overlay = gpd.overlay(
         selected[["CSOED_CANONICAL", "_ED_AREA_HA", "geometry"]],
-        catchments[["CATCHMENT", "geometry"]],
+        catchments[["WFD_CATCHMENT_ID", "WFD_CATCHMENT", "geometry"]],
         how="intersection",
         keep_geom_type=False,
     )
@@ -149,13 +196,19 @@ def build_ed_catchment_crosswalk(
 
     overlay["INTERSECT_AREA_HA"] = overlay.geometry.area / 10000.0
     grouped = (
-        overlay.groupby(["CSOED_CANONICAL", "CATCHMENT"], as_index=False)
-        .agg(INTERSECT_AREA_HA=("INTERSECT_AREA_HA", "sum"),
-             ED_AREA_HA=("_ED_AREA_HA", "first"))
+        overlay.groupby(
+            ["CSOED_CANONICAL", "WFD_CATCHMENT_ID", "WFD_CATCHMENT"],
+            as_index=False,
+        )
+        .agg(
+            INTERSECT_AREA_HA=("INTERSECT_AREA_HA", "sum"),
+            ED_AREA_HA=("_ED_AREA_HA", "first"),
+        )
     )
     intersect_total = grouped.groupby("CSOED_CANONICAL")["INTERSECT_AREA_HA"].transform("sum")
     grouped["ED_CATCHMENT_WEIGHT"] = grouped["INTERSECT_AREA_HA"] / intersect_total
     grouped["ED_COVERAGE_SHARE"] = intersect_total / grouped["ED_AREA_HA"]
+    grouped["COLM_CATCHMENT"] = grouped["WFD_CATCHMENT"].map(to_colm_catchment_name)
 
     source = base_keys.copy()
     source["CSOED_CANONICAL"] = source[baseline_key].map(canonical_csoed)
@@ -167,19 +220,32 @@ def build_ed_catchment_crosswalk(
         set(source["CSOED_CANONICAL"]) - set(grouped["CSOED_CANONICAL"])
     )
     if missing:
-        raise ValueError(f"{len(missing)} model EDs do not intersect a catchment; examples={missing[:10]}")
+        raise ValueError(
+            f"{len(missing)} model EDs do not intersect a WFD catchment; examples={missing[:10]}"
+        )
 
     closure = grouped.groupby(baseline_key)["ED_CATCHMENT_WEIGHT"].sum()
     if not np.allclose(closure.to_numpy(), 1.0, rtol=0, atol=1e-10):
         raise AssertionError("ED-to-catchment weights do not close to 1.0.")
 
     return grouped[
-        [baseline_key, "CSOED_CANONICAL", "CATCHMENT", "INTERSECT_AREA_HA",
-         "ED_AREA_HA", "ED_COVERAGE_SHARE", "ED_CATCHMENT_WEIGHT"]
-    ].sort_values([baseline_key, "CATCHMENT"], kind="stable").reset_index(drop=True)
+        [
+            baseline_key,
+            "CSOED_CANONICAL",
+            "WFD_CATCHMENT_ID",
+            "WFD_CATCHMENT",
+            "COLM_CATCHMENT",
+            "INTERSECT_AREA_HA",
+            "ED_AREA_HA",
+            "ED_COVERAGE_SHARE",
+            "ED_CATCHMENT_WEIGHT",
+        ]
+    ].sort_values(
+        [baseline_key, "WFD_CATCHMENT_ID"], kind="stable"
+    ).reset_index(drop=True)
 
 
-def aggregate_to_catchments(
+def aggregate_to_wfd_catchments(
     master: pd.DataFrame,
     crosswalk: pd.DataFrame,
     *,
@@ -187,24 +253,69 @@ def aggregate_to_catchments(
     year_col: str = "YEAR",
     ed_key: str = "CSOED",
 ) -> pd.DataFrame:
-    """Aggregate the ED x year master to catchment x year without changing totals."""
+    """Aggregate the ED x year master to the official WFD catchment x year geography."""
     columns = _existing_additive(master, additive_columns)
     if master.duplicated([year_col, ed_key]).any():
         raise ValueError("Master must contain one row per ED x year.")
 
-    weights = crosswalk[[ed_key, "CATCHMENT", "ED_CATCHMENT_WEIGHT"]].copy()
+    weight_cols = [
+        ed_key, "WFD_CATCHMENT_ID", "WFD_CATCHMENT", "ED_CATCHMENT_WEIGHT"
+    ]
+    weights = crosswalk[weight_cols].copy()
     merged = master[[year_col, ed_key, *columns]].merge(
         weights, on=ed_key, how="left", validate="many_to_many"
     )
     if merged["ED_CATCHMENT_WEIGHT"].isna().any():
-        missing = merged.loc[merged["ED_CATCHMENT_WEIGHT"].isna(), ed_key].drop_duplicates().tolist()
+        missing = (
+            merged.loc[merged["ED_CATCHMENT_WEIGHT"].isna(), ed_key]
+            .drop_duplicates()
+            .tolist()
+        )
         raise ValueError(f"Crosswalk missing model EDs; examples={missing[:10]}")
 
     weighted = merged[columns].multiply(merged["ED_CATCHMENT_WEIGHT"], axis=0)
     weighted[year_col] = merged[year_col].to_numpy()
-    weighted["CATCHMENT"] = merged["CATCHMENT"].to_numpy()
-    out = weighted.groupby([year_col, "CATCHMENT"], as_index=False)[columns].sum()
-    return out.sort_values([year_col, "CATCHMENT"], kind="stable").reset_index(drop=True)
+    weighted["WFD_CATCHMENT_ID"] = merged["WFD_CATCHMENT_ID"].to_numpy()
+    weighted["WFD_CATCHMENT"] = merged["WFD_CATCHMENT"].to_numpy()
+    out = weighted.groupby(
+        [year_col, "WFD_CATCHMENT_ID", "WFD_CATCHMENT"], as_index=False
+    )[columns].sum()
+    return out.sort_values(
+        [year_col, "WFD_CATCHMENT_ID"], kind="stable"
+    ).reset_index(drop=True)
+
+
+# Backward-compatible alias.
+aggregate_to_catchments = aggregate_to_wfd_catchments
+
+
+def aggregate_wfd_to_colm(
+    wfd_catchment_year: pd.DataFrame,
+    *,
+    additive_columns: Iterable[str] | None = None,
+    year_col: str = "YEAR",
+) -> pd.DataFrame:
+    """Collapse the official 46 WFD units to Colm's 37 catchment groups."""
+    if "WFD_CATCHMENT" not in wfd_catchment_year.columns:
+        raise ValueError("WFD catchment table is missing WFD_CATCHMENT.")
+
+    if additive_columns is None:
+        excluded = {year_col, "WFD_CATCHMENT_ID", "WFD_CATCHMENT", "COLM_CATCHMENT"}
+        columns = [
+            c for c in wfd_catchment_year.columns
+            if c not in excluded and pd.api.types.is_numeric_dtype(wfd_catchment_year[c])
+        ]
+    else:
+        columns = [c for c in additive_columns if c in wfd_catchment_year.columns]
+
+    work = wfd_catchment_year[[year_col, "WFD_CATCHMENT", *columns]].copy()
+    work["COLM_CATCHMENT"] = work["WFD_CATCHMENT"].map(to_colm_catchment_name)
+    unknown = sorted(set(work["COLM_CATCHMENT"]) - set(COLM_CATCHMENTS))
+    if unknown:
+        raise ValueError(f"Unexpected Colm catchment names after harmonisation: {unknown}")
+
+    out = work.groupby([year_col, "COLM_CATCHMENT"], as_index=False)[columns].sum()
+    return out.sort_values([year_col, "COLM_CATCHMENT"], kind="stable").reset_index(drop=True)
 
 
 def aggregate_to_counties(
@@ -246,8 +357,12 @@ def validate_aggregation_closure(
             actual = float(derived.loc[year, column])
             diff = actual - expected
             rows.append({
-                year_col: year, "VARIABLE": column, "NATIONAL": expected,
-                "AGGREGATED": actual, "DIFF": diff,
+                year_col: year,
+                "GEOGRAPHY": geography_col,
+                "VARIABLE": column,
+                "NATIONAL": expected,
+                "AGGREGATED": actual,
+                "DIFF": diff,
             })
             if not np.isclose(actual, expected, rtol=0, atol=atol):
                 failed.append((year, column, diff))
