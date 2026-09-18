@@ -14,6 +14,7 @@ from goblin_spatial.validation.historical import (
     sheep_anchor_holdout,
     temporal_rank_stability,
     validate_achill_benchmark,
+    validate_achill_land_benchmark,
     validate_dafm_sheep_counties,
 )
 
@@ -155,6 +156,44 @@ def main() -> None:
             ]
         )
 
+    achill_land_path = (
+        cfg.project_root
+        / "data/validation/external/achill_north/ED_Land_2020.csv"
+    )
+    achill_land_diag, achill_land_summary = validate_achill_land_benchmark(
+        master,
+        achill_land_path,
+        county="Mayo",
+        year=2020,
+    )
+    achill_land_diag.to_csv(
+        output_dir / "achill_land_2020_diagnostics.csv",
+        index=False,
+    )
+    achill_land_summary.to_csv(
+        output_dir / "achill_land_2020_summary.csv",
+        index=False,
+    )
+    for row in achill_land_summary.to_dict("records"):
+        overview_rows.extend(
+            [
+                {
+                    "VALIDATION_FAMILY": "ACHILL_APPLIED_LAND_BENCHMARK",
+                    "SCOPE": row["VARIABLE"],
+                    "METRIC": "MAE",
+                    "VALUE": row["MAE"],
+                    "INTERPRETATION": "Applied 2020 ED land/farm-structure benchmark; not statistically independent because the survey also uses Census of Agriculture 2020.",
+                },
+                {
+                    "VALIDATION_FAMILY": "ACHILL_APPLIED_LAND_BENCHMARK",
+                    "SCOPE": row["VARIABLE"],
+                    "METRIC": "SPEARMAN_RHO",
+                    "VALUE": row["SPEARMAN_RHO"],
+                    "INTERPRETATION": "Agreement in ED land/farm-structure spatial ordering.",
+                },
+            ]
+        )
+
     explicit = achill_spatial.dropna(
         subset=["CATTLE_AREA_CALC", "SHEEP_AREA_CALC"]
     ).copy()
@@ -242,7 +281,8 @@ def main() -> None:
     print(f"Historical validation diagnostics written to: {output_dir}")
     print(f"DAFM county sheep rows: {len(dafm_diag)}")
     print(f"2022 sheep-composition holdout rows: {len(holdout_diag)}")
-    print(f"Achill ED benchmark rows: {len(achill_diag)}")
+    print(f"Achill livestock benchmark rows: {len(achill_diag)}")
+    print(f"Achill land benchmark rows: {len(achill_land_diag)}")
     print(f"Temporal stability diagnostics: {len(stability)}")
     print(overview.to_string(index=False))
 
