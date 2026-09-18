@@ -20,7 +20,7 @@ Dataset landing page:
 
 https://data.gov.ie/dataset/water-framework-directive-water-catchments
 
-The public EPA/GSI FeatureServer mirror exposes the WFD Catchments layer as polygon features with:
+A public GSI FeatureServer mirror of the EPA WFD Catchments layer exposes the polygons programmatically. It is used only as a reproducible fallback when a locally frozen EPA package is absent. For a publication release, a current EPA download should be preferred and frozen explicitly. The mirror exposes:
 
 - layer ID: 2
 - catchment identifier field: `CATCHMENTI`
@@ -41,7 +41,7 @@ The build first looks for:
 data/inputs/spatial/WFD_Catchments_Frozen.gpkg
 ```
 
-If that file is absent, the script queries the public EPA WFD Catchments layer through the GSI FeatureServer mirror, verifies that 46 features were returned, and writes the result to the path above as a frozen GeoPackage.
+If that file is absent, the script queries the public GSI mirror of the EPA WFD Catchments layer, verifies that 46 features were returned, and writes the result to the path above as a frozen GeoPackage. This fallback is convenient for reproducible builds, but it is not treated as evidence that the mirror is newer than the latest EPA download package.
 
 This means a manual EPA download is optional. A locally supplied official catchment file can still be used by passing `--catchment-geometry`.
 
