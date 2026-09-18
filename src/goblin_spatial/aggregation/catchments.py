@@ -153,7 +153,7 @@ def _normalise_wfd_id(value: object) -> str:
     if value is None or pd.isna(value):
         return ""
     text = re.sub(r"\.0$", "", str(value).strip().upper())
-    match = re.fullmatch(r"0*(\\d{1,2})([A-Z]?)", text)
+    match = re.fullmatch(r"0*(\d{1,2})([A-Z]?)", text)
     if match:
         return f"{int(match.group(1)):02d}{match.group(2)}"
     return text
