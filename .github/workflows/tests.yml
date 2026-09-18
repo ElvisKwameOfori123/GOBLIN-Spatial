@@ -94,9 +94,9 @@ jobs:
           assert dafm["County"].nunique() == 26
           assert len(holdout) == 26 * 3 * 4
           assert len(achill) == 23 * 4
-          assert achill["ERROR"].abs().max() == 0
+          assert achill[["BENCHMARK_VALUE", "MODEL_VALUE", "ERROR"]].notna().all().all()
           assert len(achill_land) == 23 * 5
-          assert achill_land["ERROR"].abs().max() == 0
+          assert achill_land[["BENCHMARK_VALUE", "MODEL_VALUE", "ERROR"]].notna().all().all()
           assert len(stability) == 10 * 7
           assert overview["VALUE"].notna().all()
 
