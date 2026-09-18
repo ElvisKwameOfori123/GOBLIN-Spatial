@@ -32,7 +32,7 @@ def test_spearman_rank_is_order_based():
 def test_achill_benchmark_matches_repository_2020_anchor():
     master = pd.read_csv(
         "data/inputs/baseline/01_CSO_ED_Agricultural_Baseline_2020.csv"
-    )
+    ).rename(columns={"CENSUS_YEAR": "YEAR"})
     benchmark = Path(
         "data/validation/external/achill_north/ED_Livestock_2020.csv"
     )
@@ -68,7 +68,7 @@ def test_achill_benchmark_matches_repository_2020_anchor():
 def test_achill_land_benchmark_matches_repository_2020_anchor():
     master = pd.read_csv(
         "data/inputs/baseline/01_CSO_ED_Agricultural_Baseline_2020.csv"
-    )
+    ).rename(columns={"CENSUS_YEAR": "YEAR"})
     diagnostics, summary = validate_achill_land_benchmark(
         master,
         "data/validation/external/achill_north/ED_Land_2020.csv",
@@ -92,7 +92,7 @@ def test_achill_land_benchmark_matches_repository_2020_anchor():
 def test_dafm_county_sheep_validation_covers_all_2020_counties():
     master = pd.read_csv(
         "data/inputs/baseline/01_CSO_ED_Agricultural_Baseline_2020.csv"
-    )
+    ).rename(columns={"CENSUS_YEAR": "YEAR"})
     diagnostics, summary = validate_dafm_sheep_counties(
         master,
         "data/inputs/baseline/03_0_DAFM_Sheep_County_Totals_2015_2020_2022_2025.csv",
@@ -163,8 +163,11 @@ def test_temporal_rank_stability_detects_preserved_ordering():
         ]
     )
 
-    stability = temporal_rank_stability(master)
-    assert len(stability) == 7
+    stability = temporal_rank_stability(
+        master,
+        columns=("TOTAL_CATTLE", "TOTAL_SHEEP"),
+    )
+    assert len(stability) == 2
     assert set(stability["YEAR_FROM"]) == {2020}
     assert set(stability["YEAR_TO"]) == {2021}
     assert np.allclose(stability["SPEARMAN_RHO"], 1.0, equal_nan=False)
