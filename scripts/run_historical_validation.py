@@ -77,13 +77,19 @@ def main() -> None:
                     "VALUE": row["MAE"],
                     "INTERPRETATION": "Independent county sheep comparison; CSO remains the controlling model source.",
                 },
-                {
-                    "VALIDATION_FAMILY": "EXTERNAL_DAFM_SHEEP",
-                    "SCOPE": str(int(row["YEAR"])),
-                    "METRIC": "SPEARMAN_RHO",
-                    "VALUE": row["SPEARMAN_RHO"],
-                    "INTERPRETATION": "County spatial-ranking agreement with DAFM sheep census totals.",
-                },
+                *(
+                    [
+                        {
+                            "VALIDATION_FAMILY": "EXTERNAL_DAFM_SHEEP",
+                            "SCOPE": str(int(row["YEAR"])),
+                            "METRIC": "SPEARMAN_RHO",
+                            "VALUE": row["SPEARMAN_RHO"],
+                            "INTERPRETATION": "County spatial-ranking agreement with DAFM sheep census totals.",
+                        }
+                    ]
+                    if np.isfinite(row["SPEARMAN_RHO"])
+                    else []
+                ),
             ]
         )
 
@@ -109,13 +115,19 @@ def main() -> None:
                     "VALUE": row["MAE_PP"],
                     "INTERPRETATION": "2022 anchor omitted and reconstructed by interpolation from 2020 and 2025.",
                 },
-                {
-                    "VALIDATION_FAMILY": "HOLDOUT_SHEEP_COMPOSITION",
-                    "SCOPE": row["BREED_GROUP"],
-                    "METRIC": "SPEARMAN_RHO",
-                    "VALUE": row["SPEARMAN_RHO"],
-                    "INTERPRETATION": "Spatial/compositional ranking agreement for the omitted 2022 anchor.",
-                },
+                *(
+                    [
+                        {
+                            "VALIDATION_FAMILY": "HOLDOUT_SHEEP_COMPOSITION",
+                            "SCOPE": row["BREED_GROUP"],
+                            "METRIC": "SPEARMAN_RHO",
+                            "VALUE": row["SPEARMAN_RHO"],
+                            "INTERPRETATION": "Spatial/compositional ranking agreement for the omitted 2022 anchor.",
+                        }
+                    ]
+                    if np.isfinite(row["SPEARMAN_RHO"])
+                    else []
+                ),
             ]
         )
 
@@ -146,13 +158,19 @@ def main() -> None:
                     "VALUE": row["MAE"],
                     "INTERPRETATION": "Applied 2020 ED benchmark; not statistically independent because the survey also uses Census of Agriculture 2020.",
                 },
-                {
-                    "VALIDATION_FAMILY": "ACHILL_APPLIED_BENCHMARK",
-                    "SCOPE": row["VARIABLE"],
-                    "METRIC": "SPEARMAN_RHO",
-                    "VALUE": row["SPEARMAN_RHO"],
-                    "INTERPRETATION": "Agreement in ED livestock spatial ordering.",
-                },
+                *(
+                    [
+                        {
+                            "VALIDATION_FAMILY": "ACHILL_APPLIED_BENCHMARK",
+                            "SCOPE": row["VARIABLE"],
+                            "METRIC": "SPEARMAN_RHO",
+                            "VALUE": row["SPEARMAN_RHO"],
+                            "INTERPRETATION": "Agreement in ED livestock spatial ordering.",
+                        }
+                    ]
+                    if np.isfinite(row["SPEARMAN_RHO"])
+                    else []
+                ),
             ]
         )
 
@@ -184,13 +202,19 @@ def main() -> None:
                     "VALUE": row["MAE"],
                     "INTERPRETATION": "Applied 2020 ED land/farm-structure benchmark; not statistically independent because the survey also uses Census of Agriculture 2020.",
                 },
-                {
-                    "VALIDATION_FAMILY": "ACHILL_APPLIED_LAND_BENCHMARK",
-                    "SCOPE": row["VARIABLE"],
-                    "METRIC": "SPEARMAN_RHO",
-                    "VALUE": row["SPEARMAN_RHO"],
-                    "INTERPRETATION": "Agreement in ED land/farm-structure spatial ordering.",
-                },
+                *(
+                    [
+                        {
+                            "VALIDATION_FAMILY": "ACHILL_APPLIED_LAND_BENCHMARK",
+                            "SCOPE": row["VARIABLE"],
+                            "METRIC": "SPEARMAN_RHO",
+                            "VALUE": row["SPEARMAN_RHO"],
+                            "INTERPRETATION": "Agreement in ED land/farm-structure spatial ordering.",
+                        }
+                    ]
+                    if np.isfinite(row["SPEARMAN_RHO"])
+                    else []
+                ),
             ]
         )
 
@@ -236,15 +260,16 @@ def main() -> None:
         index=False,
     )
     for row in stability_summary.to_dict("records"):
-        overview_rows.append(
-            {
-                "VALIDATION_FAMILY": "TEMPORAL_STABILITY_DIAGNOSTIC",
-                "SCOPE": row["INDICATOR"],
-                "METRIC": "MIN_ADJACENT_YEAR_SPEARMAN_RHO",
-                "VALUE": row["MIN_RHO"],
-                "INTERPRETATION": "Diagnostic for accidental year-to-year spatial discontinuity; not independent validation.",
-            }
-        )
+        if np.isfinite(row["MIN_RHO"]):
+            overview_rows.append(
+                {
+                    "VALIDATION_FAMILY": "TEMPORAL_STABILITY_DIAGNOSTIC",
+                    "SCOPE": row["INDICATOR"],
+                    "METRIC": "MIN_ADJACENT_YEAR_SPEARMAN_RHO",
+                    "VALUE": row["MIN_RHO"],
+                    "INTERPRETATION": "Diagnostic for accidental year-to-year spatial discontinuity; not independent validation.",
+                }
+            )
 
     # 5. Preserve the existing accounting-verification summary in the overview.
     accounting_path = cfg.processed_dir / "validation_summary.csv"
