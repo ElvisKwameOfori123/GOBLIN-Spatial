@@ -379,6 +379,46 @@ def build_ed_catchment_crosswalk(
         grouped["INTERSECT_AREA_HA"] / intersect_total
     )
     grouped["ED_COVERAGE_SHARE"] = intersect_total / grouped["ED_AREA_HA"]
+    grouped["ASSIGNMENT_METHOD"] = "polygon_intersection"
+    grouped["NEAREST_DISTANCE_M"] = 0.0
+
+    # WFD catchment polygons do not necessarily cover every offshore island.
+    # Preserve national closure by assigning any model ED with no polygon
+    # intersection to its nearest official WFD catchment. This fallback is
+    # explicit in the crosswalk and does not alter the ED baseline itself.
+    missing_canonical = sorted(
+        set(selected["CSOED_CANONICAL"])
+        - set(grouped["CSOED_CANONICAL"])
+    )
+    if missing_canonical:
+        fallback_rows = []
+        catchment_geometry = catchments.set_index("WFD_CATCHMENT_ID")
+        for canonical_key in missing_canonical:
+            ed_row = selected.loc[
+                selected["CSOED_CANONICAL"] == canonical_key
+            ].iloc[0]
+            distances = catchments.geometry.distance(ed_row.geometry)
+            nearest_idx = distances.idxmin()
+            nearest = catchments.loc[nearest_idx]
+            fallback_rows.append(
+                {
+                    "CSOED_CANONICAL": canonical_key,
+                    "WFD_CATCHMENT_ID": nearest["WFD_CATCHMENT_ID"],
+                    "WFD_CATCHMENT": nearest["WFD_CATCHMENT"],
+                    "COLM_CATCHMENT": nearest["COLM_CATCHMENT"],
+                    "INTERSECT_AREA_HA": 0.0,
+                    "ED_AREA_HA": float(ed_row["_ED_AREA_HA"]),
+                    "ED_CATCHMENT_WEIGHT": 1.0,
+                    "ED_COVERAGE_SHARE": 0.0,
+                    "ASSIGNMENT_METHOD": "nearest_catchment_fallback",
+                    "NEAREST_DISTANCE_M": float(distances.loc[nearest_idx]),
+                }
+            )
+        grouped = pd.concat(
+            [grouped, pd.DataFrame(fallback_rows)],
+            ignore_index=True,
+            sort=False,
+        )
 
     source = base_keys.copy()
     source["CSOED_CANONICAL"] = source[baseline_key].map(canonical_csoed)
@@ -397,8 +437,8 @@ def build_ed_catchment_crosswalk(
     )
     if missing:
         raise ValueError(
-            f"{len(missing)} model EDs do not intersect a WFD catchment; "
-            f"examples={missing[:10]}"
+            f"{len(missing)} model EDs remain unassigned after nearest-catchment "
+            f"fallback; examples={missing[:10]}"
         )
 
     closure = grouped.groupby(baseline_key)["ED_CATCHMENT_WEIGHT"].sum()
@@ -416,6 +456,8 @@ def build_ed_catchment_crosswalk(
             "ED_AREA_HA",
             "ED_COVERAGE_SHARE",
             "ED_CATCHMENT_WEIGHT",
+            "ASSIGNMENT_METHOD",
+            "NEAREST_DISTANCE_M",
         ]
     ].sort_values(
         [baseline_key, "WFD_CATCHMENT_ID"],
