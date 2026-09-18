@@ -1,0 +1,6 @@
+Source,Faecal production g/day,Average E. coli / g,Daily E. coli load,Agriculture relevance,Recommended GOBLIN use,Source reference
+Man,150,13000000,1900000000,Comparator only,Do not use in livestock model.,"Jones and White (1982), as read in Taylor (2003), reported in Table 2-7"
+Cow,23600,230000,5400000000,Direct cattle context,Conceptual evidence that livestock type matters; source-review required before any quantitative application.,Table 2-7
+Sheep,1130,16000000,18100000000,Direct sheep context,Conceptual evidence that sheep can differ strongly from cattle in microbial loading; do not import coefficient uncritically.,Table 2-7
+Chicken,182,1300000,240000000,Agricultural but not represented in current livestock baseline,Context only.,Table 2-7
+Pig,2700,3300000,8900000000,Agricultural but not represented in current livestock baseline,Context only.,Table 2-7
