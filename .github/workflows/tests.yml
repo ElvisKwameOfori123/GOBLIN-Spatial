@@ -64,8 +64,31 @@ jobs:
             tests/test_reporting_boundary.py \
             tests/test_reporting_synthesis.py \
             tests/test_reporting_build.py
+      - name: Run catchment bridge unit tests
+        run: pytest -q tests/test_catchment_bridge.py
       - name: Build canonical historical baseline
         run: goblin-spatial build --config configs/ireland_2015_2025.yaml
+      - name: Build 2015-2025 WFD catchment baseline
+        run: python scripts/build_catchment_baseline.py
+      - name: Validate catchment baseline outputs
+        run: |
+          python - <<'PY'
+          import pandas as pd
+
+          wfd = pd.read_csv("data/processed/goblin_spatial_wfd_catchment_2015_2025.csv")
+          colm = pd.read_csv("data/processed/goblin_spatial_colm_catchment_2015_2025.csv")
+          crosswalk = pd.read_csv("data/processed/ed_wfd_catchment_crosswalk.csv")
+          diagnostics = pd.read_csv("data/processed/catchment_closure_diagnostics.csv")
+
+          assert wfd.groupby("YEAR")["WFD_CATCHMENT_ID"].nunique().eq(46).all()
+          assert colm.groupby("YEAR")["COLM_CATCHMENT"].nunique().eq(37).all()
+          assert crosswalk.groupby("CSOED")["ED_CATCHMENT_WEIGHT"].sum().sub(1.0).abs().max() < 1e-10
+          assert diagnostics["DIFF"].abs().max() < 1e-6
+
+          print("WFD catchment-years:", len(wfd))
+          print("Colm catchment-years:", len(colm))
+          print("Crosswalk rows:", len(crosswalk))
+          PY
       - name: Preflight 2020 SC2 runtime
         run: |
           python - <<'PY'
