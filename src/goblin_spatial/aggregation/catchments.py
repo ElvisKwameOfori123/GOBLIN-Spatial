@@ -62,7 +62,7 @@ def _name_key(value: object) -> str:
 
 
 _COLM_BY_KEY = {_name_key(name): name for name in COLM_CATCHMENTS}
-_COLM_BY_KEY["blackwater"] = "Blackwater (Munster)"
+_COLM_BY_KEY["blackwater"] = "Blackwater (Munster)"\n_COLM_BY_KEY["sligo bay and drowse"] = "Sligo Bay"
 
 
 def canonical_wfd_catchment_name(value: object) -> str:
