@@ -55,6 +55,8 @@ ED_CATCHMENT_WEIGHT = ED/catchment intersection area / total mapped intersection
 
 Weights are normalised to sum to exactly 1 within each model ED. This guarantees national closure for additive variables.
 
+A small number of offshore or otherwise uncovered ED polygons may not intersect the WFD catchment polygon layer. These are assigned deterministically to the nearest official WFD catchment in projected coordinates. Such rows are explicitly flagged as `nearest_catchment_fallback`, retain zero polygon coverage and record the nearest-distance value, so they can be audited separately rather than silently absorbed.
+
 The first implementation is deliberately area-weighted. A later agricultural-land or LPIS-weighted crosswalk can replace these weights without changing the aggregation architecture.
 
 ## Outputs
