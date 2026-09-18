@@ -258,7 +258,10 @@ def sheep_anchor_holdout(
 
 
 def _find_ed_name_column(master: pd.DataFrame) -> str:
-    for candidate in ("EDNAME", "ED", "ELECTORAL_DIVISIONS"):
+    # The external Achill survey uses the Census of Agriculture ED labels.
+    # Prefer the source `ED` field before harmonised/reporting aliases such as
+    # EDNAME, which can contain Irish-language or later boundary labels.
+    for candidate in ("ED", "EDNAME", "ELECTORAL_DIVISIONS"):
         if candidate in master.columns:
             return candidate
     raise ValueError("historical master has no recognised ED-name column")
