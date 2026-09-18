@@ -81,7 +81,8 @@ def to_colm_catchment_name(value: object) -> str:
         return "Lower Shannon"
     if "upper shannon" in key:
         return "Upper Shannon"
-    mapped = _COLM_BY_KEY.get(key)
+    key_without_code = re.sub(r"\\s+\\d{2}[a-z]?$", "", key)
+    mapped = _COLM_BY_KEY.get(key) or _COLM_BY_KEY.get(key_without_code)
     if mapped is None:
         raise ValueError(f"No Colm catchment mapping for WFD catchment: {value!r}")
     return mapped
