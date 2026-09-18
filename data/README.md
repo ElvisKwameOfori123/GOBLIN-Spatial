@@ -97,3 +97,22 @@ reporting geometry
 ```
 
 The frozen ED geometry listed in the manifest is reserved for the reporting/cartography layer and does not enter baseline, SC1, SC2 or SC3 calculations.
+
+
+## 7. External validation and application benchmarks
+
+External datasets used only for validation, method comparison or application testing are stored separately from canonical model inputs under:
+
+```text
+data/validation/external/
+```
+
+The Achill North benchmark is located at:
+
+```text
+data/validation/external/achill_north/
+```
+
+It contains extracted 2020 ED livestock and agricultural-land information from the Achill North sanitary survey, together with a validation plan and agriculture Source-Pathway-Receptor context. These files are **not** read by the historical baseline or SC1-SC3 runtime and do not alter controlling livestock, land or scenario quantities.
+
+Their intended role is to test reproducibility of ED-to-catchment livestock allocation, broad livestock-system geography and alternative spatial weighting assumptions such as simple area versus agricultural-land or grassland weighting.
