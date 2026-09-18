@@ -47,3 +47,23 @@ The mapping stage writes:
 - `GOBLIN_Spatial_Map_Manifest.csv` recording the mapping choices and source geometry.
 
 QGIS can open the same output GeoPackage for visual inspection and publication polishing, but QGIS is not required to reproduce the numerical model or the Python reference maps.
+
+## WFD catchment geometry
+
+`WFD_Catchments_Frozen.gpkg` is an optional downstream aggregation input used by the catchment bridge. It does **not** enter baseline, SC1, SC2 or SC3 calculations.
+
+Authoritative source: Environmental Protection Agency Water Framework Directive Water Catchments, CC BY 4.0.
+
+https://data.gov.ie/dataset/water-framework-directive-water-catchments
+
+The reproducible fallback source is the public GSI FeatureServer mirror of the EPA WFD Catchments layer (layer 2). The layer exposes 46 polygon features, `CATCHMENTI` as the catchment identifier, `NAME` as the catchment name, and EPSG:2157 geometry.
+
+Expected frozen path:
+
+`data/inputs/spatial/WFD_Catchments_Frozen.gpkg`
+
+If the frozen file is absent, `scripts/build_catchment_baseline.py` fetches the 46-feature layer, verifies the feature count and freezes it to this path before constructing the ED-to-catchment crosswalk.
+
+The primary output preserves all 46 official WFD catchments. A secondary 37-unit compatibility table is derived for integration with `GOBLIN-Proj/catchment_data_api`.
+
+Catchment weights are normalised within ED so additive livestock, land and Standard Output quantities preserve national totals exactly. See `docs/catchment_bridge.md`.
