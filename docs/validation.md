@@ -20,6 +20,58 @@ AREA_FARMED = ALL_GRASSLAND + TOTAL_CEREALS + OTHER_CROPS_HA
 
 The 2020 ED baseline is locked as the principal fine-scale spatial anchor. Surrounding years are controlled reconstructions using repeated official higher-level statistics.
 
+### Historical validation evidence
+
+The current model-paper validation deliberately avoids a composite or "fanciful" validation score. It separates accounting verification from empirical and applied evidence.
+
+The historical validation runner is:
+
+```bash
+python scripts/run_historical_validation.py
+```
+
+after building the canonical baseline with:
+
+```bash
+goblin-spatial build --config configs/ireland_2015_2025.yaml
+```
+
+It writes diagnostics beneath `data/processed/validation/historical/`.
+
+Four additional checks are implemented.
+
+1. **Independent DAFM county sheep comparison.** Reconstructed county sheep totals are compared with the retained DAFM National Sheep and Goat Census totals for 2015, 2020, 2022 and 2025. CSO remains the controlling model source. DAFM is used only as independent validation evidence. Diagnostics report county-level error and spatial-rank agreement.
+
+2. **2022 sheep-composition holdout.** The observed 2022 DAFM breed-composition anchor is omitted. County-category breed shares are reconstructed by interpolation from the 2020 and 2025 anchors and then compared with the withheld 2022 observations. This tests reconstruction performance rather than accounting closure.
+
+3. **Achill North applied benchmark.** The 23-ED livestock and land tables extracted from the 2026 Achill North sanitary survey are compared with the 2020 GOBLIN-Spatial anchor. Because both ultimately use Census of Agriculture 2020, this is an external applied implementation benchmark rather than statistically independent validation. The survey's published ED-area overlap correction for cattle and sheep is also reproduced as a spatial-transfer check.
+
+4. **Temporal spatial-rank stability.** Adjacent-year ED rankings are checked for total cattle, total sheep and transparent livestock-system signature indicators. This is a diagnostic for accidental discontinuities in the reconstructed panel, not independent empirical validation.
+
+The validation suite therefore distinguishes:
+
+```text
+accounting closure
+    -> verifies implementation and conservation identities
+
+independent / holdout comparisons
+    -> validate reconstruction performance where external evidence exists
+
+applied benchmark reproduction
+    -> demonstrates that the model can reproduce a real Irish ED-to-catchment workflow
+
+temporal stability diagnostics
+    -> detect unintended spatial discontinuities
+```
+
+No arbitrary pass/fail thresholds are imposed on independent empirical discrepancies. The raw diagnostics and conventional statistics are reported so the scientific interpretation remains visible.
+
+A true grassland-weighted ED-to-catchment sensitivity requires spatial information on where grassland lies within each ED-catchment intersection. The current compact LPIS/land context is ED-level, so the repository does not pretend that an ED total alone provides that within-ED geography. Simple area weighting is reproducible now; agricultural-land or grassland-weighted allocation should be added only when a defensible intersectable spatial layer is frozen.
+
+## Downstream scenario-module validation
+
+SC1, SC2 and SC3 are retained as downstream/future modules. They are not required to define or validate the current historical GOBLIN-Spatial model paper. Their protected tests remain in the repository so future scenario work cannot silently break scientific boundaries.
+
 ## SC1 validation
 
 SC1 must preserve the national GOBLIN pathway while resolving its geography.
@@ -133,6 +185,10 @@ The CI workflow covers:
 - frozen 2020 soil + LPIS context checks;
 - historical baseline unit tests;
 - complete 2015-2025 regression;
+- independent DAFM sheep validation diagnostics;
+- 2022 sheep-composition holdout validation;
+- Achill North livestock, land and spatial-transfer benchmark checks;
+- adjacent-year livestock/signature stability diagnostics;
 - SC1 endpoint, release, comparison and metric tests;
 - SC2 physical-resource and eligibility tests;
 - SC3 finite-resource and feasible-geography tests;

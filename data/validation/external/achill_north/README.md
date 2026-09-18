@@ -14,6 +14,7 @@ The survey identified 23 EDs overlapping its bespoke Achill North contributing c
 
 - `ED_Livestock_2020.csv`: Table 2-8 livestock data for the 23 overlapping EDs, published corrected values and QA fields reproduced from the extraction workbook.
 - `ED_Land_2020.csv`: Table 2-9 holdings, farmed area, cereals and grassland, with derived intensity fields.
+- `ED_Name_Crosswalk.csv`: explicit mapping from the sanitary-survey ED labels to the stable GOBLIN-Spatial `CSOED` identifiers. This is required because several Mayo ED labels are Irish-language or harmonised/merged in the model baseline.
 - `Agriculture_SPR.csv`: agriculture-specific Source-Pathway-Receptor information for the principal livestock-source EDs.
 - `Agri_Context.csv`: catchment area, sub-basin count, farmed share, seasonality and other agricultural context.
 - `Faecal_Load_Context.csv`: microbial-loading coefficients reported in the sanitary survey. These are contextual evidence only and must not be adopted as GOBLIN-Spatial coefficients without separate source review.
