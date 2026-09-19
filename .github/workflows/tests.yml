@@ -19,7 +19,7 @@ jobs:
       - name: Install package
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[geo,goblin,scenario,reporting]"
+          pip install -e ".[geo,goblin,scenario,reporting,query]"
           pip install pytest
       - name: Compile Python sources
         run: python -m compileall -q src tests scripts
@@ -123,6 +123,39 @@ jobs:
           print("Colm catchment-years:", len(colm))
           print("Crosswalk rows:", len(crosswalk))
           PY
+      - name: Build historical manuscript result bundle
+        run: python scripts/build_historical_results_bundle.py
+      - name: Validate historical manuscript result bundle
+        run: |
+          test -f reporting/report_data/historical/ed_year.parquet
+          test -f reporting/report_data/historical/county_year.parquet
+          test -f reporting/report_data/historical/wfd_catchment_year.parquet
+          test -f reporting/report_data/historical/national_year.parquet
+          test -f reporting/report_data/historical/validation_summary.csv
+          test -f reporting/report_data/historical/anchor_reconciliation_2020.csv
+          test -f reporting/report_data/historical/so_change_2015_2025.csv
+          test -f reporting/report_data/historical/matched_pairs_2020.csv
+          test -f reporting/report_data/historical/stable_ed_sensitivity.csv
+          test -f reporting/report_data/historical/multiscale_example_2020.csv
+          test -f reporting/report_data/historical/historical_results.duckdb
+          python - <<'PY'
+          import duckdb
+          from pathlib import Path
+
+          db = Path("reporting/report_data/historical/historical_results.duckdb")
+          con = duckdb.connect(str(db), read_only=True)
+          assert con.sql("select count(*) from ed_year").fetchone()[0] == 31427
+          assert con.sql("select count(distinct County) from county_year").fetchone()[0] == 26
+          assert con.sql("select count(distinct WFD_CATCHMENT_ID) from wfd_catchment_year").fetchone()[0] == 46
+          con.close()
+          PY
+      - name: Upload historical result bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: goblin-spatial-historical-results
+          path: reporting/report_data/historical/
+          if-no-files-found: error
+          retention-days: 30
       - name: Preflight 2020 SC2 runtime
         run: |
           python - <<'PY'
