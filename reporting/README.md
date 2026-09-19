@@ -27,3 +27,16 @@ goblin-spatial-report-data \
 The default writes typed Parquet tables plus transparent CSV companions and a provenance manifest. Generated reporting directories are ignored by Git; publish or archive selected outputs separately when required.
 
 Do not place scientific controls or authoritative model inputs in this tree.
+
+
+For the historical model paper, build the canonical baseline result bundle after
+the historical baseline, validation diagnostics and catchment bridge have been
+materialised:
+
+```bash
+python scripts/build_historical_results_bundle.py
+```
+
+This writes CSV/Parquet tables and a non-authoritative DuckDB query copy below
+`reporting/report_data/historical/`. See
+`docs/historical_results_bundle.md`.
