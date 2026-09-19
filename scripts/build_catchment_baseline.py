@@ -58,7 +58,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--master",
-        default="data/processed/goblin_spatial_master_2015_2025.csv",
+        default="data/processed/08_GOBLIN_Spatial_Standard_Output_2015_2025.csv",
     )
     parser.add_argument(
         "--ed-geometry",
