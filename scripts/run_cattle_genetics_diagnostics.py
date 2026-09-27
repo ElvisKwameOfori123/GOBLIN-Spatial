@@ -1,13 +1,16 @@
 """Diagnostics for the final cattle genetics disaggregation.
 
-This script does not alter the model. It runs the frozen CSO cattle panel
-through the existing GOBLIN genetics allocator and writes transparent checks
-on exact closure, support/receiver use, concentration and biologically
-interpretable ED ratios for 2020.
+The script compares the legacy cow-support G0 allocator with the production
+AIM-hierarchical G1 allocator. It checks exact accounting, receiver/rearing
+behaviour, concentration and agreement with the DAFM/AIM broad cattle-type
+composition. Because G1 uses AIM cattle type as a prior, the G1 AIM comparison
+is a calibration/coherence diagnostic rather than independent validation.
 """
 
 from __future__ import annotations
 
+from copy import deepcopy
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -139,10 +142,44 @@ def _build_dafm_type_signal(ed_frame: pd.DataFrame, dafm_path) -> pd.DataFrame:
     return signal
 
 
+def _config_with_genetics_mode(config, mode: str):
+    raw = deepcopy(config.raw)
+    raw.setdefault("cattle", {})["genetics_prior"] = mode
+    return replace(config, raw=raw)
+
+
+def _dafm_type_metrics(frame: pd.DataFrame) -> tuple[pd.DataFrame, float, float, float]:
+    matched = frame.loc[
+        frame["DAFM_TYPE_MATCHED"]
+        & frame["MODEL_DAIRY_TYPE_SHARE"].notna()
+        & frame["DAFM_DAIRY_SHARE"].notna()
+    ].copy()
+    if matched.empty:
+        raise AssertionError("no DAFM beef/dairy composition matches available")
+    spearman = float(
+        matched["MODEL_DAIRY_TYPE_SHARE"].corr(
+            matched["DAFM_DAIRY_SHARE"], method="spearman"
+        )
+    )
+    mae_pp = float(
+        100.0
+        * np.average(
+            matched["DAFM_DAIRY_SHARE_RESIDUAL"].abs(),
+            weights=matched["DAFM_TYPE_TOTAL"],
+        )
+    )
+    cattle_share = float(matched["TOTAL_CATTLE"].sum() / frame["TOTAL_CATTLE"].sum())
+    return matched, spearman, mae_pp, cattle_share
+
+
 def run() -> None:
     config = load_config(CONFIG)
     panel = build_cattle_panel(config)
     cattle = add_cattle_cohorts(panel, config)
+    g0 = add_cattle_cohorts(
+        panel,
+        _config_with_genetics_mode(config, "cow_support"),
+    )
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -193,12 +230,18 @@ def run() -> None:
     national.to_csv(OUTPUT_DIR / "cattle_genetics_national_margins.csv", index=False)
 
     y2020 = cattle.loc[cattle["YEAR"] == 2020].copy()
-    dairy_cols = _sum_columns("dairy_origin")
-    bxb_cols = _sum_columns("bxb")
+    g0_2020 = g0.loc[g0["YEAR"] == 2020].copy()
+    dxd_cols = [mapping["DxD"] for mapping in CONTAINERS.values()]
+    dxb_cols = [mapping["DxB"] for mapping in CONTAINERS.values()]
+    bxb_cols = [mapping["BxB"] for mapping in CONTAINERS.values()]
+    dairy_cols = dxd_cols + dxb_cols
+
+    y2020["DXD_YOUNG"] = y2020[dxd_cols].sum(axis=1)
+    y2020["DXB_YOUNG"] = y2020[dxb_cols].sum(axis=1)
     y2020["DAIRY_ORIGIN_YOUNG"] = y2020[dairy_cols].sum(axis=1)
     y2020["BXB_YOUNG"] = y2020[bxb_cols].sum(axis=1)
-    y2020["IS_DAIRY_SUPPORT"] = y2020["CSOED"].isin(dairy_support)
-    y2020["IS_BXB_SUPPORT"] = y2020["CSOED"].isin(bxb_support)
+    y2020["IS_DAIRY_SUPPORT_G0"] = y2020["CSOED"].isin(dairy_support)
+    y2020["IS_BXB_SUPPORT_G0"] = y2020["CSOED"].isin(bxb_support)
     y2020["NO_ADULT_RECEIVER"] = (
         y2020["DAIRY_COW"].eq(0)
         & y2020["OTHER_COW"].eq(0)
@@ -232,10 +275,13 @@ def run() -> None:
         y2020[["County", "ED"]], config.files["dafm_aim_ed_cattle_profile_2020"]
     )
     y2020 = y2020.join(dafm_type)
-    y2020["MODEL_DAIRY_TYPE_COUNT"] = (
-        y2020["DAIRY_COW"] + y2020["DAIRY_ORIGIN_YOUNG"]
+    # DAFM broad dairy cattle are compared with DxD, not with all
+    # dairy-origin cattle. DxB are beef-cross cattle and therefore belong with
+    # BxB in the broad beef-type comparison.
+    y2020["MODEL_DAIRY_TYPE_COUNT"] = y2020["DAIRY_COW"] + y2020["DXD_YOUNG"]
+    y2020["MODEL_BEEF_TYPE_COUNT"] = (
+        y2020["OTHER_COW"] + y2020["DXB_YOUNG"] + y2020["BXB_YOUNG"]
     )
-    y2020["MODEL_BEEF_TYPE_COUNT"] = y2020["OTHER_COW"] + y2020["BXB_YOUNG"]
     y2020["MODEL_TYPE_TOTAL"] = (
         y2020["MODEL_DAIRY_TYPE_COUNT"] + y2020["MODEL_BEEF_TYPE_COUNT"]
     )
@@ -248,30 +294,41 @@ def run() -> None:
     y2020["DAFM_DAIRY_SHARE_RESIDUAL"] = (
         y2020["MODEL_DAIRY_TYPE_SHARE"] - y2020["DAFM_DAIRY_SHARE"]
     )
+    matched_type, type_spearman, type_mae_pp, matched_model_cattle_share = (
+        _dafm_type_metrics(y2020)
+    )
 
-    matched_type = y2020.loc[
-        y2020["DAFM_TYPE_MATCHED"]
-        & y2020["MODEL_DAIRY_TYPE_SHARE"].notna()
-        & y2020["DAFM_DAIRY_SHARE"].notna()
-    ].copy()
-    if matched_type.empty:
-        raise AssertionError("no DAFM beef/dairy composition matches available")
-
-    type_spearman = float(
-        matched_type["MODEL_DAIRY_TYPE_SHARE"].corr(
-            matched_type["DAFM_DAIRY_SHARE"], method="spearman"
-        )
+    g0_2020 = g0_2020.join(
+        dafm_type[
+            [
+                "DAFM_TYPE_MATCHED",
+                "DAFM_TYPE_TOTAL",
+                "DAFM_DAIRY_SHARE",
+            ]
+        ]
     )
-    type_mae_pp = float(
-        100.0
-        * np.average(
-            matched_type["DAFM_DAIRY_SHARE_RESIDUAL"].abs(),
-            weights=matched_type["DAFM_TYPE_TOTAL"],
-        )
+    g0_2020["DXD_YOUNG"] = g0_2020[dxd_cols].sum(axis=1)
+    g0_2020["DXB_YOUNG"] = g0_2020[dxb_cols].sum(axis=1)
+    g0_2020["BXB_YOUNG"] = g0_2020[bxb_cols].sum(axis=1)
+    g0_2020["MODEL_DAIRY_TYPE_COUNT"] = (
+        g0_2020["DAIRY_COW"] + g0_2020["DXD_YOUNG"]
     )
-    matched_model_cattle_share = float(
-        matched_type["TOTAL_CATTLE"].sum() / y2020["TOTAL_CATTLE"].sum()
+    g0_2020["MODEL_BEEF_TYPE_COUNT"] = (
+        g0_2020["OTHER_COW"] + g0_2020["DXB_YOUNG"] + g0_2020["BXB_YOUNG"]
     )
+    g0_2020["MODEL_TYPE_TOTAL"] = (
+        g0_2020["MODEL_DAIRY_TYPE_COUNT"] + g0_2020["MODEL_BEEF_TYPE_COUNT"]
+    )
+    g0_2020["MODEL_DAIRY_TYPE_SHARE"] = np.divide(
+        g0_2020["MODEL_DAIRY_TYPE_COUNT"],
+        g0_2020["MODEL_TYPE_TOTAL"],
+        out=np.full(len(g0_2020), np.nan, dtype=float),
+        where=g0_2020["MODEL_TYPE_TOTAL"].to_numpy(dtype=float) > 0,
+    )
+    g0_2020["DAFM_DAIRY_SHARE_RESIDUAL"] = (
+        g0_2020["MODEL_DAIRY_TYPE_SHARE"] - g0_2020["DAFM_DAIRY_SHARE"]
+    )
+    _, g0_type_spearman, g0_type_mae_pp, _ = _dafm_type_metrics(g0_2020)
 
     ed_columns = [
         "CSOED",
@@ -280,10 +337,12 @@ def run() -> None:
         "DAIRY_COW",
         "OTHER_COW",
         "OTHER_CATTLE",
+        "DXD_YOUNG",
+        "DXB_YOUNG",
         "DAIRY_ORIGIN_YOUNG",
         "BXB_YOUNG",
-        "IS_DAIRY_SUPPORT",
-        "IS_BXB_SUPPORT",
+        "IS_DAIRY_SUPPORT_G0",
+        "IS_BXB_SUPPORT_G0",
         "NO_ADULT_RECEIVER",
         "ZERO_DAIRY_WITH_DAIRY_ORIGIN",
         "ZERO_SUCKLER_WITH_BXB",
@@ -336,7 +395,7 @@ def run() -> None:
     summary = pd.DataFrame(
         [
             {"METRIC": "ed_count_2020", "VALUE": len(y2020)},
-            {"METRIC": "dairy_support_ed_count", "VALUE": len(dairy_support)},
+            {"METRIC": "g0_dairy_support_ed_count", "VALUE": len(dairy_support)},
             {
                 "METRIC": "dafm_type_matched_ed_count",
                 "VALUE": int(matched_type.shape[0]),
@@ -346,14 +405,22 @@ def run() -> None:
                 "VALUE": matched_model_cattle_share,
             },
             {
-                "METRIC": "dafm_type_model_spearman_rho",
+                "METRIC": "g0_dafm_type_model_spearman_rho",
+                "VALUE": g0_type_spearman,
+            },
+            {
+                "METRIC": "g0_dafm_type_weighted_mae_percentage_points",
+                "VALUE": g0_type_mae_pp,
+            },
+            {
+                "METRIC": "g1_dafm_type_model_spearman_rho",
                 "VALUE": type_spearman,
             },
             {
-                "METRIC": "dafm_type_weighted_mae_percentage_points",
+                "METRIC": "g1_dafm_type_weighted_mae_percentage_points",
                 "VALUE": type_mae_pp,
             },
-            {"METRIC": "bxb_support_ed_count", "VALUE": len(bxb_support)},
+            {"METRIC": "g0_bxb_support_ed_count", "VALUE": len(bxb_support)},
             {
                 "METRIC": "no_adult_receiver_ed_count",
                 "VALUE": int(no_adult.sum()),
@@ -474,7 +541,7 @@ def run() -> None:
     print("Cattle genetics diagnostics")
     print(summary.to_string(index=False))
     print("National genetic margin max absolute difference:", int(national["DIFF"].abs().max()))
-    print("DAFM type comparison, worst 15 absolute share residuals")
+    print("G1 DAFM type calibration comparison, worst 15 absolute share residuals")
     print(
         matched_type.assign(
             ABS_RESIDUAL=matched_type["DAFM_DAIRY_SHARE_RESIDUAL"].abs()
