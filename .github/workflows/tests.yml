@@ -34,6 +34,7 @@ jobs:
           pytest -q \
             tests/test_baseline_contract.py \
             tests/test_cattle.py \
+            tests/test_cattle_annual_panel.py \
             tests/test_cattle_two_anchor.py \
             tests/test_cli_data_boundary.py \
             tests/test_data_fetch.py \
