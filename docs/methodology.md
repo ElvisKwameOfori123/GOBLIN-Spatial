@@ -34,7 +34,7 @@ The Irish implementation reconstructs agriculture from 2015 to 2025 across 2,857
 
 For cattle, the 2010 and 2020 CSO Census of Agriculture ED distributions provide two fine-scale spatial anchors. For 2015-2019, within-county ED shares are jointly informed by those anchors using temporal-proximity weights: 0.5/0.5 in 2015, 0.4/0.6 in 2016, 0.3/0.7 in 2017, 0.2/0.8 in 2018 and 0.1/0.9 in 2019. Annual AAA10 county totals are imposed exactly. The reconciled 2020 ED state is the observed anchor for 2020, and its within-county shares are held for 2021-2025 while AAA10 continues to supply annual county totals. Thus the intervening ED path is a bounded reconstruction assumption, not an independently observed annual ED series.
 
-The undivided ED \`OTHER_CATTLE\` total is then separated into the seven CSO age-sex groups under exact accounting constraints. AAA10 supplies the authoritative county age-sex composition. The A0 null applies that county composition uniformly across EDs. The production A1 prior uses the 2020 DAFM/AIM ED age profile only to shift the odds of under-one versus one-to-two-year cattle. DAFM under-one combines 0-3, 3-6 and 6-12 months; one-to-two combines 12-18 and 18-24 months. For ED \(e\) in county \(c\),
+The undivided ED \`OTHER_CATTLE\` total is then separated into the seven CSO age-sex groups under exact accounting constraints. AAA10 supplies the authoritative county age-sex composition. The A0 null applies that county composition uniformly across EDs. The production A1 prior uses the 2020 DAFM/AIM ED age profile only to shift the odds of under-one versus one-to-two-year cattle. The DAFM/AIM values are the arithmetic mean of the June and December 2020 stock observations, so they are interpreted as a two-snapshot approximation to the resident standing herd rather than as an exact point-in-time census or a continuous annual mean. DAFM under-one combines 0-3, 3-6 and 6-12 months; one-to-two combines 12-18 and 18-24 months. For ED \(e\) in county \(c\),
 
 \[
 \operatorname{logit}(p_e)
@@ -45,6 +45,26 @@ The undivided ED \`OTHER_CATTLE\` total is then separated into the seven CSO age
 \]
 
 where \(p_c\) is the AAA10 under-one share of the combined under-one plus one-to-two county pool, and \(q_e\) and \(q_c\) are the corresponding DAFM ED and county shares. Probabilities are bounded by a fixed \(10^{-6}\) epsilon only to make logits finite. Bulls and cattle aged two years and over retain the county prior, and sex composition within the two adjusted young-age groups comes from the county AAA10 ratios. The prior is reconciled by iterative proportional fitting and exact integerisation so every ED \`OTHER_CATTLE\` row and every rescaled AAA10 county age-sex column closes exactly. DAFM rows aggregated as \`DED < 5 HERDS\` contribute to the county reference but are not assigned to individual EDs; unmatched EDs receive the county DAFM ratio, making their log-odds adjustment neutral.
+
+The resulting age-sex table is frozen before genetic disaggregation. Step 4 then separates each fixed age-sex container into DxD, DxB and BxB without moving cattle between EDs or changing any age-sex control. GOBLIN/COHORTS supplies the exact national age-sex-specific genetic margins. DAFM/AIM broad dairy/beef composition supplies a 2020 spatial prior. For a matched ED, the AIM dairy share is first placed on the fixed CSO total and the fixed CSO dairy-cow count is removed,
+
+\[
+q_e = \frac{T_e\,(AIM\_DAIRY_e/AIM\_TOTAL_e)-D_e}{O_e},
+\]
+
+where \(T_e\), \(D_e\) and \(O_e\) are the fixed CSO total cattle, dairy cows and other cattle. This is a composition signal, not a new cattle count. If the local cross-source residual falls outside \((0,1)\), if the ED is unmatched, or if no usable denominator exists, the corresponding county signal is used instead. No value is forced to zero because of the absence of local adult cows.
+
+For age-sex container \(j\), the national GOBLIN DxD share remains the biological centre of the prior and the AIM signal supplies only the spatial log-odds shift,
+
+\[
+\operatorname{logit}(p^{DxD}_{e,j})
+=
+\operatorname{logit}(p^{DxD}_{N,j})
++
+\left[\operatorname{logit}(q_e)-\operatorname{logit}(q_N)\right].
+\]
+
+The residual beef-type pool is divided between DxB and BxB using a soft combination of local biological production evidence and the national residual mix. Expected local DxB contribution is proportional to dairy cows and the relevant GOBLIN DxB coefficient; expected local BxB contribution is proportional to suckler cows and the relevant GOBLIN BxB coefficient. A national mixing component is added to both so that suckler-only, dairy-only and no-adult-cow EDs can all contain bought-in followers. Adult-cow absence is therefore never a structural genetics gate. Only an already-fixed zero age-sex cell is a structural zero. IPF and exact integerisation then restore every ED age-sex row and every national DxD/DxB/BxB margin exactly. The 2020 AIM spatial signature is held as the fine-scale type prior across 2015-2025, while reconstructed annual cow populations and the year-specific GOBLIN relationships supply the annual biological context.
 
 Other livestock, land and farm-structure variables continue to use their documented official higher-level controls and spatial anchors. The framework combines these sources through hierarchical reconciliation rather than treating every non-census ED value as independently observed.
 

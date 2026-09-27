@@ -14,6 +14,9 @@ cattle:
   # Use flat_county for the A0 null sensitivity.
   age_sex_prior: dafm_log_odds
   dafm_logit_epsilon: 1.0e-6
+  # Step 4 production prior: AIM ED type signal -> county fallback -> GOBLIN margins.
+  # Use cow_support only to reproduce the G0 genetics sensitivity.
+  genetics_prior: aim_hierarchical
 
 paths:
   raw: data/raw

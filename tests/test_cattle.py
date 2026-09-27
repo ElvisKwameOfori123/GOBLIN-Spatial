@@ -114,35 +114,38 @@ def test_cattle_goblin_cohort_regression() -> None:
         assert observed == expected
 
 
-def test_cattle_ed_informed_genetic_support() -> None:
-    """The GOBLIN genetic split must remain sparse where adult origins are absent."""
+def test_cattle_aim_hierarchical_genetic_prior() -> None:
+    """Step 4 must allow receiver/rearing geography without cow-based gates."""
 
     config = load_config(CONFIG)
     cattle = add_cattle_cohorts(build_cattle_panel(config), config)
     y2020 = cattle.loc[cattle["YEAR"] == 2020].copy()
 
-    dairy_origin_columns = [
-        mapping[genetic]
-        for mapping in CONTAINERS.values()
-        for genetic in ("DxD", "DxB")
-    ]
+    dxd_columns = [mapping["DxD"] for mapping in CONTAINERS.values()]
+    dxb_columns = [mapping["DxB"] for mapping in CONTAINERS.values()]
     bxb_columns = [mapping["BxB"] for mapping in CONTAINERS.values()]
 
     zero_dairy = y2020["DAIRY_COW"].eq(0)
-    no_dairy_origin = y2020[dairy_origin_columns].sum(axis=1).eq(0)
-
-    assert int(zero_dairy.sum()) == 1_463
-    assert int((zero_dairy & no_dairy_origin).sum()) == 1_142
-
+    suckler_only = zero_dairy & y2020["OTHER_COW"].gt(0)
     dairy_only = y2020["DAIRY_COW"].gt(0) & y2020["OTHER_COW"].eq(0)
-    assert int(dairy_only.sum()) == 11
-    assert y2020.loc[dairy_only, bxb_columns].sum(axis=1).eq(0).all()
-
     no_adult_receiver = (
         y2020["DAIRY_COW"].eq(0)
         & y2020["OTHER_COW"].eq(0)
         & y2020["OTHER_CATTLE"].gt(0)
     )
+
+    assert int(zero_dairy.sum()) == 1_463
     assert int(no_adult_receiver.sum()) == 51
-    assert y2020.loc[no_adult_receiver, dairy_origin_columns].sum(axis=1).gt(0).all()
-    assert y2020.loc[no_adult_receiver, bxb_columns].sum(axis=1).gt(0).all()
+
+    # No adult-cow category is a structural genetics gate.
+    assert int(y2020.loc[suckler_only, dxb_columns].to_numpy().sum()) > 0
+    assert int(y2020.loc[dairy_only, bxb_columns].to_numpy().sum()) > 0
+    assert int(y2020.loc[no_adult_receiver, dxd_columns].to_numpy().sum()) > 0
+    assert int(y2020.loc[no_adult_receiver, dxb_columns].to_numpy().sum()) > 0
+    assert int(y2020.loc[no_adult_receiver, bxb_columns].to_numpy().sum()) > 0
+
+    # The only hard support rule is the already-fixed age-sex row itself.
+    for container, mapping in CONTAINERS.items():
+        zero_row = y2020[container].eq(0)
+        cohort_columns = [mapping[g] for g in ("DxD", "DxB", "BxB")]
+        assert y2020.loc[zero_row, cohort_columns].sum(axis=1).eq(0).all()

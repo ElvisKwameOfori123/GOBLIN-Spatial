@@ -33,7 +33,7 @@ datasets:
   dafm_aim_ed_cattle_profile_2020:
     stage: "02"
     module: [baseline, cattle]
-    description: "DAFM AIM-derived 2020 Electoral Division cattle profile: annual-average cattle totals, beef/dairy composition and seven age bands; used as Step 3 spatial age-profile evidence, not as a replacement for CSO/AAA10 hard controls."
+    description: "DAFM AIM-derived 2020 Electoral Division cattle profile: June/December-average cattle totals, beef/dairy composition and seven age bands; used as Step 3 age-profile and Step 4 cattle-type spatial evidence, never as a replacement for CSO/AAA10 hard controls."
     source: "git"
     path: "data/inputs/baseline/02_DAFM_AIM_ED_Cattle_Profile_2020.csv"
     sha256: "33c985cb01e06c79ab2ba8d68b7b3fa57679c853697ea05cf5b5074e02fb1913"
