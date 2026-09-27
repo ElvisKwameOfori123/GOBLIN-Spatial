@@ -32,7 +32,9 @@ post-SC3 spatial flexibility
 
 The Irish implementation reconstructs agriculture from 2015 to 2025 across 2,857 EDs represented in the harmonised agricultural dataset.
 
-The 2020 CSO Census of Agriculture is the principal fine-scale spatial anchor. Annual higher-level official controls constrain surrounding livestock, land and farm-structure totals. The framework combines these controls through hierarchical reconciliation rather than treating every non-2020 ED value as independently observed.
+For cattle, the 2010 and 2020 CSO Census of Agriculture ED distributions provide two fine-scale spatial anchors. For 2015-2019, within-county ED shares are jointly informed by those anchors using temporal-proximity weights: 0.5/0.5 in 2015, 0.4/0.6 in 2016, 0.3/0.7 in 2017, 0.2/0.8 in 2018 and 0.1/0.9 in 2019. Annual AAA10 county totals are imposed exactly. The reconciled 2020 ED state is the observed anchor for 2020, and its within-county shares are held for 2021-2025 while AAA10 continues to supply annual county totals. Thus the intervening ED path is a bounded reconstruction assumption, not an independently observed annual ED series.
+
+Other livestock, land and farm-structure variables continue to use their documented official higher-level controls and spatial anchors. The framework combines these sources through hierarchical reconciliation rather than treating every non-census ED value as independently observed.
 
 The baseline contains:
 

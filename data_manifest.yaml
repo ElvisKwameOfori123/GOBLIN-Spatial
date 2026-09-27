@@ -1,8 +1,17 @@
 manifest_version: "2.0.0"
-release: "goblin-spatial-v1"
+release: "goblin-spatial-v1.1"
 status: "verified"
 
 datasets:
+  cso_ed_agricultural_baseline_2010:
+    stage: "01"
+    module: [baseline, cattle]
+    description: "Model-ready rearrangement of CSO AVA42 2010 Electoral Division livestock geography; published blanks preserved; used as the earlier cattle spatial anchor."
+    source: "git"
+    path: "data/inputs/baseline/CSO_ED2010.csv"
+    sha256: "973adba516b84c115563049e3de2be73f7fbc15efafcee56b08b311034c15661"
+    required: true
+
   cso_ed_agricultural_baseline_2020:
     stage: "01"
     module: [baseline, cattle, sheep, land_farm_structure]
@@ -19,6 +28,15 @@ datasets:
     source: "git"
     path: "data/inputs/baseline/01_CSO_AAA10_Cattle_County_2015_2025.csv"
     sha256: "4df4e3c7dcf7f3183cec422b55da627249c62fc061851132d30ad95c902bcbf7"
+    required: true
+
+  dafm_aim_ed_cattle_profile_2020:
+    stage: "02"
+    module: [baseline, cattle]
+    description: "DAFM AIM-derived 2020 Electoral Division cattle profile: annual-average cattle totals, beef/dairy composition and seven age bands; used as Step 3 spatial age-profile evidence, not as a replacement for CSO/AAA10 hard controls."
+    source: "git"
+    path: "data/inputs/baseline/02_DAFM_AIM_ED_Cattle_Profile_2020.csv"
+    sha256: "33c985cb01e06c79ab2ba8d68b7b3fa57679c853697ea05cf5b5074e02fb1913"
     required: true
 
   cso_aaa09_sheep_county_region_2015_2025:

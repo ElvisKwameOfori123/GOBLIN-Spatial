@@ -18,7 +18,7 @@ sum(10 GOBLIN sheep cohorts) = TOTAL_SHEEP
 AREA_FARMED = ALL_GRASSLAND + TOTAL_CEREALS + OTHER_CROPS_HA
 ```
 
-The 2020 ED baseline is locked as the principal fine-scale spatial anchor. Surrounding years are controlled reconstructions using repeated official higher-level statistics.
+For cattle, the 2010 and 2020 ED census distributions jointly inform 2015-2019 within-county shares through temporal-proximity weighting, with AAA10 county totals imposed exactly. The 2020 ED state is locked as the census anchor, and its within-county shares are held for 2021-2025 while annual AAA10 county totals continue to change. The exact ED path between censuses is therefore a reconstruction assumption rather than directly observed annual ED evidence.
 
 ### Historical validation evidence
 
@@ -65,6 +65,8 @@ temporal stability diagnostics
 ```
 
 No arbitrary pass/fail thresholds are imposed on independent empirical discrepancies. The raw diagnostics and conventional statistics are reported so the scientific interpretation remains visible.
+
+For the cattle two-anchor reconstruction, protected implementation checks additionally require exact county closure by component and year, exact 2020-2025 invariance relative to the fixed-2020 panel, non-negative ED values, component accounting closure, within-county shares summing to one, no support where both anchors are zero, bounded intermediate shares, and equal yearly share increments between the two census anchors. These checks verify the reconstruction mathematics; they do not constitute independent ED-level validation for 2015-2019.
 
 A true grassland-weighted ED-to-catchment sensitivity requires spatial information on where grassland lies within each ED-catchment intersection. The current compact LPIS/land context is ED-level, so the repository does not pretend that an ED total alone provides that within-ED geography. Simple area weighting is reproducible now; agricultural-land or grassland-weighted allocation should be added only when a defensible intersectable spatial layer is frozen.
 
