@@ -1,4 +1,4 @@
-"""Build the CSO-only annual ED cattle panel 2015-2025 and write it to disk.
+"""Build the CSO-only annual ED cattle panel and its age-sex split, 2015-2025.
 
 Usage: python scripts/build_cattle_annual_panel.py
 """
@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from goblin_spatial.cattle.annual_age_sex import build_annual_age_sex_panel, lsu_check_2020
 from goblin_spatial.cattle.annual_panel import build_annual_ed_panel
 from goblin_spatial.config import load_config
 
@@ -23,7 +24,10 @@ def main() -> None:
     log.to_csv(OUT / "cattle_annual_ed_panel_calibration_log.csv", index=False)
     totals = panel.groupby("YEAR")[["DAIRY_COW", "OTHER_COW", "OTHER_CATTLE", "TOTAL_CATTLE"]].sum()
     print(totals.to_string())
-    print(f"Wrote {len(panel):,} rows to {OUT}")
+    age_sex = build_annual_age_sex_panel(cfg, panel)
+    age_sex.to_csv(OUT / "cattle_annual_ed_age_sex_2015_2025.csv", index=False)
+    print("2020 LSU check:", lsu_check_2020(cfg, age_sex))
+    print(f"Wrote {len(panel):,} rows (panel and age-sex) to {OUT}")
 
 
 if __name__ == "__main__":
