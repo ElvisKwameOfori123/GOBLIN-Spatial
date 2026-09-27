@@ -93,8 +93,9 @@ def test_g1_receiver_movement_is_retained_on_new_chain() -> None:
     _, _, _, cohorts = _built()
     y2020 = cohorts.loc[cohorts["YEAR"] == KNOWN_YEAR].copy()
 
-    dxd_young = [CONTAINERS[c]["DxD"] for c in YOUNG_CONTAINERS]
-    dxb_young = [CONTAINERS[c]["DxB"] for c in YOUNG_CONTAINERS]
+    # all six follower containers (under 1, 1-2 and 2+), as reported
+    dxd_young = [CONTAINERS[c]["DxD"] for c in CONTAINERS]
+    dxb_young = [CONTAINERS[c]["DxB"] for c in CONTAINERS]
 
     zero_dairy = y2020["DAIRY_COW"].eq(0)
     suckler_only = zero_dairy & y2020["OTHER_COW"].gt(0)
