@@ -47,6 +47,14 @@ def _anchors():
             "dairy_anchor_prior", "positive_proportional"
         ),
         ed_2010_path=cfg.files["cso_ed_2010"],
+        exclude_2010_dairy_zero=bool(
+            cfg.raw.get("cattle", {}).get(
+                "dairy_anchor_exclude_2010_zero", False
+            )
+        ),
+        min_new_dairy_herd=int(
+            cfg.raw.get("cattle", {}).get("dairy_anchor_min_new_herd", 0)
+        ),
     )
     ed_2010 = _load_cso_ed_2010(cfg.files["cso_ed_2010"])
     weights = _build_historical_spatial_weights(anchor, ed_2010)
