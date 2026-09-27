@@ -59,6 +59,11 @@ LSU_COEFFICIENTS = {
     "CATTLE_FEMALE_2_PLUS": 0.8,
 }
 SHEEP_LSU = 0.1
+AGE_SEX_AUDIT_COLS = (
+    "AGE_SEX_AIM_MATCHED",
+    "AGE_SEX_DAFM_Q_LOCAL",
+    "AGE_SEX_DAFM_Q_COUNTY",
+)
 
 
 def _mode(config: SpatialConfig, mode: str | None) -> str:
@@ -68,16 +73,63 @@ def _mode(config: SpatialConfig, mode: str | None) -> str:
     return value
 
 
-def county_age_sex_targets(county: pd.DataFrame, year: int, county_name: str, other_cattle: int) -> np.ndarray:
-    """Seven AAA10 age-sex groups as proportions, Hamilton-scaled to ``other_cattle``."""
+def _raw_county_age_sex(
+    county: pd.DataFrame,
+    year: int,
+    county_name: str,
+) -> np.ndarray:
+    """Return the checked seven-group AAA10 age-sex vector for a county-year."""
 
     source = county.loc[(county["Year"] == year) & (county["County"] == county_name)]
     if len(source) != 1:
         raise AssertionError(f"{county_name} {year}: expected one AAA10 row")
     raw = source[[f"{c}__HEAD" for c in AAA_AGE_SEX_COLS]].to_numpy(dtype=float)[0]
+    if not np.isfinite(raw).all() or (raw < 0).any():
+        raise AssertionError(f"{county_name} {year}: invalid AAA10 age-sex values")
     if raw.sum() <= 0:
         raise AssertionError(f"{county_name} {year}: zero AAA10 age-sex total")
+    return raw
+
+
+def county_age_sex_targets(
+    county: pd.DataFrame,
+    year: int,
+    county_name: str,
+    other_cattle: int,
+) -> np.ndarray:
+    """Seven AAA10 age-sex groups as proportions, Hamilton-scaled to ``other_cattle``."""
+
+    raw = _raw_county_age_sex(county, year, county_name)
     return hamilton_allocate(raw / raw.sum(), int(other_cattle))
+
+
+def _validate_input_panel(panel: pd.DataFrame, expected_eds: int) -> None:
+    """Validate the annual cattle panel before any age-sex allocation."""
+
+    required = {"YEAR", "CSOED", "County", "ED", "OTHER_CATTLE"}
+    missing = sorted(required - set(panel.columns))
+    if missing:
+        raise ValueError(f"annual cattle panel missing required columns: {missing}")
+
+    expected_rows = expected_eds * len(YEARS)
+    if len(panel) != expected_rows:
+        raise AssertionError(
+            f"expected {expected_rows:,} annual cattle rows, found {len(panel):,}"
+        )
+    if panel[["YEAR", "CSOED"]].duplicated().any():
+        raise AssertionError("duplicate YEAR x CSOED rows in annual cattle panel")
+    if set(panel["YEAR"].unique()) != set(YEARS):
+        raise AssertionError("annual cattle panel years are not exactly 2015-2025")
+    if not panel.groupby("YEAR")["CSOED"].nunique().eq(expected_eds).all():
+        raise AssertionError("annual cattle panel has incomplete ED coverage")
+    if panel["CSOED"].nunique() != expected_eds:
+        raise AssertionError("annual cattle panel ED universe differs from expected frame")
+    if panel["OTHER_CATTLE"].isna().any():
+        raise AssertionError("annual cattle panel has missing OTHER_CATTLE")
+    if (panel["OTHER_CATTLE"] < 0).any():
+        raise AssertionError("annual cattle panel has negative OTHER_CATTLE")
+    if not np.issubdtype(panel["OTHER_CATTLE"].dtype, np.integer):
+        raise AssertionError("annual cattle panel OTHER_CATTLE must be integer-valued")
 
 
 def build_annual_age_sex_panel(
@@ -88,10 +140,19 @@ def build_annual_age_sex_panel(
     """Return the annual panel with the seven CSO age-sex columns added."""
 
     mode = _mode(config, mode)
-    epsilon = float(config.raw.get("cattle", {}).get("dafm_logit_epsilon", DEFAULT_LOGIT_EPSILON))
+    epsilon = float(
+        config.raw.get("cattle", {}).get(
+            "dafm_logit_epsilon", DEFAULT_LOGIT_EPSILON
+        )
+    )
+    if not 0.0 < epsilon < 0.5:
+        raise ValueError("cattle.dafm_logit_epsilon must lie in (0, 0.5)")
     if annual_panel is None:
         annual_panel, _ = build_annual_ed_panel(config)
-    panel = annual_panel.sort_values(["YEAR", "County", "CSOED"], kind="stable").reset_index(drop=True)
+    _validate_input_panel(annual_panel, config.expected_eds)
+    panel = annual_panel.sort_values(
+        ["YEAR", "County", "CSOED"], kind="stable"
+    ).reset_index(drop=True)
     county = _load_aaa10(config.files["cso_cattle_county"])
 
     # 2020 ED age-composition signature, one value per ED, used for every year
@@ -100,8 +161,23 @@ def build_annual_age_sex_panel(
         signal = build_dafm_age_signal(frame, config.files["dafm_aim_ed_cattle_profile_2020"])
         signal["CSOED"] = frame["CSOED"].to_numpy()
         signal = signal.set_index("CSOED")
+        if signal.index.duplicated().any():
+            raise AssertionError("duplicate CSOED in the 2020 DAFM age signal")
     else:
         signal = None
+
+    if signal is None:
+        panel["AGE_SEX_AIM_MATCHED"] = False
+        panel["AGE_SEX_DAFM_Q_LOCAL"] = np.nan
+        panel["AGE_SEX_DAFM_Q_COUNTY"] = np.nan
+    else:
+        panel["AGE_SEX_AIM_MATCHED"] = (
+            panel["CSOED"].map(signal["DAFM_MATCHED"]).fillna(False).astype(bool)
+        )
+        panel["AGE_SEX_DAFM_Q_LOCAL"] = panel["CSOED"].map(signal["DAFM_Q_LOCAL"])
+        panel["AGE_SEX_DAFM_Q_COUNTY"] = panel["CSOED"].map(signal["DAFM_Q_COUNTY"])
+        if panel[list(AGE_SEX_AUDIT_COLS[1:])].isna().any().any():
+            raise AssertionError("annual panel contains EDs without a DAFM age signal")
 
     for column in AGE_SEX_COLS:
         panel[column] = np.int64(0)
@@ -110,8 +186,7 @@ def build_annual_age_sex_panel(
     for (year, county_name), idx in panel.groupby(["YEAR", "County"]).groups.items():
         idx = np.asarray(idx)
         rows = panel.loc[idx, "OTHER_CATTLE"].to_numpy(dtype=np.int64)
-        source = county.loc[(county["Year"] == year) & (county["County"] == county_name)]
-        raw = source[[f"{c}__HEAD" for c in AAA_AGE_SEX_COLS]].to_numpy(dtype=float)[0]
+        raw = _raw_county_age_sex(county, int(year), str(county_name))
         if signal is None:
             allocation, _ = allocate_age_sex(rows, raw, mode="flat_county", epsilon=epsilon)
         else:
@@ -144,6 +219,10 @@ def _validate(panel: pd.DataFrame, county: pd.DataFrame) -> None:
             raise AssertionError(f"{county_name} {year}: county age-sex totals do not match AAA10")
     if set(panel["YEAR"]) != set(YEARS):
         raise AssertionError("age-sex panel years are not 2015-2025")
+    if panel[["YEAR", "CSOED"]].duplicated().any():
+        raise AssertionError("duplicate YEAR x CSOED rows in age-sex panel")
+    if not all(np.issubdtype(panel[column].dtype, np.integer) for column in AGE_SEX_COLS):
+        raise AssertionError("age-sex counts must be integer-valued")
 
 
 def lsu_check_2020(config: SpatialConfig, panel: pd.DataFrame) -> dict:
