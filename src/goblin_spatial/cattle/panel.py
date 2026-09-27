@@ -341,8 +341,14 @@ def _allocate_dairy_anchor_residual(
     capacity = total - other_cows - published
     if (capacity < 0).any():
         raise AssertionError("published dairy cows exceed reconciled cattle capacity")
+
+    # Preserve genuine no-adult-cow receiver/rearing EDs. AIM dairy-type cattle
+    # in such EDs may be followers and are not evidence of resident dairy cows.
+    adult_cow_support = (published > 0) | (other_cows > 0)
+    capacity = np.where(adult_cow_support, capacity, 0).astype(np.int64)
+
     if gap > int(capacity.sum()):
-        raise AssertionError("county dairy gap exceeds reconciled cattle capacity")
+        raise AssertionError("county dairy gap exceeds eligible reconciled cattle capacity")
     if gap == 0:
         return published.copy()
 
@@ -354,11 +360,12 @@ def _allocate_dairy_anchor_residual(
     expected[matched] = target * aim_dairy[matched] / county_aim
     weights = np.maximum(0.0, expected - published.astype(float))
     weights[~matched] = 0.0
+    weights[~adult_cow_support] = 0.0
 
     if float(weights.sum()) <= 0:
-        weights = np.where(matched, aim_dairy, 0.0)
+        weights = np.where(matched & adult_cow_support, aim_dairy, 0.0)
     if float(weights.sum()) <= 0:
-        weights = published.astype(float)
+        weights = np.where(adult_cow_support, published.astype(float), 0.0)
 
     addition = _bounded_weighted_allocate(weights, capacity, gap)
     reconciled = published + addition
