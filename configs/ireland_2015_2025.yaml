@@ -10,6 +10,10 @@ study:
 cattle:
   # Preferred historical reconstruction; use fixed_2020 to reproduce frozen v1 weights.
   spatial_weights: two_anchor_2010_2020
+  # Step 3: DAFM/AIM shifts only under-1 vs 1-2 odds; CSO/AAA10 margins stay exact.
+  # Use flat_county for the A0 null sensitivity.
+  age_sex_prior: dafm_log_odds
+  dafm_logit_epsilon: 1.0e-6
 
 paths:
   raw: data/raw
