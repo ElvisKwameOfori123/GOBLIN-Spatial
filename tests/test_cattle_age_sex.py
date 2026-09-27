@@ -56,6 +56,7 @@ def _anchor(mode: str) -> pd.DataFrame:
                 "dairy_anchor_prior", "positive_proportional"
             )
         ),
+        ed_2010_path=cfg.files["cso_ed_2010"],
     )
 
 
