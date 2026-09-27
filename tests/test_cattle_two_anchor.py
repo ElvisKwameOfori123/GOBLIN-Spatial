@@ -129,13 +129,10 @@ def test_two_anchor_shares_close_are_bounded_and_move_in_equal_steps() -> None:
 def test_two_anchor_blank_rule_and_zero_support() -> None:
     cfg, _, anchor, ed_2010, weights = _anchors()
     source = ed_2010.set_index("_ED_KEY")
-    keys = anchor["CSOED"].map(
-        lambda value: weights.loc[weights["CSOED"].eq(value), "_ED_KEY"].iloc[0]
-    )
     panel = build_cattle_panel(cfg)
 
     for component in SPATIAL_COMPONENTS:
-        v2010 = keys.map(source[component])
+        v2010 = weights["_ED_KEY"].map(source[component])
         blank = v2010.isna().to_numpy()
         s10 = weights[f"{component}_SHARE_2010"].to_numpy()
         s20 = weights[f"{component}_SHARE_2020"].to_numpy()
@@ -178,7 +175,7 @@ def test_two_anchor_hamilton_outputs_follow_interpolated_quota_within_one_head()
                 expected = shares * target
                 ids = anchor.loc[idx, "CSOED"]
                 actual = observed_year.loc[ids, component].to_numpy(dtype=float)
-                assert ((actual - expected).abs() < 1.0 + 1e-12).all()
+                assert (np.abs(actual - expected) < 1.0 + 1e-12).all()
 
 
 def test_two_anchor_difference_from_fixed_2020_shrinks_toward_2020() -> None:
