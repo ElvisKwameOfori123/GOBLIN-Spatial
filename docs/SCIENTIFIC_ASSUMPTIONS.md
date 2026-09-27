@@ -20,12 +20,14 @@ Interpretation
 
 ## Historical reconstruction evidence hierarchy
 
-The 2015-2025 baseline is not a simple projection from 2020. The 2020 CSO Census of Agriculture is the principal ED spatial anchor, while repeated official higher-level livestock and land controls constrain surrounding years.
+The 2015-2025 baseline is not a simple projection from 2020. For cattle, the 2010 and 2020 CSO Census of Agriculture ED distributions jointly inform the within-county geography of 2015-2019 through time-weighted interpolation. The 2020 ED distribution is held for 2021-2025 because no later ED census is available. Annual official higher-level livestock and land controls constrain surrounding years.
 
 ```text
-2020 CSO ED agricultural structure
+2010 + 2020 CSO ED cattle structure
         ↓
-principal local spatial anchor
+time-weighted within-county cattle geography, 2015-2019
+        ↓
+2020 ED cattle structure held, 2020-2025
 
 annual county cattle controls
         ↓
@@ -66,6 +68,7 @@ reconciled 2015-2025 ED panel
 | **A24** | Scenario time | **Interpretation** | Current pathway runs primarily spatialise specified endpoints rather than predicting annual ED transitions to 2050. | Results are endpoint spatial stress tests unless intermediate controls are explicitly supplied. |
 | **A25** | Post-SC3 flexibility | **Core foresight analysis** | The model may hold realised national hectares of each use fixed and search alternative feasible geographies. | One solver map is not automatically treated as the uniquely necessary geography. |
 | **A26** | Behaviour and adoption | **Interpretation boundary** | GOBLIN-Spatial is deterministic and assumption-explicit. | It does not predict individual farmer behaviour, parcel conversion, willingness to adopt or exact realised future geography. |
+| **A27** | Historical cattle ED weights | **Reconstruction assumption** | For 2015-2019, within-county ED shares of dairy cows, other cows and other cattle are a temporal-proximity-weighted combination of the 2010 and 2020 census shares. Annual AAA10 county totals are imposed exactly. Published 2010 zeroes remain zeroes; a blank 2010 component retains its reconciled 2020 share. From 2021-2025 the 2020 within-county shares are held while AAA10 continues to provide annual county totals. | The two censuses inform the geography but do not observe the exact ED path between them. Post-2020 within-county change is not extrapolated in the main model; trend continuation is a sensitivity only. |
 
 ## Core scientific sequence
 
