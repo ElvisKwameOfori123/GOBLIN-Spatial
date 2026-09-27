@@ -22,6 +22,7 @@ from goblin_spatial.cattle.cohorts import (
     CONTAINERS,
     FINAL_21_COHORTS,
     GENETICS,
+    _build_aim_genetic_signature,
     _build_biological_controls,
     _build_ed_genetic_support,
     _load_goblin,
@@ -201,6 +202,11 @@ def run() -> None:
     goblin = _load_goblin(config.files["goblin_cohorts"])
     targets, _ = _build_biological_controls(cattle, goblin)
     dairy_support, bxb_support, _, _ = _build_ed_genetic_support(cattle, targets)
+    aim_signature, q_national = _build_aim_genetic_signature(
+        panel,
+        config.files["dafm_aim_ed_cattle_profile_2020"],
+        epsilon=float(config.raw.get("cattle", {}).get("dafm_logit_epsilon", 1.0e-6)),
+    )
 
     national_rows: list[dict] = []
     for year in sorted(cattle["YEAR"].unique()):
@@ -397,6 +403,22 @@ def run() -> None:
             {"METRIC": "ed_count_2020", "VALUE": len(y2020)},
             {"METRIC": "g0_dairy_support_ed_count", "VALUE": len(dairy_support)},
             {
+                "METRIC": "aim_genetic_signature_matched_ed_count",
+                "VALUE": int(aim_signature["AIM_TYPE_MATCHED"].sum()),
+            },
+            {
+                "METRIC": "aim_genetic_signature_local_valid_ed_count",
+                "VALUE": int(aim_signature["AIM_LOCAL_SIGNAL_VALID"].sum()),
+            },
+            {
+                "METRIC": "aim_genetic_signature_county_fallback_ed_count",
+                "VALUE": int((~aim_signature["AIM_LOCAL_SIGNAL_VALID"]).sum()),
+            },
+            {
+                "METRIC": "aim_genetic_signature_q_national",
+                "VALUE": float(q_national),
+            },
+            {
                 "METRIC": "dafm_type_matched_ed_count",
                 "VALUE": int(matched_type.shape[0]),
             },
@@ -432,6 +454,29 @@ def run() -> None:
             {
                 "METRIC": "zero_suckler_ed_with_bxb_count",
                 "VALUE": int(y2020["ZERO_SUCKLER_WITH_BXB"].sum()),
+            },
+            {
+                "METRIC": "dxd_share_in_zero_dairy_eds",
+                "VALUE": (
+                    float(y2020.loc[y2020["DAIRY_COW"].eq(0), "DXD_YOUNG"].sum())
+                    / float(y2020["DXD_YOUNG"].sum())
+                    if float(y2020["DXD_YOUNG"].sum()) > 0
+                    else 0.0
+                ),
+            },
+            {
+                "METRIC": "dxb_share_in_suckler_only_eds",
+                "VALUE": (
+                    float(
+                        y2020.loc[
+                            y2020["DAIRY_COW"].eq(0) & y2020["OTHER_COW"].gt(0),
+                            "DXB_YOUNG",
+                        ].sum()
+                    )
+                    / float(y2020["DXB_YOUNG"].sum())
+                    if float(y2020["DXB_YOUNG"].sum()) > 0
+                    else 0.0
+                ),
             },
             {
                 "METRIC": "dairy_origin_share_in_zero_dairy_eds",
