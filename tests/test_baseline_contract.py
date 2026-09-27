@@ -90,6 +90,7 @@ def test_config_separates_baseline_from_downstream_spatial_inputs():
     baseline_keys = {
         "cso_ed_2020",
         "cso_cattle_county",
+        "cattle_dairy_suppression_support_2020",
         "cso_sheep_workbook",
         "sheep_breed_anchors",
         "goblin_cohorts",
