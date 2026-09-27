@@ -51,6 +51,11 @@ def _anchor(mode: str) -> pd.DataFrame:
         age_sex_mode=mode,
         dafm_path=cfg.files["dafm_aim_ed_cattle_profile_2020"],
         logit_epsilon=float(cfg.raw["cattle"].get("dafm_logit_epsilon", 1e-6)),
+        dairy_anchor_mode=str(
+            cfg.raw.get("cattle", {}).get(
+                "dairy_anchor_prior", "positive_proportional"
+            )
+        ),
     )
 
 
@@ -87,7 +92,15 @@ def test_dafm_age_signal_has_high_coverage_without_forcing_unmatched_eds() -> No
     cfg = _config_with_age_mode("dafm_log_odds")
     county = _load_aaa10(cfg.files["cso_cattle_county"])
     flat = _build_2020_baseline(
-        cfg.files["cso_ed_2020"], county, cfg.expected_eds
+        cfg.files["cso_ed_2020"],
+        county,
+        cfg.expected_eds,
+        dafm_path=cfg.files["dafm_aim_ed_cattle_profile_2020"],
+        dairy_anchor_mode=str(
+            cfg.raw.get("cattle", {}).get(
+                "dairy_anchor_prior", "positive_proportional"
+            )
+        ),
     )
     signal = build_dafm_age_signal(
         flat, cfg.files["dafm_aim_ed_cattle_profile_2020"]
