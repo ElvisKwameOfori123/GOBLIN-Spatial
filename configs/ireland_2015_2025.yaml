@@ -7,6 +7,10 @@ study:
   base_year: 2020
   expected_eds: 2857
 
+cattle:
+  # Preferred historical reconstruction; use fixed_2020 to reproduce frozen v1 weights.
+  spatial_weights: two_anchor_2010_2020
+
 paths:
   raw: data/raw
   controls: data/controls

@@ -13,6 +13,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from goblin_spatial.cattle.ed_keys import canonical_ed_key
 from goblin_spatial.config import SpatialConfig
 from goblin_spatial.reconciliation import hamilton_allocate, integer_transport
 
@@ -32,6 +33,8 @@ AGE_SEX_MAP = {
 AAA_AGE_SEX_COLS = list(AGE_SEX_MAP)
 AGE_SEX_COLS = list(AGE_SEX_MAP.values())
 MAIN_CATTLE_COLS = ["DAIRY_COW", "OTHER_COW", "OTHER_CATTLE", "TOTAL_CATTLE"]
+SPATIAL_COMPONENTS = ("DAIRY_COW", "OTHER_COW", "OTHER_CATTLE")
+SPATIAL_WEIGHT_MODES = {"fixed_2020", "two_anchor_2010_2020"}
 
 
 def _normalise_county(value) -> str:
@@ -86,6 +89,138 @@ def _load_aaa10(path) -> pd.DataFrame:
         county[f"{column}__HEAD"] = np.rint(values * 1000.0).astype(np.int64)
 
     return county
+
+
+def _load_cso_ed_2010(path) -> pd.DataFrame:
+    """Load the 2010 ED cattle anchor while preserving published blanks."""
+
+    ed = pd.read_csv(path, dtype=str, keep_default_na=False)
+    required = ["CSOED", "County", *SPATIAL_COMPONENTS, "TOTAL_CATTLE"]
+    _require_columns(ed, required, "2010 ED cattle data")
+
+    ed["_ED_KEY"] = ed["CSOED"].map(canonical_ed_key)
+    if ed["_ED_KEY"].duplicated().any():
+        raise AssertionError("2010 ED cattle data contain duplicate canonical ED keys")
+
+    for column in (*SPATIAL_COMPONENTS, "TOTAL_CATTLE"):
+        text = ed[column].astype(str).str.strip()
+        blank = text.eq("")
+        values = pd.to_numeric(text.mask(blank), errors="raise")
+        if (values.dropna() < 0).any():
+            raise ValueError(f"2010 ED cattle data contain negative values in {column}")
+        ed[column] = values.astype(float)
+
+    return ed
+
+
+def _spatial_weight_mode(config: SpatialConfig) -> str:
+    """Return the configured historical cattle spatial-weight rule."""
+
+    value = str(
+        config.raw.get("cattle", {}).get("spatial_weights", "fixed_2020")
+    ).strip()
+    if value not in SPATIAL_WEIGHT_MODES:
+        raise ValueError(
+            "cattle.spatial_weights must be one of "
+            + ", ".join(sorted(SPATIAL_WEIGHT_MODES))
+        )
+    return value
+
+
+def _build_historical_spatial_weights(
+    anchor_2020: pd.DataFrame,
+    ed_2010: pd.DataFrame,
+) -> pd.DataFrame:
+    """Build component-specific 2010 and 2020 within-county ED shares.
+
+    Published 2010 zeroes remain zeroes. A blank 2010 component carries no
+    component-specific information, so that ED retains its reconciled 2020
+    within-county share for that component. The published 2010 values in the
+    county are rescaled over the remaining share so each county closes to one.
+    """
+
+    anchor = anchor_2020.copy()
+    anchor["_ED_KEY"] = anchor["CSOED"].map(canonical_ed_key)
+    if anchor["_ED_KEY"].duplicated().any():
+        raise AssertionError("2020 cattle anchor contains duplicate canonical ED keys")
+
+    source = ed_2010.set_index("_ED_KEY")
+    missing = sorted(set(anchor["_ED_KEY"]) - set(source.index))
+    if missing:
+        raise AssertionError(
+            f"2010 cattle input is missing {len(missing)} EDs from the 2020 model frame"
+        )
+
+    weights = anchor[["County", "CSOED", "_ED_KEY"]].copy()
+
+    for component in SPATIAL_COMPONENTS:
+        v2010 = anchor["_ED_KEY"].map(source[component])
+        s2010 = pd.Series(0.0, index=anchor.index, dtype=float)
+        s2020 = pd.Series(0.0, index=anchor.index, dtype=float)
+
+        for county_name, idx in anchor.groupby("County").groups.items():
+            total_2020 = float(anchor.loc[idx, component].sum())
+            if total_2020 <= 0:
+                raise AssertionError(
+                    f"{county_name}: zero 2020 support for {component}"
+                )
+
+            county_s2020 = anchor.loc[idx, component].astype(float) / total_2020
+            s2020.loc[idx] = county_s2020
+
+            county_v2010 = v2010.loc[idx]
+            blank = county_v2010.isna()
+            published = county_v2010.loc[~blank]
+
+            if float(published.sum()) <= 0:
+                s2010.loc[idx] = county_s2020
+                continue
+
+            blank_index = county_v2010.index[blank]
+            published_index = published.index
+            s2010.loc[blank_index] = county_s2020.loc[blank_index]
+
+            remaining_share = 1.0 - float(county_s2020.loc[blank_index].sum())
+            if remaining_share < -1e-12:
+                raise AssertionError(
+                    f"{county_name}: 2010 blank-share rule exceeded one for {component}"
+                )
+            s2010.loc[published_index] = (
+                published.astype(float) / float(published.sum())
+            ) * max(0.0, remaining_share)
+
+        weights[f"{component}_SHARE_2010"] = s2010
+        weights[f"{component}_SHARE_2020"] = s2020
+
+        sums_2010 = weights.groupby("County")[f"{component}_SHARE_2010"].sum()
+        sums_2020 = weights.groupby("County")[f"{component}_SHARE_2020"].sum()
+        if float((sums_2010 - 1.0).abs().max()) > 1e-9:
+            raise AssertionError(f"2010 {component} shares do not close within county")
+        if float((sums_2020 - 1.0).abs().max()) > 1e-9:
+            raise AssertionError(f"2020 {component} shares do not close within county")
+
+    return weights
+
+
+def _weights_for_year(
+    historical_weights: pd.DataFrame,
+    idx,
+    component: str,
+    year: int,
+) -> np.ndarray:
+    """Return time-weighted 2010-2020 ED shares for one component and year."""
+
+    if not 2010 <= int(year) <= 2020:
+        raise ValueError("two-anchor weights are defined only for 2010-2020")
+
+    lambda_2020 = (int(year) - 2010) / 10.0
+    s2010 = historical_weights.loc[idx, f"{component}_SHARE_2010"].to_numpy(
+        dtype=float
+    )
+    s2020 = historical_weights.loc[idx, f"{component}_SHARE_2020"].to_numpy(
+        dtype=float
+    )
+    return (1.0 - lambda_2020) * s2010 + lambda_2020 * s2020
 
 
 def _build_2020_baseline(ed_source, county: pd.DataFrame, expected_eds: int) -> pd.DataFrame:
@@ -225,9 +360,11 @@ def _validate_county_controls(frame: pd.DataFrame, county_year: pd.DataFrame, ye
 def build_cattle_panel(config: SpatialConfig) -> pd.DataFrame:
     """Build the validated CSO-controlled annual cattle ED panel.
 
-    2020 is the fixed ED spatial anchor. Other years preserve its within-county
-    spatial support while reproducing each year's AAA10 county cattle totals and
-    same-year other-cattle age-sex composition exactly.
+    The annual county population is fixed by AAA10. In two-anchor mode, 2015-2019
+    within-county ED shares are jointly informed by the 2010 and 2020 census
+    geographies, weighted by temporal proximity. The 2020 anchor is exact and
+    2021-2025 retain its ED shares. Fixed-2020 mode remains available for
+    reproducibility. Same-year other-cattle age-sex county margins close exactly.
 
     Returns
     -------
@@ -242,9 +379,18 @@ def build_cattle_panel(config: SpatialConfig) -> pd.DataFrame:
     if not county_path.exists():
         raise FileNotFoundError(county_path)
 
+    weight_mode = _spatial_weight_mode(config)
     county = _load_aaa10(county_path)
     baseline = _build_2020_baseline(ed_path, county, config.expected_eds)
     expected_counties = set(baseline["County"].unique())
+
+    historical_weights: pd.DataFrame | None = None
+    if weight_mode == "two_anchor_2010_2020":
+        ed_2010_path = config.files.get("cso_ed_2010")
+        if ed_2010_path is None or not ed_2010_path.exists():
+            raise FileNotFoundError(ed_2010_path)
+        ed_2010 = _load_cso_ed_2010(ed_2010_path)
+        historical_weights = _build_historical_spatial_weights(baseline, ed_2010)
 
     if len(expected_counties) != 26:
         raise AssertionError("cattle baseline must contain exactly 26 counties")
@@ -276,9 +422,15 @@ def build_cattle_panel(config: SpatialConfig) -> pd.DataFrame:
         if year == config.base_year:
             frame["LIVESTOCK_DATA_STATUS"] = "FIXED_2020_RECONCILED_ANCHOR"
         else:
-            frame["LIVESTOCK_DATA_STATUS"] = (
-                "RECONSTRUCTED_FROM_2020_ED_WEIGHTS_AND_ANNUAL_AAA10_COUNTY_CONTROLS"
-            )
+            if weight_mode == "two_anchor_2010_2020" and year < config.base_year:
+                frame["LIVESTOCK_DATA_STATUS"] = (
+                    "RECONSTRUCTED_FROM_2010_2020_TIME_WEIGHTED_ED_SHARES_"
+                    "AND_ANNUAL_AAA10_COUNTY_CONTROLS"
+                )
+            else:
+                frame["LIVESTOCK_DATA_STATUS"] = (
+                    "RECONSTRUCTED_FROM_2020_ED_WEIGHTS_AND_ANNUAL_AAA10_COUNTY_CONTROLS"
+                )
             for column in MAIN_CATTLE_COLS + AGE_SEX_COLS:
                 frame[column] = 0
 
@@ -296,9 +448,42 @@ def build_cattle_panel(config: SpatialConfig) -> pd.DataFrame:
                 if other_cattle_target < 0:
                     raise AssertionError(f"{county_name} {year}: negative OTHER_CATTLE target")
 
-                dairy = hamilton_allocate(support["DAIRY_COW"], dairy_target)
-                other_cows = hamilton_allocate(support["OTHER_COW"], other_cow_target)
-                other_cattle = hamilton_allocate(support["OTHER_CATTLE"], other_cattle_target)
+                if (
+                    weight_mode == "two_anchor_2010_2020"
+                    and year < config.base_year
+                ):
+                    if historical_weights is None:
+                        raise AssertionError("two-anchor historical weights were not built")
+                    dairy_weights = _weights_for_year(
+                        historical_weights, idx, "DAIRY_COW", year
+                    )
+                    other_cow_weights = _weights_for_year(
+                        historical_weights, idx, "OTHER_COW", year
+                    )
+                    other_cattle_weights = _weights_for_year(
+                        historical_weights, idx, "OTHER_CATTLE", year
+                    )
+                else:
+                    dairy_weights = support["DAIRY_COW"].astype(float)
+                    other_cow_weights = support["OTHER_COW"].astype(float)
+                    other_cattle_weights = support["OTHER_CATTLE"].astype(float)
+
+                dairy = hamilton_allocate(dairy_weights, dairy_target)
+                other_cows = hamilton_allocate(other_cow_weights, other_cow_target)
+                other_cattle = hamilton_allocate(
+                    other_cattle_weights, other_cattle_target
+                )
+
+                for label, allocation_values, allocation_weights in (
+                    ("DAIRY_COW", dairy, dairy_weights),
+                    ("OTHER_COW", other_cows, other_cow_weights),
+                    ("OTHER_CATTLE", other_cattle, other_cattle_weights),
+                ):
+                    zero_support = np.asarray(allocation_weights, dtype=float) <= 1e-15
+                    if (np.asarray(allocation_values)[zero_support] != 0).any():
+                        raise AssertionError(
+                            f"{year} {county_name}: spatial support rule failed for {label}"
+                        )
 
                 frame.loc[idx, "DAIRY_COW"] = dairy
                 frame.loc[idx, "OTHER_COW"] = other_cows
@@ -323,19 +508,6 @@ def build_cattle_panel(config: SpatialConfig) -> pd.DataFrame:
         )
         _validate_ed_cattle_accounting(frame, f"{year} cattle panel")
         _validate_county_controls(frame, county.loc[county["Year"] == year], year)
-
-        if year != config.base_year:
-            for county_name in sorted(expected_counties):
-                support = fixed_weights[county_name]
-                idx = support["index"]
-                for column in ("DAIRY_COW", "OTHER_COW", "OTHER_CATTLE"):
-                    zero_support = support[column] == 0
-                    if (
-                        frame.loc[idx, column].to_numpy(dtype=np.int64)[zero_support] != 0
-                    ).any():
-                        raise AssertionError(
-                            f"{year} {county_name}: fixed 2020 support rule failed for {column}"
-                        )
 
         annual.append(frame)
 
