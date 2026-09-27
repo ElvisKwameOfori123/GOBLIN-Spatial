@@ -13,6 +13,12 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from goblin_spatial.cattle.age_sex import (
+    AGE_SEX_PRIOR_MODES,
+    DEFAULT_LOGIT_EPSILON,
+    allocate_age_sex,
+    build_dafm_age_signal,
+)
 from goblin_spatial.cattle.ed_keys import canonical_ed_key
 from goblin_spatial.config import SpatialConfig
 from goblin_spatial.reconciliation import hamilton_allocate, integer_transport
@@ -127,6 +133,31 @@ def _spatial_weight_mode(config: SpatialConfig) -> str:
     return value
 
 
+def _age_sex_prior_mode(config: SpatialConfig) -> str:
+    """Return the configured ED age-sex prior rule."""
+
+    value = str(
+        config.raw.get("cattle", {}).get("age_sex_prior", "flat_county")
+    ).strip()
+    if value not in AGE_SEX_PRIOR_MODES:
+        raise ValueError(
+            "cattle.age_sex_prior must be one of "
+            + ", ".join(sorted(AGE_SEX_PRIOR_MODES))
+        )
+    return value
+
+
+def _age_sex_logit_epsilon(config: SpatialConfig) -> float:
+    value = float(
+        config.raw.get("cattle", {}).get(
+            "dafm_logit_epsilon", DEFAULT_LOGIT_EPSILON
+        )
+    )
+    if not 0.0 < value < 0.5:
+        raise ValueError("cattle.dafm_logit_epsilon must lie in (0, 0.5)")
+    return value
+
+
 def _build_historical_spatial_weights(
     anchor_2020: pd.DataFrame,
     ed_2010: pd.DataFrame,
@@ -223,7 +254,14 @@ def _weights_for_year(
     return (1.0 - lambda_2020) * s2010 + lambda_2020 * s2020
 
 
-def _build_2020_baseline(ed_source, county: pd.DataFrame, expected_eds: int) -> pd.DataFrame:
+def _build_2020_baseline(
+    ed_source,
+    county: pd.DataFrame,
+    expected_eds: int,
+    age_sex_mode: str = "flat_county",
+    dafm_path=None,
+    logit_epsilon: float = DEFAULT_LOGIT_EPSILON,
+) -> pd.DataFrame:
     """Reconcile the fixed 2020 ED cattle baseline to AAA10 county controls."""
 
     ed = pd.read_csv(ed_source)
@@ -288,6 +326,12 @@ def _build_2020_baseline(ed_source, county: pd.DataFrame, expected_eds: int) -> 
     for output_column in AGE_SEX_COLS:
         ed[output_column] = 0
 
+    age_signal = None
+    if age_sex_mode == "dafm_log_odds":
+        if dafm_path is None:
+            raise ValueError("DAFM log-odds age-sex mode requires a DAFM profile path")
+        age_signal = build_dafm_age_signal(ed, dafm_path)
+
     for county_name in sorted(ed_counties):
         idx = ed.index[ed["County"] == county_name]
         row_totals = ed.loc[idx, "OTHER_CATTLE"].to_numpy(dtype=np.int64)
@@ -300,8 +344,22 @@ def _build_2020_baseline(ed_source, county: pd.DataFrame, expected_eds: int) -> 
         if float(components.sum()) <= 0:
             raise AssertionError(f"{county_name}: zero AAA10 age-sex component sum")
 
-        column_targets = hamilton_allocate(components / components.sum(), int(row_totals.sum()))
-        allocation = integer_transport(row_totals, column_targets)
+        if age_signal is None:
+            allocation, _ = allocate_age_sex(
+                row_totals,
+                components,
+                mode="flat_county",
+                epsilon=logit_epsilon,
+            )
+        else:
+            allocation, _ = allocate_age_sex(
+                row_totals,
+                components,
+                mode=age_sex_mode,
+                local_q=age_signal.loc[idx, "DAFM_Q_LOCAL"].to_numpy(dtype=float),
+                county_q=float(age_signal.loc[idx, "DAFM_Q_COUNTY"].iloc[0]),
+                epsilon=logit_epsilon,
+            )
         for j, output_column in enumerate(AGE_SEX_COLS):
             ed.loc[idx, output_column] = allocation[:, j]
 
@@ -380,9 +438,28 @@ def build_cattle_panel(config: SpatialConfig) -> pd.DataFrame:
         raise FileNotFoundError(county_path)
 
     weight_mode = _spatial_weight_mode(config)
+    age_sex_mode = _age_sex_prior_mode(config)
+    logit_epsilon = _age_sex_logit_epsilon(config)
+    dafm_path = config.files.get("dafm_aim_ed_cattle_profile_2020")
+    if age_sex_mode == "dafm_log_odds":
+        if dafm_path is None or not dafm_path.exists():
+            raise FileNotFoundError(dafm_path)
+
     county = _load_aaa10(county_path)
-    baseline = _build_2020_baseline(ed_path, county, config.expected_eds)
+    baseline = _build_2020_baseline(
+        ed_path,
+        county,
+        config.expected_eds,
+        age_sex_mode=age_sex_mode,
+        dafm_path=dafm_path,
+        logit_epsilon=logit_epsilon,
+    )
     expected_counties = set(baseline["County"].unique())
+    age_signal = (
+        build_dafm_age_signal(baseline, dafm_path)
+        if age_sex_mode == "dafm_log_odds"
+        else None
+    )
 
     historical_weights: pd.DataFrame | None = None
     if weight_mode == "two_anchor_2010_2020":
@@ -496,10 +573,23 @@ def build_cattle_panel(config: SpatialConfig) -> pd.DataFrame:
                 )
                 if float(components.sum()) <= 0:
                     raise AssertionError(f"{county_name} {year}: zero age-sex component sum")
-                age_targets = hamilton_allocate(
-                    components / components.sum(), other_cattle_target
-                )
-                allocation = integer_transport(other_cattle, age_targets)
+
+                if age_signal is None:
+                    allocation, _ = allocate_age_sex(
+                        other_cattle,
+                        components,
+                        mode="flat_county",
+                        epsilon=logit_epsilon,
+                    )
+                else:
+                    allocation, _ = allocate_age_sex(
+                        other_cattle,
+                        components,
+                        mode=age_sex_mode,
+                        local_q=age_signal.loc[idx, "DAFM_Q_LOCAL"].to_numpy(dtype=float),
+                        county_q=float(age_signal.loc[idx, "DAFM_Q_COUNTY"].iloc[0]),
+                        epsilon=logit_epsilon,
+                    )
                 for j, output_column in enumerate(AGE_SEX_COLS):
                     frame.loc[idx, output_column] = allocation[:, j]
 
