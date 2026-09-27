@@ -34,6 +34,18 @@ The Irish implementation reconstructs agriculture from 2015 to 2025 across 2,857
 
 For cattle, the 2010 and 2020 CSO Census of Agriculture ED distributions provide two fine-scale spatial anchors. For 2015-2019, within-county ED shares are jointly informed by those anchors using temporal-proximity weights: 0.5/0.5 in 2015, 0.4/0.6 in 2016, 0.3/0.7 in 2017, 0.2/0.8 in 2018 and 0.1/0.9 in 2019. Annual AAA10 county totals are imposed exactly. The reconciled 2020 ED state is the observed anchor for 2020, and its within-county shares are held for 2021-2025 while AAA10 continues to supply annual county totals. Thus the intervening ED path is a bounded reconstruction assumption, not an independently observed annual ED series.
 
+The undivided ED `OTHER_CATTLE` total is then separated into the seven CSO age-sex groups under exact accounting constraints. AAA10 supplies the authoritative county age-sex composition. The A0 null applies that county composition uniformly across EDs. The production A1 prior uses the 2020 DAFM/AIM ED age profile only to shift the odds of under-one versus one-to-two-year cattle. DAFM under-one combines 0-3, 3-6 and 6-12 months; one-to-two combines 12-18 and 18-24 months. For ED (e) in county (c),
+
+[
+operatorname{logit}(p_e)
+=
+operatorname{logit}(p_c)
++
+left[operatorname{logit}(q_e)-operatorname{logit}(q_c)ight],
+]
+
+where (p_c) is the AAA10 under-one share of the combined under-one plus one-to-two county pool, and (q_e) and (q_c) are the corresponding DAFM ED and county shares. Probabilities are bounded by a fixed (10^{-6}) epsilon only to make logits finite. Bulls and cattle aged two years and over retain the county prior, and sex composition within the two adjusted young-age groups comes from the county AAA10 ratios. The prior is reconciled by iterative proportional fitting and exact integerisation so every ED `OTHER_CATTLE` row and every rescaled AAA10 county age-sex column closes exactly. DAFM rows aggregated as `DED < 5 HERDS` contribute to the county reference but are not assigned to individual EDs; unmatched EDs receive the county DAFM ratio, making their log-odds adjustment neutral.
+
 Other livestock, land and farm-structure variables continue to use their documented official higher-level controls and spatial anchors. The framework combines these sources through hierarchical reconciliation rather than treating every non-census ED value as independently observed.
 
 The baseline contains:
