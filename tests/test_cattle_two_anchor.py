@@ -84,10 +84,36 @@ def test_aim_residual_dairy_anchor_reduces_known_positive_ed_inflation() -> None
     aim20 = aim.loc[aim["YEAR"] == 2020].set_index("CSOED")
     legacy20 = legacy.loc[legacy["YEAR"] == 2020].set_index("CSOED")
 
-    for csoed in [28060, 30019, 13076]:
+    for csoed in ["28060", "30019", "13076"]:
         assert int(aim20.loc[csoed, "DAIRY_COW"]) < int(
             legacy20.loc[csoed, "DAIRY_COW"]
         )
+
+
+def test_aim_residual_minimum_new_herd_rule() -> None:
+    cfg = _config_with_dairy_anchor("aim_residual")
+    raw = deepcopy(cfg.raw)
+    raw.setdefault("cattle", {})["dairy_anchor_min_new_herd"] = 10
+    raw["cattle"]["dairy_anchor_exclude_2010_zero"] = False
+    cfg = replace(cfg, raw=raw)
+
+    panel = build_cattle_panel(cfg)
+    y2020 = panel.loc[panel["YEAR"] == 2020].set_index("CSOED")
+    published = pd.read_csv(
+        cfg.files["cso_ed_2020"], dtype={"CSOED": str}
+    ).set_index("CSOED")
+    published_dairy = pd.to_numeric(
+        published["DAIRY_COW"], errors="raise"
+    ).astype(int)
+
+    added_to_zero = (
+        y2020.loc[published_dairy.index, "DAIRY_COW"] - published_dairy
+    )
+    new_herd = published_dairy.eq(0) & added_to_zero.gt(0)
+    assert not (
+        new_herd
+        & y2020.loc[published_dairy.index, "DAIRY_COW"].between(1, 9)
+    ).any()
 
 
 def test_two_anchor_county_controls_and_accounting() -> None:
