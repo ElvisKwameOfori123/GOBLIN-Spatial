@@ -22,6 +22,7 @@ def test_config_uses_only_canonical_baseline_package() -> None:
         "cso_ed_2010": "data/inputs/baseline/CSO_ED2010.csv",
         "cso_ed_2020": "data/inputs/baseline/01_CSO_ED_Agricultural_Baseline_2020.csv",
         "cso_cattle_county": "data/inputs/baseline/01_CSO_AAA10_Cattle_County_2015_2025.csv",
+        "dafm_aim_ed_cattle_profile_2020": "data/inputs/baseline/02_DAFM_AIM_ED_Cattle_Profile_2020.csv",
         "cso_sheep_workbook": "data/inputs/baseline/03_CSO_AAA09_Sheep_County_Region_2015_2025.xlsx",
         "sheep_breed_anchors": "data/inputs/baseline/05A_DAFM_Sheep_Breed_Anchors_2016_2020_2022_2025.csv",
         "dafm_sheep_county_validation": "data/inputs/baseline/03_0_DAFM_Sheep_County_Totals_2015_2020_2022_2025.csv",
@@ -125,6 +126,42 @@ def test_cattle_county_control_contract() -> None:
     assert set(frame["Year"].unique()) == set(range(2015, 2026))
     assert frame["Region and County"].nunique() == 26
     assert (frame["UNIT"] == "000 Head").all()
+
+
+
+def test_dafm_aim_ed_cattle_profile_2020_contract() -> None:
+    frame = pd.read_csv(_config().files["dafm_aim_ed_cattle_profile_2020"])
+    assert len(frame) == 2826
+    assert set(frame["AVERAGE_YEAR"].unique()) == {2020}
+
+    age_columns = [
+        "AVERAGE_CATTLE_AGE_0_3MTH",
+        "AVERAGE_CATTLE_AGE_3_6MTH",
+        "AVERAGE_CATTLE_AGE_6_12MTH",
+        "AVERAGE_CATTLE_AGE_12_18MTH",
+        "AVERAGE_CATTLE_AGE_18_24MTH",
+        "AVERAGE_CATTLE_AGE_24_36MTH",
+        "AVERAGE_CATTLE_AGE_36MTH_PLUS",
+    ]
+    numeric_columns = [
+        "NUMBER_OF_HERDS",
+        "AVERAGE_NUMBER_CATTLE",
+        "AVERAGE_CATTLE_BEEF",
+        "AVERAGE_CATTLE_DAIRY",
+        *age_columns,
+    ]
+    required = {"AVERAGE_YEAR", "COUNTY", "ELECTORAL_DIVISION", *numeric_columns}
+    assert required.issubset(frame.columns)
+    assert (frame[numeric_columns] >= 0).all().all()
+
+    age_sum = frame[age_columns].sum(axis=1)
+    assert (age_sum - frame["AVERAGE_NUMBER_CATTLE"]).abs().max() < 1e-9
+    beef_dairy_diff = (
+        frame["AVERAGE_CATTLE_BEEF"]
+        + frame["AVERAGE_CATTLE_DAIRY"]
+        - frame["AVERAGE_NUMBER_CATTLE"]
+    ).abs()
+    assert beef_dairy_diff.max() <= 1.0
 
 
 def test_sheep_workbook_contains_production_hierarchy() -> None:
