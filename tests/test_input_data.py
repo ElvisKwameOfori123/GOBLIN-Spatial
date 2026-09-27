@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from goblin_spatial.cattle.ed_keys import canonical_ed_key
 from goblin_spatial.config import load_config
 
 
@@ -18,6 +19,7 @@ def _config():
 def test_config_uses_only_canonical_baseline_package() -> None:
     cfg = _config()
     expected = {
+        "cso_ed_2010": "data/inputs/baseline/CSO_ED2010.csv",
         "cso_ed_2020": "data/inputs/baseline/01_CSO_ED_Agricultural_Baseline_2020.csv",
         "cso_cattle_county": "data/inputs/baseline/01_CSO_AAA10_Cattle_County_2015_2025.csv",
         "cso_sheep_workbook": "data/inputs/baseline/03_CSO_AAA09_Sheep_County_Region_2015_2025.xlsx",
@@ -31,6 +33,67 @@ def test_config_uses_only_canonical_baseline_package() -> None:
     for key, relative in expected.items():
         assert cfg.files[key] == ROOT / relative
         assert cfg.files[key].exists(), key
+
+
+def test_cso_ed_2010_contract_and_2020_frame_mapping() -> None:
+    frame = pd.read_csv(
+        _config().files["cso_ed_2010"],
+        dtype=str,
+        keep_default_na=False,
+    )
+    assert len(frame) == 3409
+
+    required = {
+        "ELECTORAL_DIVISIONS",
+        "ED",
+        "County",
+        "EDID",
+        "CSOED",
+        "DAIRY_COW",
+        "OTHER_COW",
+        "OTHER_CATTLE",
+        "TOTAL_CATTLE",
+        "TOTAL_SHEEP",
+        "LSU",
+    }
+    assert required.issubset(frame.columns)
+
+    keys_2010 = frame["CSOED"].map(canonical_ed_key)
+    assert keys_2010.nunique() == 3409
+
+    frame_2020 = pd.read_csv(
+        _config().files["cso_ed_2020"],
+        dtype={"CSOED": str},
+    )
+    keys_2020 = frame_2020["CSOED"].map(canonical_ed_key)
+    assert len(frame_2020) == 2857
+    assert keys_2020.nunique() == 2857
+
+    indexed_2010 = frame.assign(_ED_KEY=keys_2010).set_index("_ED_KEY")
+    matched = indexed_2010.reindex(keys_2020)
+    assert len(matched) == 2857
+    assert matched["CSOED"].notna().all()
+
+    expected_counts = {
+        "DAIRY_COW": {"blank": 956, "zero": 487, "positive": 1414},
+        "OTHER_COW": {"blank": 50, "zero": 4, "positive": 2803},
+        "OTHER_CATTLE": {"blank": 980, "zero": 2, "positive": 1875},
+        "TOTAL_CATTLE": {"blank": 29, "zero": 2, "positive": 2826},
+    }
+    for column, expected in expected_counts.items():
+        values = matched[column].astype(str).str.strip()
+        blank = values.eq("")
+        numeric = pd.to_numeric(values.mask(blank), errors="raise")
+        assert int(blank.sum()) == expected["blank"]
+        assert int(numeric.eq(0).sum()) == expected["zero"]
+        assert int(numeric.gt(0).sum()) == expected["positive"]
+
+
+def test_canonical_ed_key_normalises_historical_codes() -> None:
+    assert canonical_ed_key("01003") == "1003"
+    assert canonical_ed_key("1003") == "1003"
+    assert canonical_ed_key("32028/32025") == "32025/32028"
+    assert canonical_ed_key("32025/32028") == "32025/32028"
 
 
 def test_cso_ed_2020_contract() -> None:
