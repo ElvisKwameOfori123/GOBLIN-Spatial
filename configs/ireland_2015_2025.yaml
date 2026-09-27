@@ -14,10 +14,10 @@ cattle:
   # place only the positive AAA10 county residual using AIM dairy-type geography.
   # Use positive_proportional to reproduce the legacy anchor sensitivity.
   dairy_anchor_prior: aim_residual
-  # Do not use 2010 published zeros as a production exclusion; the same
-  # small-area definition issue may affect both census anchors. Retain as a
-  # sensitivity switch only.
-  dairy_anchor_exclude_2010_zero: false
+  # Production eligibility: a 2020 published-zero dairy ED may receive part
+  # of the county residual only if the 2010 dairy cell was not a published zero.
+  # Set false only for the pre-specified sensitivity.
+  dairy_anchor_exclude_2010_zero: true
   # Avoid creating token dairy herds in EDs published with zero dairy cows.
   dairy_anchor_min_new_herd: 10
   # Step 3: DAFM/AIM shifts only under-1 vs 1-2 odds; CSO/AAA10 margins stay exact.
@@ -39,6 +39,7 @@ files:
   cso_ed_2020: data/inputs/baseline/01_CSO_ED_Agricultural_Baseline_2020.csv
   cso_cattle_county: data/inputs/baseline/01_CSO_AAA10_Cattle_County_2015_2025.csv
   dafm_aim_ed_cattle_profile_2020: data/inputs/baseline/02_DAFM_AIM_ED_Cattle_Profile_2020.csv
+  dafm_aim_ed_crosswalk_2020: data/controls/cattle/AIM_ED_Crosswalk_2020.csv
   cso_sheep_workbook: data/inputs/baseline/03_CSO_AAA09_Sheep_County_Region_2015_2025.xlsx
   sheep_breed_anchors: data/inputs/baseline/05A_DAFM_Sheep_Breed_Anchors_2016_2020_2022_2025.csv
   dafm_sheep_county_validation: data/inputs/baseline/03_0_DAFM_Sheep_County_Totals_2015_2020_2022_2025.csv
