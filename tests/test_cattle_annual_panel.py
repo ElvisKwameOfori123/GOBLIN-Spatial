@@ -7,6 +7,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from goblin_spatial.cattle.annual_panel import (
     COLUMNS,
@@ -35,7 +36,10 @@ def _built():
 def test_shape_and_identity() -> None:
     _, panel, _ = _built()
     assert len(panel) == 2857 * len(YEARS)
+    assert not panel[["YEAR", "CSOED"]].duplicated().any()
+    assert set(panel["YEAR"]) == set(YEARS)
     assert panel.groupby("YEAR")["CSOED"].nunique().eq(2857).all()
+    assert all(np.issubdtype(panel[column].dtype, np.integer) for column in COLUMNS)
     assert (panel[list(COLUMNS)] >= 0).all().all()
     assert (panel[list(COMPONENTS)].sum(axis=1) == panel["TOTAL_CATTLE"]).all()
 
@@ -87,8 +91,31 @@ def test_no_single_ed_absorbs_county_cow_shortfall() -> None:
 
 def test_every_county_year_calibrated_without_fallback() -> None:
     _, _, log = _built()
-    assert len(log) == 26 * (len(YEARS) - 1)
-    assert log["SUPPORT_FALLBACK_LEVEL"].eq(0).all()
+    calibration = log.loc[log["RECORD_TYPE"] == "CALIBRATION"]
+    assert len(calibration) == 26 * (len(YEARS) - 1)
+    assert calibration["SUPPORT_FALLBACK_LEVEL"].eq(0).all()
+
+
+def test_2020_source_discrepancy_is_written_to_log() -> None:
+    cfg, panel, log = _built()
+    audit = log.loc[log["RECORD_TYPE"] == "2020_SOURCE_DISCREPANCY"].copy()
+    assert len(audit) == 26
+
+    county = _load_aaa10(cfg.files["cso_cattle_county"])
+    target = _county_controls(county, KNOWN_YEAR)
+    observed = (
+        panel.loc[panel["YEAR"] == KNOWN_YEAR]
+        .groupby("County")[list(COLUMNS)]
+        .sum()
+    )
+    for column in COLUMNS:
+        expected = observed[column] - target.loc[observed.index, column]
+        actual = audit.set_index("County").loc[observed.index, f"DIFF_{column}"]
+        assert np.array_equal(actual.to_numpy(), expected.to_numpy())
+
+    assert audit["REFERENCE_SEEDED_TOTAL"].sum() == pytest.approx(
+        log.attrs["seeded_head_2020_reference"]
+    )
 
 
 def test_integerisation_keeps_structural_zeros() -> None:
