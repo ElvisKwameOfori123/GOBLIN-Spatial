@@ -65,79 +65,115 @@ def main() -> None:
         raise AssertionError("boundary file lacks the planned PROPNAME/English alias field")
 
     boundary = pd.DataFrame({
-        "CSOED": gdf[cso_col].astype(str).str.replace(r"\.0$", "", regex=True),
+        "CSOED": gdf[cso_col].astype(str).str.replace(r"\\.0$", "", regex=True),
         "County": gdf[county_col].map(norm_county),
         "BOUNDARY_EDNAME": gdf[ed_col].astype(str) if ed_col is not None else "",
         "BOUNDARY_PROPNAME": gdf[prop_col].astype(str),
     })
-    # Canonicalise leading zeroes for numeric ED codes while preserving grouped ids.
+
     def canon(value: str) -> str:
-        parts=[]
+        parts = []
         for token in str(value).split("/"):
-            token=token.strip()
+            token = token.strip()
             if not token:
                 continue
             try:
                 parts.append(str(int(float(token))))
             except ValueError:
                 parts.append(token)
-        return "/".join(sorted(parts, key=lambda x: int(x) if x.isdigit() else x))
+        return "/".join(
+            sorted(parts, key=lambda x: int(x) if x.isdigit() else x)
+        )
 
     boundary["CSOED"] = boundary["CSOED"].map(canon)
+    boundary = boundary.set_index("CSOED", drop=False)
     ed["CSOED"] = ed["CSOED"].astype(str).map(canon)
-    merged = ed[["CSOED","County","ED"]].merge(
-        boundary,
-        on="CSOED",
-        how="left",
-        suffixes=("_CSO","_BOUNDARY"),
-        validate="one_to_one",
-    )
-    merged["County"] = merged["County_CSO"].map(norm_county)
-    merged["_ED_KEY"] = merged["ED"].map(norm_name)
-    merged["_PROP_KEY"] = merged["BOUNDARY_PROPNAME"].map(norm_name)
-    merged["_BOUNDARY_ED_KEY"] = merged["BOUNDARY_EDNAME"].map(norm_name)
 
-    aim_keys = set(zip(aim["County"], aim["_AIM_KEY"]))
+    aim_by_base = {}
+    for _, row in aim.iterrows():
+        key = (row["County"], row["_AIM_KEY"])
+        aim_by_base.setdefault(key, []).append(str(row["ELECTORAL_DIVISION"]))
 
     direct = []
     alias = []
-    for _, row in merged.iterrows():
-        county = row["County"]
-        if (county, row["_ED_KEY"]) in aim_keys:
+    unmatched = []
+
+    for _, row in ed.iterrows():
+        county = norm_county(row["County"])
+        model_names = [
+            part.strip() for part in str(row["ED"]).split("/") if part.strip()
+        ]
+        model_keys = {norm_name(name) for name in model_names if norm_name(name)}
+
+        direct_names = []
+        for key in sorted(model_keys):
+            direct_names.extend(aim_by_base.get((county, key), []))
+
+        # Gather frozen boundary aliases for every constituent code in a grouped
+        # model ED, not only for one-to-one CSOED rows.
+        alias_candidates = []
+        for constituent in str(row["CSOED"]).split("/"):
+            ckey = canon(constituent)
+            if ckey not in boundary.index:
+                continue
+            b = boundary.loc[ckey]
+            if isinstance(b, pd.DataFrame):
+                boundary_rows = [x for _, x in b.iterrows()]
+            else:
+                boundary_rows = [b]
+            for b_row in boundary_rows:
+                for field in ("BOUNDARY_EDNAME", "BOUNDARY_PROPNAME"):
+                    value = str(b_row[field]).strip()
+                    key = norm_name(value)
+                    if value and key and key not in model_keys:
+                        alias_candidates.append((field, value, key, ckey))
+
+        alias_names = []
+        alias_sources = []
+        seen_names = set()
+        for field, value, key, constituent in alias_candidates:
+            for aim_name in aim_by_base.get((county, key), []):
+                if aim_name in direct_names or aim_name in seen_names:
+                    continue
+                seen_names.add(aim_name)
+                alias_names.append(aim_name)
+                alias_sources.append(
+                    f"{constituent}:{field}:{value}"
+                )
+
+        matched_names = list(dict.fromkeys(direct_names + alias_names))
+        if direct_names:
             direct.append(row["CSOED"])
-            continue
-        candidates = []
-        for field, key in (
-            ("PROPNAME", row["_PROP_KEY"]),
-            ("BOUNDARY_EDNAME", row["_BOUNDARY_ED_KEY"]),
-        ):
-            if key and key != row["_ED_KEY"] and (county, key) in aim_keys:
-                candidates.append((field, key))
-        if candidates:
-            # Deduplicate aliases that normalise to the same name.
-            unique = []
-            seen = set()
-            for field, key in candidates:
-                if key not in seen:
-                    unique.append((field,key))
-                    seen.add(key)
+
+        if alias_names:
             alias.append({
                 "CSOED": row["CSOED"],
                 "County": county,
                 "CSO_ED": row["ED"],
-                "BOUNDARY_EDNAME": row["BOUNDARY_EDNAME"],
-                "BOUNDARY_PROPNAME": row["BOUNDARY_PROPNAME"],
-                "MATCH_FIELDS": "+".join(x[0] for x in unique),
-                "MATCH_KEYS": "+".join(x[1] for x in unique),
+                "AIM_NAMES": "|".join(alias_names),
+                "BOUNDARY_SOURCES": "|".join(alias_sources),
             })
 
-    print("DIRECT_MATCH_EDS", len(direct))
-    print("ALIAS_MATCH_EDS", len(alias))
-    print("TOTAL_WITH_ALIAS", len(direct)+len(alias))
+        if not matched_names:
+            unmatched.append({
+                "CSOED": row["CSOED"],
+                "County": county,
+                "CSO_ED": row["ED"],
+            })
+
+    matched_ids = set(direct) | {x["CSOED"] for x in alias}
+    print("DIRECT_MATCH_EDS", len(set(direct)))
+    print("ALIAS_MATCH_EDS", len({x["CSOED"] for x in alias}))
+    print("TOTAL_WITH_ALIAS", len(matched_ids))
+    print("UNMATCHED_EDS", len(unmatched))
     print("ALIAS_ROWS_BEGIN")
     if alias:
         print(pd.DataFrame(alias).to_csv(index=False).strip())
     print("ALIAS_ROWS_END")
+    print("UNMATCHED_ROWS_BEGIN")
+    if unmatched:
+        print(pd.DataFrame(unmatched).to_csv(index=False).strip())
+    print("UNMATCHED_ROWS_END")
 
 
 if __name__ == "__main__":
