@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 
 from goblin_spatial.cattle.age_sex import _normalise_ed_name
+from goblin_spatial.cattle.ed_keys import canonical_ed_key
 from goblin_spatial.cattle.panel import _normalise_county, build_cattle_panel
 from goblin_spatial.config import load_config
 
@@ -123,6 +124,7 @@ def _anchor_metrics(
     panel: pd.DataFrame,
     published: pd.DataFrame,
     aim: pd.DataFrame,
+    dairy_2010: pd.Series,
 ) -> tuple[dict[str, object], pd.DataFrame]:
     y = panel.loc[panel["YEAR"].eq(2020)].set_index("CSOED").copy()
     pub = published.set_index("CSOED")
@@ -146,6 +148,15 @@ def _anchor_metrics(
     )
 
     zero_added = published_dairy.eq(0) & reconciled.gt(0)
+    dairy2010_aligned = pd.Series(
+        [dairy_2010.get(canonical_ed_key(value), np.nan) for value in idx],
+        index=idx,
+        dtype=float,
+    )
+    zero_2010 = dairy2010_aligned.eq(0)
+    added_to_2010_zero = published_dairy.eq(0) & zero_2010 & reconciled.gt(0)
+    token_added = published_dairy.eq(0) & reconciled.between(1, 10)
+
     no_adult = (
         y["DAIRY_COW"].eq(0)
         & y["OTHER_COW"].eq(0)
@@ -172,6 +183,13 @@ def _anchor_metrics(
         "GAP_SHARE_TO_PUBLISHED_ZERO_EDS": float(
             addition.loc[zero_added].sum() / addition.sum()
         ),
+        "PUBLISHED_ZERO_2010_ZERO_EDS_GAINING_DAIRY": int(
+            added_to_2010_zero.sum()
+        ),
+        "GAP_HEAD_TO_2010_PUBLISHED_ZERO_EDS": int(
+            addition.loc[added_to_2010_zero].sum()
+        ),
+        "PUBLISHED_ZERO_EDS_RECEIVING_1_TO_10_COWS": int(token_added.sum()),
         "NO_ADULT_COW_RECEIVER_EDS": int(no_adult.sum()),
         "MAX_POSITIVE_ED_SCALE_FACTOR": float(ratios.max()),
         "P95_POSITIVE_ED_SCALE_FACTOR": float(ratios.quantile(0.95)),
@@ -250,11 +268,23 @@ def main() -> None:
     aim_residual = build_cattle_panel(_config_with_anchor(cfg, "aim_residual"))
     aim = _aim_type_frame(cfg, published)
 
+    source_2010 = pd.read_csv(
+        cfg.files["cso_ed_2010"], dtype=str, keep_default_na=False
+    )
+    dairy_2010_text = source_2010["DAIRY_COW"].astype(str).str.strip()
+    dairy_2010_values = pd.to_numeric(
+        dairy_2010_text.mask(dairy_2010_text.eq("")), errors="raise"
+    )
+    dairy_2010 = pd.Series(
+        dairy_2010_values.to_numpy(dtype=float),
+        index=source_2010["CSOED"].map(canonical_ed_key),
+    )
+
     legacy_metric, legacy_detail = _anchor_metrics(
-        "LEGACY_POSITIVE_ONLY", legacy, published, aim
+        "LEGACY_POSITIVE_ONLY", legacy, published, aim, dairy_2010
     )
     aim_metric, aim_detail = _anchor_metrics(
-        "AIM_RESIDUAL", aim_residual, published, aim
+        "AIM_RESIDUAL", aim_residual, published, aim, dairy_2010
     )
     summary = pd.DataFrame([legacy_metric, aim_metric])
 
@@ -278,6 +308,10 @@ def main() -> None:
     legacy_row = summary.loc[summary["MODEL"].eq("LEGACY_POSITIVE_ONLY")].iloc[0]
     if int(candidate["NO_ADULT_COW_RECEIVER_EDS"]) != 51:
         raise AssertionError("AIM dairy anchor changed the 51 no-adult receiver EDs")
+    if int(candidate["PUBLISHED_ZERO_2010_ZERO_EDS_GAINING_DAIRY"]) != 0:
+        raise AssertionError("AIM dairy anchor assigned cows to a 2010 published-zero ED")
+    if int(candidate["GAP_HEAD_TO_2010_PUBLISHED_ZERO_EDS"]) != 0:
+        raise AssertionError("AIM dairy anchor placed residual head in 2010 zero EDs")
     if float(candidate["MAX_POSITIVE_ED_SCALE_FACTOR"]) >= float(
         legacy_row["MAX_POSITIVE_ED_SCALE_FACTOR"]
     ):
