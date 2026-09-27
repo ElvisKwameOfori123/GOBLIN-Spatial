@@ -21,6 +21,15 @@ datasets:
     sha256: "4df4e3c7dcf7f3183cec422b55da627249c62fc061851132d30ad95c902bcbf7"
     required: true
 
+  cattle_dairy_suppression_support_2020:
+    stage: "01A"
+    module: [baseline, cattle]
+    description: "Frozen 2010 AVA42-informed support mask for the selected Stage A V1b 2020 dairy-anchor correction."
+    source: "git"
+    path: "data/controls/cattle/2020_dairy_suppression_support_from_AVA42_2010.csv"
+    sha256: "21bec8632264b984c9e932a5c027b69de8404969a7c5557eb1a75a9c2cf5c8e3"
+    required: true
+
   cso_aaa09_sheep_county_region_2015_2025:
     stage: "03A"
     module: [baseline, sheep]
