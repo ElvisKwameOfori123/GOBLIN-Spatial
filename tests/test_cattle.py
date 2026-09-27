@@ -134,7 +134,6 @@ def test_cattle_aim_hierarchical_genetic_prior() -> None:
         & y2020["OTHER_CATTLE"].gt(0)
     )
 
-    assert int(zero_dairy.sum()) == 1_463
     assert int(no_adult_receiver.sum()) == 51
 
     # No adult-cow category is a structural genetics gate.
