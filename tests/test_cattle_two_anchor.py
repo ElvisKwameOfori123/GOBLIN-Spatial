@@ -39,11 +39,56 @@ def _anchors():
     cfg = _config_with_mode("two_anchor_2010_2020")
     county = _load_aaa10(cfg.files["cso_cattle_county"])
     anchor = _build_2020_baseline(
-        cfg.files["cso_ed_2020"], county, cfg.expected_eds
+        cfg.files["cso_ed_2020"],
+        county,
+        cfg.expected_eds,
+        dafm_path=cfg.files["dafm_aim_ed_cattle_profile_2020"],
+        dairy_anchor_mode=cfg.raw.get("cattle", {}).get(
+            "dairy_anchor_prior", "positive_proportional"
+        ),
     )
     ed_2010 = _load_cso_ed_2010(cfg.files["cso_ed_2010"])
     weights = _build_historical_spatial_weights(anchor, ed_2010)
     return cfg, county, anchor, ed_2010, weights
+
+
+def _config_with_dairy_anchor(mode: str):
+    cfg = load_config(CONFIG)
+    raw = deepcopy(cfg.raw)
+    raw.setdefault("cattle", {})["dairy_anchor_prior"] = mode
+    return replace(cfg, raw=raw)
+
+
+def test_aim_residual_dairy_anchor_preserves_published_counts_as_lower_bounds() -> None:
+    cfg = _config_with_dairy_anchor("aim_residual")
+    panel = build_cattle_panel(cfg)
+    y2020 = panel.loc[panel["YEAR"] == 2020].set_index("CSOED")
+
+    published = pd.read_csv(cfg.files["cso_ed_2020"]).set_index("CSOED")
+    published_dairy = pd.to_numeric(published["DAIRY_COW"], errors="raise").astype(int)
+    reconciled = y2020.loc[published_dairy.index, "DAIRY_COW"].astype(int)
+
+    assert (reconciled >= published_dairy).all()
+    assert int((reconciled - published_dairy).sum()) == 187_716
+
+    published_zero = published_dairy.eq(0)
+    assert int((published_zero & reconciled.gt(0)).sum()) > 0
+    assert (y2020["OTHER_CATTLE"] >= 0).all()
+
+
+def test_aim_residual_dairy_anchor_reduces_known_positive_ed_inflation() -> None:
+    aim = build_cattle_panel(_config_with_dairy_anchor("aim_residual"))
+    legacy = build_cattle_panel(_config_with_dairy_anchor("positive_proportional"))
+
+    aim20 = aim.loc[aim["YEAR"] == 2020].set_index(["County", "ED"])
+    legacy20 = legacy.loc[legacy["YEAR"] == 2020].set_index(["County", "ED"])
+
+    for key in [
+        ("Leitrim", "Carrigallen East"),
+        ("Roscommon", "Rockhill"),
+        ("Westmeath", "Hopestown"),
+    ]:
+        assert int(aim20.loc[key, "DAIRY_COW"]) < int(legacy20.loc[key, "DAIRY_COW"])
 
 
 def test_two_anchor_county_controls_and_accounting() -> None:
