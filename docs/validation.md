@@ -20,6 +20,10 @@ AREA_FARMED = ALL_GRASSLAND + TOTAL_CEREALS + OTHER_CROPS_HA
 
 The 2020 ED baseline is locked as the principal fine-scale spatial anchor. Surrounding years are controlled reconstructions using repeated official higher-level statistics.
 
+The cattle anchor has an additional pre-registered Stage A validation. The current positive-only dairy reconciliation is retained as a reference, while suppression-aware alternatives preserve published positive dairy values and place the known 2020 county dairy residual only into published-zero EDs with explicit support. The selected V1b anchor uses a support mask from the 2010 AVA42 Census and published 2020 `OTHER_CATTLE` as within-county weights. Published ED livestock units are used as an unused same-census benchmark for choosing among the pre-registered anchor candidates; they are not an external source and are not used by the reconstruction itself.
+
+The 2010 Census also provides an out-of-sample check of the fixed-2020 within-county spatial-share assumption. The primary 2015-2025 model retains the 2020 within-county shares, while the earlier census is used to quantify how well that assumption reconstructs an observed earlier spatial state. A separate two-anchor interpolation may be retained as sensitivity analysis rather than replacing this out-of-sample check.
+
 ### Historical validation evidence
 
 The current model-paper validation deliberately avoids a composite or "fanciful" validation score. It separates accounting verification from empirical and applied evidence.
