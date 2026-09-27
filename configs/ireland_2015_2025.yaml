@@ -14,6 +14,12 @@ cattle:
   # place only the positive AAA10 county residual using AIM dairy-type geography.
   # Use positive_proportional to reproduce the legacy anchor sensitivity.
   dairy_anchor_prior: aim_residual
+  # Do not use 2010 published zeros as a production exclusion; the same
+  # small-area definition issue may affect both census anchors. Retain as a
+  # sensitivity switch only.
+  dairy_anchor_exclude_2010_zero: false
+  # Avoid creating token dairy herds in EDs published with zero dairy cows.
+  dairy_anchor_min_new_herd: 10
   # Step 3: DAFM/AIM shifts only under-1 vs 1-2 odds; CSO/AAA10 margins stay exact.
   # Use flat_county for the A0 null sensitivity.
   age_sex_prior: dafm_log_odds
