@@ -40,8 +40,28 @@ def test_annual_panel_is_not_changed() -> None:
 def test_rows_close_to_other_cattle() -> None:
     _, _, a1, a0 = _built()
     for panel in (a1, a0):
+        assert not panel[["YEAR", "CSOED"]].duplicated().any()
+        assert all(np.issubdtype(panel[column].dtype, np.integer) for column in AGE_SEX_COLS)
         assert (panel[AGE_SEX_COLS] >= 0).all().all()
         assert (panel[AGE_SEX_COLS].sum(axis=1) == panel["OTHER_CATTLE"]).all()
+
+
+def test_dafm_signal_is_retained_for_audit() -> None:
+    _, _, a1, a0 = _built()
+
+    assert a1["AGE_SEX_DAFM_Q_LOCAL"].notna().all()
+    assert a1["AGE_SEX_DAFM_Q_COUNTY"].notna().all()
+    assert a1["AGE_SEX_AIM_MATCHED"].dtype == bool
+
+    unmatched = ~a1["AGE_SEX_AIM_MATCHED"]
+    assert np.allclose(
+        a1.loc[unmatched, "AGE_SEX_DAFM_Q_LOCAL"],
+        a1.loc[unmatched, "AGE_SEX_DAFM_Q_COUNTY"],
+    )
+
+    assert not a0["AGE_SEX_AIM_MATCHED"].any()
+    assert a0["AGE_SEX_DAFM_Q_LOCAL"].isna().all()
+    assert a0["AGE_SEX_DAFM_Q_COUNTY"].isna().all()
 
 
 def test_county_columns_match_cso() -> None:
