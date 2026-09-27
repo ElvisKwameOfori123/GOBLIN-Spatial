@@ -72,11 +72,16 @@ jobs:
         run: goblin-spatial build --config configs/ireland_2015_2025.yaml
       - name: Run historical validation diagnostics
         run: python scripts/run_historical_validation.py
+      - name: Run cattle dairy anchor diagnostics
+        run: python scripts/run_cattle_dairy_anchor_diagnostics.py
       - name: Run cattle genetics diagnostics
         run: python scripts/run_cattle_genetics_diagnostics.py
       - name: Confirm historical validation outputs
         run: |
           test -f data/processed/validation/historical/historical_validation_overview.csv
+          test -f data/processed/validation/historical/cattle_dairy_anchor_comparison.csv
+          test -f data/processed/validation/historical/cattle_dairy_anchor_ed_2020.csv
+          test -f data/processed/validation/historical/cattle_dairy_anchor_lsu.csv
           test -f data/processed/validation/historical/dafm_county_sheep_diagnostics.csv
           test -f data/processed/validation/historical/sheep_composition_holdout_2022.csv
           test -f data/processed/validation/historical/achill_ed_2020_diagnostics.csv
