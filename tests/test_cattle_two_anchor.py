@@ -46,6 +46,7 @@ def _anchors():
         dairy_anchor_mode=cfg.raw.get("cattle", {}).get(
             "dairy_anchor_prior", "positive_proportional"
         ),
+        ed_2010_path=cfg.files["cso_ed_2010"],
     )
     ed_2010 = _load_cso_ed_2010(cfg.files["cso_ed_2010"])
     weights = _build_historical_spatial_weights(anchor, ed_2010)
@@ -80,15 +81,13 @@ def test_aim_residual_dairy_anchor_reduces_known_positive_ed_inflation() -> None
     aim = build_cattle_panel(_config_with_dairy_anchor("aim_residual"))
     legacy = build_cattle_panel(_config_with_dairy_anchor("positive_proportional"))
 
-    aim20 = aim.loc[aim["YEAR"] == 2020].set_index(["County", "ED"])
-    legacy20 = legacy.loc[legacy["YEAR"] == 2020].set_index(["County", "ED"])
+    aim20 = aim.loc[aim["YEAR"] == 2020].set_index("CSOED")
+    legacy20 = legacy.loc[legacy["YEAR"] == 2020].set_index("CSOED")
 
-    for key in [
-        ("Leitrim", "Carrigallen East"),
-        ("Roscommon", "Rockhill"),
-        ("Westmeath", "Hopestown"),
-    ]:
-        assert int(aim20.loc[key, "DAIRY_COW"]) < int(legacy20.loc[key, "DAIRY_COW"])
+    for csoed in [28060, 30019, 13076]:
+        assert int(aim20.loc[csoed, "DAIRY_COW"]) < int(
+            legacy20.loc[csoed, "DAIRY_COW"]
+        )
 
 
 def test_two_anchor_county_controls_and_accounting() -> None:
