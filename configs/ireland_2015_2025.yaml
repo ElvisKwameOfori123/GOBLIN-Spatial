@@ -16,6 +16,7 @@ paths:
 files:
   cso_ed_2020: data/inputs/baseline/01_CSO_ED_Agricultural_Baseline_2020.csv
   cso_cattle_county: data/inputs/baseline/01_CSO_AAA10_Cattle_County_2015_2025.csv
+  cattle_dairy_suppression_support_2020: data/controls/cattle/2020_dairy_suppression_support_from_AVA42_2010.csv
   cso_sheep_workbook: data/inputs/baseline/03_CSO_AAA09_Sheep_County_Region_2015_2025.xlsx
   sheep_breed_anchors: data/inputs/baseline/05A_DAFM_Sheep_Breed_Anchors_2016_2020_2022_2025.csv
   dafm_sheep_county_validation: data/inputs/baseline/03_0_DAFM_Sheep_County_Totals_2015_2020_2022_2025.csv
