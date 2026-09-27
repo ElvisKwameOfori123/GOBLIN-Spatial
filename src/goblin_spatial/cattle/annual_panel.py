@@ -121,6 +121,18 @@ def _attach_2010(ed: pd.DataFrame, ed_2010: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def _check_2010_consistency(ed: pd.DataFrame) -> None:
+    """Fail on internally inconsistent published 2010 ED cattle rows."""
+
+    d, s, o, t = (ed[f"{c}_2010"] for c in COLUMNS)
+    full = d.notna() & s.notna() & o.notna() & t.notna()
+    if ((d + s + o - t).abs()[full] > 0).any():
+        raise AssertionError("published 2010 ED rows with D + S + O != T")
+    parts = d.fillna(0) + s.fillna(0) + o.fillna(0)
+    if (t.notna() & (parts > t)).any():
+        raise AssertionError("published 2010 ED components exceed the 2010 total")
+
+
 def _size_shares(ed: pd.DataFrame) -> pd.DataFrame:
     """Within-county shares of total cattle in 2010 and 2020 (blank rule)."""
 
@@ -145,7 +157,9 @@ def _size_shares(ed: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame({"SIZE_2010": s2010, "SIZE_2020": s2020})
 
 
-def _reference_mix_2020(ed: pd.DataFrame, controls_2020: pd.DataFrame) -> pd.DataFrame:
+def _reference_mix_2020(
+    ed: pd.DataFrame, controls_2020: pd.DataFrame, apply_seed: bool = True
+) -> pd.DataFrame:
     """2020 mix used only to guide unknown years (published values untouched)."""
 
     counts = ed[list(COMPONENTS)].astype(float).copy()
@@ -155,7 +169,7 @@ def _reference_mix_2020(ed: pd.DataFrame, controls_2020: pd.DataFrame) -> pd.Dat
             shortfall = float(controls_2020.loc[county_name, component]) - float(
                 ed.loc[idx, component].sum()
             )
-            if shortfall <= 0:
+            if shortfall <= 0 or not apply_seed:
                 continue
             published = ed.loc[idx, component]
             cows_present = (ed.loc[idx, "DAIRY_COW"] + ed.loc[idx, "OTHER_COW"]) > 0
@@ -306,10 +320,11 @@ def _calibrate_county(
     """IPF + exact integerisation; returns allocation and fallback level used."""
 
     prior = row_totals[:, None].astype(float) * mix
+    # Level 0: the prior as built. Level 1: tiny support added only to cells
+    # allowed by the census evidence. No level ever opens a structural zero.
     attempts = (
         prior,
         prior + SUPPORT_EPSILON * row_totals[:, None] * possible,
-        prior + SUPPORT_EPSILON * row_totals[:, None] * (row_totals[:, None] > 0),
     )
     for level, candidate in enumerate(attempts):
         try:
@@ -317,18 +332,26 @@ def _calibrate_county(
         except (ValueError, RuntimeError):
             continue
         return _integerise_keep_zeros(fitted, row_totals, col_targets), level
-    raise RuntimeError("county calibration infeasible after all support fallbacks")
+    raise RuntimeError("county calibration infeasible without relaxing a structural zero")
 
 
-def build_annual_ed_panel(config: SpatialConfig) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Return (panel, calibration_log) for 2015-2025."""
+def build_annual_ed_panel(
+    config: SpatialConfig, seed_reference_mix: bool = True
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Return (panel, calibration_log) for 2015-2025.
+
+    ``seed_reference_mix=False`` is the sensitivity that guides the unknown
+    years with the published 2020 composition only (no cow-shortfall seeding).
+    """
 
     county = _load_aaa10(config.files["cso_cattle_county"])
     ed = _load_ed_2020(config.files["cso_ed_2020"])
     ed = _attach_2010(ed, _load_cso_ed_2010(config.files["cso_ed_2010"]))
 
     sizes = _size_shares(ed)
-    mix20 = _reference_mix_2020(ed, _county_controls(county, KNOWN_YEAR))
+    _check_2010_consistency(ed)
+    controls_2020 = _county_controls(county, KNOWN_YEAR)
+    mix20 = _reference_mix_2020(ed, controls_2020, apply_seed=seed_reference_mix)
     mix10 = _mix_2010(ed, mix20)
 
     # a component zero in both censuses (published zero, not seeded) stays zero
@@ -385,7 +408,17 @@ def build_annual_ed_panel(config: SpatialConfig) -> tuple[pd.DataFrame, pd.DataF
     panel = pd.concat(frames, ignore_index=True)
     _validate(panel, ed, county)
     log = pd.DataFrame(log_rows)
+    shortfall = 0.0
+    for county_name, idx in ed.groupby("County").groups.items():
+        for component in ("DAIRY_COW", "OTHER_COW"):
+            shortfall += max(
+                0.0,
+                float(controls_2020.loc[county_name, component])
+                - float(ed.loc[idx, component].sum()),
+            )
+    log.attrs["cow_shortfall_2020"] = shortfall
     log.attrs["seeded_head_2020_reference"] = float(mix20["SEEDED_HEAD_2020_REFERENCE"].sum())
+    log.attrs["unseeded_head_2020_reference"] = shortfall - log.attrs["seeded_head_2020_reference"]
     return panel, log
 
 

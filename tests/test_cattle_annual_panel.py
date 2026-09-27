@@ -99,3 +99,12 @@ def test_integerisation_keeps_structural_zeros() -> None:
     assert np.array_equal(out.sum(axis=1), rows)
     assert np.array_equal(out.sum(axis=0), cols)
     assert out[0, 1] == 0 and out[2, 0] == 0
+
+
+def test_reference_seeding_is_what_prevents_single_ed_absorption() -> None:
+    cfg, panel, log = _built()
+    assert log.attrs["unseeded_head_2020_reference"] < 0.02 * log.attrs["cow_shortfall_2020"]
+    unseeded, _ = build_annual_ed_panel(cfg, seed_reference_mix=False)
+    wide = unseeded.pivot_table(index="CSOED", columns="YEAR", values="DAIRY_COW")
+    # without seeding, Leitrim's whole dairy herd returns to Carrigallen East
+    assert wide.loc["28060", 2021] > 5 * 201
