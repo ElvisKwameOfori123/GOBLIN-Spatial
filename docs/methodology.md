@@ -34,6 +34,10 @@ The Irish implementation reconstructs agriculture from 2015 to 2025 across 2,857
 
 The 2020 CSO Census of Agriculture is the principal fine-scale spatial anchor. Annual higher-level official controls constrain surrounding livestock, land and farm-structure totals. The framework combines these controls through hierarchical reconciliation rather than treating every non-2020 ED value as independently observed.
 
+For cattle, the ED publication supplies only dairy cows, other/suckler cows, total cattle and the residual `OTHER_CATTLE` population. The 2020 publication contains dairy cells reported as zero that cannot be distinguished internally from confidentiality-withheld values. A frozen support mask derived from the 2010 AVA42 Census identifies published-zero 2020 EDs in which dairy was either withheld or positive in 2010. The selected Stage A reconstruction preserves every published positive 2020 dairy value and allocates each county's known AAA10 dairy residual only across that support mask, weighted by the ED's published 2020 `OTHER_CATTLE`. Added dairy is reclassified from `OTHER_CATTLE`, so the published ED total cattle population is unchanged before county reconciliation.
+
+AAA10 then supplies the controlling annual county populations for 2015-2025. It also supplies the seven non-cow age-sex groups that are not published at ED level. The county age-sex proportions are reconciled exactly to each ED's residual cattle envelope before GOBLIN/COHORTS national biological relationships subdivide the six pre-adult age-sex groups into DxD, DxB and BxB cohorts. Thus ED evidence determines the local cattle envelope, county statistics determine annual age-sex structure, and GOBLIN/COHORTS supplies the national genetic relationships used for biological subdivision.
+
 The baseline contains:
 
 - 21 biologically linked cattle cohorts;
