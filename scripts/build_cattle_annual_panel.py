@@ -10,6 +10,7 @@ from pathlib import Path
 from goblin_spatial.cattle.annual_age_sex import build_annual_age_sex_panel, lsu_check_2020
 from goblin_spatial.cattle.annual_panel import build_annual_ed_panel
 from goblin_spatial.cattle.cohorts import CONTAINERS, FINAL_21_COHORTS, add_cattle_cohorts
+from goblin_spatial.cattle.goblin_calibration import build_goblin_calibrated_cattle
 from goblin_spatial.config import load_config
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -31,6 +32,16 @@ def main() -> None:
 
     cohorts = add_cattle_cohorts(age_sex, cfg)
     cohorts.to_csv(OUT / "cattle_annual_ed_21_cohorts_2015_2025.csv", index=False)
+
+    goblin_calibrated, goblin_factors = build_goblin_calibrated_cattle(cfg, cohorts)
+    goblin_calibrated.to_csv(
+        OUT / "cattle_annual_ed_21_cohorts_goblin_calibrated_2015_2025.csv",
+        index=False,
+    )
+    goblin_factors.to_csv(
+        OUT / "cattle_goblin_national_calibration_factors_2015_2025.csv",
+        index=False,
+    )
 
     y2020 = cohorts.loc[cohorts["YEAR"] == 2020]
     young_containers = [
@@ -64,8 +75,9 @@ def main() -> None:
         },
     )
     print(
-        f"Wrote {len(panel):,} rows for annual panel, age-sex and "
-        f"{len(FINAL_21_COHORTS)}-cohort cattle outputs to {OUT}"
+        f"Wrote {len(panel):,} rows for annual panel, age-sex, "
+        f"{len(FINAL_21_COHORTS)}-cohort CSO cattle and separate "
+        f"GOBLIN-calibrated cattle outputs to {OUT}"
     )
 
 
