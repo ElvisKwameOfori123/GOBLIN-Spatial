@@ -38,11 +38,27 @@ AGE_SEX = [
 ]
 
 
-def _config_with_anchor(cfg, mode: str, age_mode: str | None = None):
+def _config_variant(
+    cfg,
+    *,
+    spatial_mode: str | None = None,
+    dairy_mode: str | None = None,
+    age_mode: str | None = None,
+    exclude_2010_zero: bool | None = None,
+    min_new_herd: int | None = None,
+):
     raw = deepcopy(cfg.raw)
-    raw.setdefault("cattle", {})["dairy_anchor_prior"] = mode
+    cattle = raw.setdefault("cattle", {})
+    if spatial_mode is not None:
+        cattle["spatial_weights"] = spatial_mode
+    if dairy_mode is not None:
+        cattle["dairy_anchor_prior"] = dairy_mode
     if age_mode is not None:
-        raw["cattle"]["age_sex_prior"] = age_mode
+        cattle["age_sex_prior"] = age_mode
+    if exclude_2010_zero is not None:
+        cattle["dairy_anchor_exclude_2010_zero"] = bool(exclude_2010_zero)
+    if min_new_herd is not None:
+        cattle["dairy_anchor_min_new_herd"] = int(min_new_herd)
     return replace(cfg, raw=raw)
 
 
@@ -155,7 +171,7 @@ def _anchor_metrics(
     )
     zero_2010 = dairy2010_aligned.eq(0)
     added_to_2010_zero = published_dairy.eq(0) & zero_2010 & reconciled.gt(0)
-    token_added = published_dairy.eq(0) & reconciled.between(1, 10)
+    token_added = published_dairy.eq(0) & reconciled.between(1, 9)
 
     no_adult = (
         y["DAIRY_COW"].eq(0)
@@ -189,7 +205,7 @@ def _anchor_metrics(
         "GAP_HEAD_TO_2010_PUBLISHED_ZERO_EDS": int(
             addition.loc[added_to_2010_zero].sum()
         ),
-        "PUBLISHED_ZERO_EDS_RECEIVING_1_TO_10_COWS": int(token_added.sum()),
+        "PUBLISHED_ZERO_EDS_RECEIVING_1_TO_9_COWS": int(token_added.sum()),
         "NO_ADULT_COW_RECEIVER_EDS": int(no_adult.sum()),
         "MAX_POSITIVE_ED_SCALE_FACTOR": float(ratios.max()),
         "P95_POSITIVE_ED_SCALE_FACTOR": float(ratios.quantile(0.95)),
@@ -218,7 +234,14 @@ def _age_lsu_metrics(cfg) -> pd.DataFrame:
     rows = []
     for age_mode in ("flat_county", "dafm_log_odds"):
         panel = build_cattle_panel(
-            _config_with_anchor(cfg, "aim_residual", age_mode=age_mode)
+            _config_variant(
+                cfg,
+                spatial_mode="two_anchor_2010_2020",
+                dairy_mode="aim_residual",
+                age_mode=age_mode,
+                exclude_2010_zero=False,
+                min_new_herd=10,
+            )
         )
         y = panel.loc[panel["YEAR"].eq(2020)].copy()
         eligible = _eligible(y)
@@ -257,6 +280,44 @@ def _age_lsu_metrics(cfg) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def _spatial_difference(
+    reference: pd.DataFrame,
+    candidate: pd.DataFrame,
+    label: str,
+) -> pd.DataFrame:
+    """Return fraction of each national component placed in different EDs."""
+
+    keys = ["YEAR", "CSOED"]
+    components = ["DAIRY_COW", "OTHER_COW", "OTHER_CATTLE", "TOTAL_CATTLE"]
+    merged = reference[keys + components].merge(
+        candidate[keys + components],
+        on=keys,
+        suffixes=("_REF", "_CAND"),
+        validate="one_to_one",
+    )
+    rows = []
+    for year, frame in merged.groupby("YEAR"):
+        for component in components:
+            ref = frame[f"{component}_REF"].to_numpy(dtype=float)
+            cand = frame[f"{component}_CAND"].to_numpy(dtype=float)
+            total = float(ref.sum())
+            displaced = (
+                float(np.abs(cand - ref).sum()) / (2.0 * total)
+                if total > 0
+                else 0.0
+            )
+            rows.append(
+                {
+                    "VARIANT": label,
+                    "YEAR": int(year),
+                    "COMPONENT": component,
+                    "DISPLACED_SHARE_VS_NULL": displaced,
+                    "NATIONAL_TOTAL_DIFFERENCE": int(round(cand.sum() - ref.sum())),
+                }
+            )
+    return pd.DataFrame(rows)
+
+
 def main() -> None:
     cfg = load_config(CONFIG)
     published = pd.read_csv(cfg.files["cso_ed_2020"])
@@ -264,8 +325,42 @@ def main() -> None:
         published["DAIRY_COW"], errors="raise"
     ).astype(int)
 
-    legacy = build_cattle_panel(_config_with_anchor(cfg, "positive_proportional"))
-    aim_residual = build_cattle_panel(_config_with_anchor(cfg, "aim_residual"))
+    null = build_cattle_panel(
+        _config_variant(
+            cfg,
+            spatial_mode="fixed_2020",
+            dairy_mode="positive_proportional",
+            exclude_2010_zero=False,
+            min_new_herd=0,
+        )
+    )
+    two_anchor_legacy = build_cattle_panel(
+        _config_variant(
+            cfg,
+            spatial_mode="two_anchor_2010_2020",
+            dairy_mode="positive_proportional",
+            exclude_2010_zero=False,
+            min_new_herd=0,
+        )
+    )
+    aim_residual = build_cattle_panel(
+        _config_variant(
+            cfg,
+            spatial_mode="two_anchor_2010_2020",
+            dairy_mode="aim_residual",
+            exclude_2010_zero=False,
+            min_new_herd=10,
+        )
+    )
+    aim_residual_2010_zero = build_cattle_panel(
+        _config_variant(
+            cfg,
+            spatial_mode="two_anchor_2010_2020",
+            dairy_mode="aim_residual",
+            exclude_2010_zero=True,
+            min_new_herd=10,
+        )
+    )
     aim = _aim_type_frame(cfg, published)
 
     source_2010 = pd.read_csv(
@@ -280,15 +375,22 @@ def main() -> None:
         index=source_2010["CSOED"].map(canonical_ed_key),
     )
 
-    legacy_metric, legacy_detail = _anchor_metrics(
-        "LEGACY_POSITIVE_ONLY", legacy, published, aim, dairy_2010
+    null_metric, null_detail = _anchor_metrics(
+        "NULL_FIXED_2020_LEGACY", null, published, aim, dairy_2010
     )
     aim_metric, aim_detail = _anchor_metrics(
         "AIM_RESIDUAL", aim_residual, published, aim, dairy_2010
     )
-    summary = pd.DataFrame([legacy_metric, aim_metric])
+    sensitivity_metric, _ = _anchor_metrics(
+        "AIM_RESIDUAL_EXCLUDE_2010_ZERO",
+        aim_residual_2010_zero,
+        published,
+        aim,
+        dairy_2010,
+    )
+    summary = pd.DataFrame([null_metric, aim_metric, sensitivity_metric])
 
-    detail = legacy_detail.merge(
+    detail = null_detail.merge(
         aim_detail[
             [
                 "CSOED",
@@ -305,15 +407,13 @@ def main() -> None:
 
     # Hard acceptance checks for the candidate.
     candidate = summary.loc[summary["MODEL"].eq("AIM_RESIDUAL")].iloc[0]
-    legacy_row = summary.loc[summary["MODEL"].eq("LEGACY_POSITIVE_ONLY")].iloc[0]
+    null_row = summary.loc[summary["MODEL"].eq("NULL_FIXED_2020_LEGACY")].iloc[0]
     if int(candidate["NO_ADULT_COW_RECEIVER_EDS"]) != 51:
         raise AssertionError("AIM dairy anchor changed the 51 no-adult receiver EDs")
-    if int(candidate["PUBLISHED_ZERO_2010_ZERO_EDS_GAINING_DAIRY"]) != 0:
-        raise AssertionError("AIM dairy anchor assigned cows to a 2010 published-zero ED")
-    if int(candidate["GAP_HEAD_TO_2010_PUBLISHED_ZERO_EDS"]) != 0:
-        raise AssertionError("AIM dairy anchor placed residual head in 2010 zero EDs")
+    if int(candidate["PUBLISHED_ZERO_EDS_RECEIVING_1_TO_9_COWS"]) != 0:
+        raise AssertionError("AIM dairy anchor created a sub-10-cow token dairy herd")
     if float(candidate["MAX_POSITIVE_ED_SCALE_FACTOR"]) >= float(
-        legacy_row["MAX_POSITIVE_ED_SCALE_FACTOR"]
+        null_row["MAX_POSITIVE_ED_SCALE_FACTOR"]
     ):
         raise AssertionError("AIM dairy anchor did not reduce maximum positive-ED inflation")
 
@@ -336,10 +436,24 @@ def main() -> None:
         ):
             raise AssertionError(f"A1 fails LSU fold {fold} under AIM dairy anchor")
 
+    refinements = pd.concat(
+        [
+            _spatial_difference(null, two_anchor_legacy, "TWO_ANCHOR_ONLY"),
+            _spatial_difference(null, aim_residual, "TWO_ANCHOR_PLUS_AIM_DAIRY"),
+        ],
+        ignore_index=True,
+    )
+    # All refinements must preserve the same annual national totals as the null.
+    if not refinements["NATIONAL_TOTAL_DIFFERENCE"].eq(0).all():
+        raise AssertionError("baseline refinement changed an annual national cattle total")
+
     OUT.mkdir(parents=True, exist_ok=True)
     summary.to_csv(OUT / "cattle_dairy_anchor_comparison.csv", index=False)
     detail.to_csv(OUT / "cattle_dairy_anchor_ed_2020.csv", index=False)
     lsu.to_csv(OUT / "cattle_dairy_anchor_lsu.csv", index=False)
+    refinements.to_csv(
+        OUT / "cattle_baseline_refinement_comparison.csv", index=False
+    )
 
     focus = detail.loc[
         detail["ED"].isin(["Carrigallen East", "Rockhill", "Hopestown"])
@@ -347,6 +461,13 @@ def main() -> None:
 
     print("Cattle dairy-anchor comparison")
     print(summary.to_string(index=False))
+    print("\nBaseline refinement displacement versus frozen null")
+    print(
+        refinements.loc[
+            refinements["COMPONENT"].eq("TOTAL_CATTLE")
+            | refinements["COMPONENT"].eq("DAIRY_COW")
+        ].to_string(index=False)
+    )
     print("\nLSU comparison under AIM-residual dairy anchor")
     print(lsu.to_string(index=False))
     print("\nKnown high-inflation EDs")
@@ -356,7 +477,7 @@ def main() -> None:
                 "County",
                 "ED",
                 "PUBLISHED_DAIRY_COW",
-                "LEGACY_POSITIVE_ONLY_DAIRY_COW",
+                "NULL_FIXED_2020_LEGACY_DAIRY_COW",
                 "AIM_RESIDUAL_DAIRY_COW",
                 "AIM_DAIRY",
                 "AIM_TOTAL",
