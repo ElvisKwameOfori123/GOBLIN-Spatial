@@ -10,6 +10,10 @@ study:
 cattle:
   # Preferred historical reconstruction; use fixed_2020 to reproduce frozen v1 weights.
   spatial_weights: two_anchor_2010_2020
+  # 2020 dairy anchor: preserve published ED dairy counts as lower bounds and
+  # place only the positive AAA10 county residual using AIM dairy-type geography.
+  # Use positive_proportional to reproduce the legacy anchor sensitivity.
+  dairy_anchor_prior: aim_residual
   # Step 3: DAFM/AIM shifts only under-1 vs 1-2 odds; CSO/AAA10 margins stay exact.
   # Use flat_county for the A0 null sensitivity.
   age_sex_prior: dafm_log_odds
