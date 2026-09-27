@@ -16,6 +16,7 @@ import pandas as pd
 from goblin_spatial.cattle.age_sex import (
     AGE_SEX_PRIOR_MODES,
     DEFAULT_LOGIT_EPSILON,
+    _normalise_ed_name,
     allocate_age_sex,
     build_dafm_age_signal,
 )
@@ -41,6 +42,7 @@ AGE_SEX_COLS = list(AGE_SEX_MAP.values())
 MAIN_CATTLE_COLS = ["DAIRY_COW", "OTHER_COW", "OTHER_CATTLE", "TOTAL_CATTLE"]
 SPATIAL_COMPONENTS = ("DAIRY_COW", "OTHER_COW", "OTHER_CATTLE")
 SPATIAL_WEIGHT_MODES = {"fixed_2020", "two_anchor_2010_2020"}
+DAIRY_ANCHOR_MODES = {"positive_proportional", "aim_residual"}
 
 
 def _normalise_county(value) -> str:
@@ -131,6 +133,243 @@ def _spatial_weight_mode(config: SpatialConfig) -> str:
             + ", ".join(sorted(SPATIAL_WEIGHT_MODES))
         )
     return value
+
+
+def _dairy_anchor_mode(config: SpatialConfig) -> str:
+    """Return the configured 2020 dairy-cow reconciliation rule."""
+
+    value = str(
+        config.raw.get("cattle", {}).get(
+            "dairy_anchor_prior", "positive_proportional"
+        )
+    ).strip()
+    if value not in DAIRY_ANCHOR_MODES:
+        raise ValueError(
+            "cattle.dairy_anchor_prior must be one of "
+            + ", ".join(sorted(DAIRY_ANCHOR_MODES))
+        )
+    return value
+
+
+def _bounded_weighted_allocate(weights, capacities, target: int) -> np.ndarray:
+    """Allocate an integer residual by weights without exceeding capacities."""
+
+    weights = np.asarray(weights, dtype=float)
+    capacities = np.asarray(capacities, dtype=np.int64)
+    target = int(target)
+
+    if len(weights) != len(capacities):
+        raise ValueError("weights and capacities must have equal length")
+    if not np.isfinite(weights).all() or (weights < 0).any():
+        raise ValueError("residual weights must be finite and non-negative")
+    if (capacities < 0).any():
+        raise ValueError("residual capacities must be non-negative")
+    if target < 0 or target > int(capacities.sum()):
+        raise ValueError("residual target exceeds available capacity")
+    if target == 0:
+        return np.zeros(len(capacities), dtype=np.int64)
+
+    fractional = np.zeros(len(capacities), dtype=float)
+    active = capacities > 0
+    remaining = float(target)
+
+    while remaining > 1e-10:
+        indices = np.where(active)[0]
+        if len(indices) == 0:
+            raise RuntimeError("residual allocation exhausted capacity")
+
+        available = capacities[indices].astype(float) - fractional[indices]
+        current_weights = weights[indices].copy()
+        if float(current_weights.sum()) <= 0:
+            current_weights = available.copy()
+        if float(current_weights.sum()) <= 0:
+            raise RuntimeError("residual allocation has no positive capacity")
+
+        proposal = remaining * current_weights / current_weights.sum()
+        saturated = proposal >= available - 1e-12
+
+        if not saturated.any():
+            fractional[indices] += proposal
+            remaining = 0.0
+        else:
+            hit = indices[saturated]
+            fractional[hit] = capacities[hit]
+            active[hit] = False
+            remaining = float(target - fractional.sum())
+
+    allocation = np.floor(fractional + 1e-12).astype(np.int64)
+    left = target - int(allocation.sum())
+    if left:
+        remainder = fractional - allocation
+        eligible = allocation < capacities
+        order = np.argsort(-np.where(eligible, remainder, -1.0), kind="stable")
+        for index in order:
+            if left == 0:
+                break
+            if allocation[index] < capacities[index]:
+                allocation[index] += 1
+                left -= 1
+
+    if left != 0:
+        raise RuntimeError("residual allocation could not close integer target")
+    if int(allocation.sum()) != target:
+        raise AssertionError("residual allocation target closure failed")
+    if (allocation < 0).any() or (allocation > capacities).any():
+        raise AssertionError("residual allocation violated capacity")
+    return allocation
+
+
+def _build_aim_dairy_anchor_signal(ed_frame: pd.DataFrame, dafm_path) -> pd.DataFrame:
+    """Map AIM broad dairy-type composition to the 2020 CSO ED frame.
+
+    The signal is used only to place the county dairy-cow residual that exists
+    between the published ED dairy-cow sum and the authoritative AAA10 county
+    dairy-cow total. AIM counts are June/December averages and are not treated
+    as dairy-cow counts themselves.
+    """
+
+    required_ed = ["County", "ED"]
+    _require_columns(ed_frame, required_ed, "2020 ED cattle baseline")
+
+    dafm = pd.read_csv(dafm_path)
+    required = [
+        "AVERAGE_YEAR",
+        "COUNTY",
+        "ELECTORAL_DIVISION",
+        "AVERAGE_NUMBER_CATTLE",
+        "AVERAGE_CATTLE_DAIRY",
+    ]
+    _require_columns(dafm, required, "DAFM cattle type profile")
+
+    years = pd.to_numeric(dafm["AVERAGE_YEAR"], errors="raise").astype(int)
+    if set(years.unique()) != {2020}:
+        raise ValueError("DAFM cattle type profile must contain only 2020")
+
+    for column in ["AVERAGE_NUMBER_CATTLE", "AVERAGE_CATTLE_DAIRY"]:
+        values = pd.to_numeric(dafm[column], errors="raise").astype(float)
+        if (values < 0).any() or not np.isfinite(values).all():
+            raise ValueError(f"DAFM cattle type profile has invalid values in {column}")
+        dafm[column] = values
+
+    dafm["County"] = dafm["COUNTY"].map(_normalise_county)
+    dafm["_NAME_KEY"] = dafm["ELECTORAL_DIVISION"].map(_normalise_ed_name)
+
+    county = dafm.groupby("County")[
+        ["AVERAGE_NUMBER_CATTLE", "AVERAGE_CATTLE_DAIRY"]
+    ].sum()
+
+    low_herd = dafm["ELECTORAL_DIVISION"].astype(str).str.contains(
+        r"DED\s*<\s*5\s*HERDS", case=False, regex=True, na=False
+    )
+    local = (
+        dafm.loc[~low_herd]
+        .groupby(["County", "_NAME_KEY"])[
+            ["AVERAGE_NUMBER_CATTLE", "AVERAGE_CATTLE_DAIRY"]
+        ]
+        .sum()
+    )
+
+    signal = pd.DataFrame(index=ed_frame.index)
+    signal["AIM_DAIRY_MATCHED"] = False
+    signal["AIM_DAIRY_TYPE_HEAD"] = 0.0
+    signal["AIM_TOTAL_HEAD"] = 0.0
+    signal["AIM_COUNTY_DAIRY_TYPE_HEAD"] = np.nan
+
+    for county_name, idx in ed_frame.groupby("County").groups.items():
+        if county_name not in county.index:
+            raise ValueError(f"DAFM cattle type profile missing county {county_name}")
+        county_dairy = float(county.loc[county_name, "AVERAGE_CATTLE_DAIRY"])
+        if county_dairy <= 0:
+            raise ValueError(f"DAFM county dairy-type total is zero: {county_name}")
+        signal.loc[idx, "AIM_COUNTY_DAIRY_TYPE_HEAD"] = county_dairy
+
+        for i in idx:
+            keys = {
+                _normalise_ed_name(part)
+                for part in str(ed_frame.at[i, "ED"]).split("/")
+                if _normalise_ed_name(part)
+            }
+            local_total = 0.0
+            local_dairy = 0.0
+            matched = False
+            for key in keys:
+                lookup = (county_name, key)
+                if lookup in local.index:
+                    values = local.loc[lookup]
+                    local_total += float(values["AVERAGE_NUMBER_CATTLE"])
+                    local_dairy += float(values["AVERAGE_CATTLE_DAIRY"])
+                    matched = True
+            if matched:
+                signal.at[i, "AIM_DAIRY_MATCHED"] = True
+                signal.at[i, "AIM_DAIRY_TYPE_HEAD"] = local_dairy
+                signal.at[i, "AIM_TOTAL_HEAD"] = local_total
+
+    if signal["AIM_COUNTY_DAIRY_TYPE_HEAD"].isna().any():
+        raise AssertionError("AIM dairy anchor signal has missing county totals")
+    return signal
+
+
+def _allocate_dairy_anchor_residual(
+    published_dairy: np.ndarray,
+    reconciled_total: np.ndarray,
+    reconciled_other_cows: np.ndarray,
+    target: int,
+    aim_dairy_head: np.ndarray,
+    aim_county_dairy_head: float,
+    matched: np.ndarray,
+) -> np.ndarray:
+    """Preserve published ED dairy counts and allocate only the county gap.
+
+    The county target remains AAA10. Published ED dairy counts are lower
+    bounds. AIM broad dairy-type geography supplies the untuned spatial prior
+    for the positive county residual. The residual weight is the positive
+    difference between the county-scaled AIM dairy-type expectation and the
+    published dairy count. If that signal is exhausted, direct AIM dairy-type
+    head and then remaining physical capacity provide deterministic fallbacks.
+    """
+
+    published = np.asarray(published_dairy, dtype=np.int64)
+    total = np.asarray(reconciled_total, dtype=np.int64)
+    other_cows = np.asarray(reconciled_other_cows, dtype=np.int64)
+    aim_dairy = np.asarray(aim_dairy_head, dtype=float)
+    matched = np.asarray(matched, dtype=bool)
+    target = int(target)
+
+    gap = target - int(published.sum())
+    if gap < 0:
+        raise AssertionError("AAA10 dairy target is below published ED dairy sum")
+    capacity = total - other_cows - published
+    if (capacity < 0).any():
+        raise AssertionError("published dairy cows exceed reconciled cattle capacity")
+    if gap > int(capacity.sum()):
+        raise AssertionError("county dairy gap exceeds reconciled cattle capacity")
+    if gap == 0:
+        return published.copy()
+
+    county_aim = float(aim_county_dairy_head)
+    if not np.isfinite(county_aim) or county_aim <= 0:
+        raise ValueError("AIM county dairy-type total must be positive")
+
+    expected = np.zeros(len(published), dtype=float)
+    expected[matched] = target * aim_dairy[matched] / county_aim
+    weights = np.maximum(0.0, expected - published.astype(float))
+    weights[~matched] = 0.0
+
+    if float(weights.sum()) <= 0:
+        weights = np.where(matched, aim_dairy, 0.0)
+    if float(weights.sum()) <= 0:
+        weights = published.astype(float)
+
+    addition = _bounded_weighted_allocate(weights, capacity, gap)
+    reconciled = published + addition
+
+    if int(reconciled.sum()) != target:
+        raise AssertionError("AIM dairy residual reconciliation failed county closure")
+    if (reconciled < published).any():
+        raise AssertionError("AIM dairy residual reconciliation reduced a published count")
+    if (reconciled + other_cows > total).any():
+        raise AssertionError("AIM dairy residual reconciliation exceeded total cattle")
+    return reconciled
 
 
 def _age_sex_prior_mode(config: SpatialConfig) -> str:
@@ -261,6 +500,7 @@ def _build_2020_baseline(
     age_sex_mode: str = "flat_county",
     dafm_path=None,
     logit_epsilon: float = DEFAULT_LOGIT_EPSILON,
+    dairy_anchor_mode: str = "positive_proportional",
 ) -> pd.DataFrame:
     """Reconcile the fixed 2020 ED cattle baseline to AAA10 county controls."""
 
@@ -298,8 +538,20 @@ def _build_2020_baseline(
     if set(county_2020["County"].unique()) != ed_counties:
         raise AssertionError("county coverage differs between ED baseline and AAA10")
 
+    if dairy_anchor_mode not in DAIRY_ANCHOR_MODES:
+        raise ValueError(
+            "dairy_anchor_mode must be one of "
+            + ", ".join(sorted(DAIRY_ANCHOR_MODES))
+        )
+
+    published_dairy = ed["DAIRY_COW"].to_numpy(dtype=np.int64).copy()
+    aim_dairy_signal = None
+    if dairy_anchor_mode == "aim_residual":
+        if dafm_path is None:
+            raise ValueError("AIM residual dairy anchor requires a DAFM profile path")
+        aim_dairy_signal = _build_aim_dairy_anchor_signal(ed, dafm_path)
+
     controls = {
-        "DAIRY_COW": "Dairy cows__HEAD",
         "OTHER_COW": "Other cows__HEAD",
         "TOTAL_CATTLE": "Total cattle__HEAD",
     }
@@ -316,6 +568,27 @@ def _build_2020_baseline(
                     f"{county_name}: positive {ed_column} target with zero ED support"
                 )
             ed.loc[idx, ed_column] = hamilton_allocate(weights, target)
+
+        dairy_target = int(source["Dairy cows__HEAD"])
+        if dairy_anchor_mode == "positive_proportional":
+            weights = published_dairy[idx].astype(float)
+            if dairy_target > 0 and float(weights.sum()) <= 0:
+                raise ValueError(
+                    f"{county_name}: positive DAIRY_COW target with zero ED support"
+                )
+            dairy = hamilton_allocate(weights, dairy_target)
+        else:
+            county_signal = aim_dairy_signal.loc[idx]
+            dairy = _allocate_dairy_anchor_residual(
+                published_dairy[idx],
+                ed.loc[idx, "TOTAL_CATTLE"].to_numpy(dtype=np.int64),
+                ed.loc[idx, "OTHER_COW"].to_numpy(dtype=np.int64),
+                dairy_target,
+                county_signal["AIM_DAIRY_TYPE_HEAD"].to_numpy(dtype=float),
+                float(county_signal["AIM_COUNTY_DAIRY_TYPE_HEAD"].iloc[0]),
+                county_signal["AIM_DAIRY_MATCHED"].to_numpy(dtype=bool),
+            )
+        ed.loc[idx, "DAIRY_COW"] = dairy
 
     ed["OTHER_CATTLE"] = (
         ed["TOTAL_CATTLE"] - ed["DAIRY_COW"] - ed["OTHER_COW"]
@@ -438,10 +711,11 @@ def build_cattle_panel(config: SpatialConfig) -> pd.DataFrame:
         raise FileNotFoundError(county_path)
 
     weight_mode = _spatial_weight_mode(config)
+    dairy_anchor_mode = _dairy_anchor_mode(config)
     age_sex_mode = _age_sex_prior_mode(config)
     logit_epsilon = _age_sex_logit_epsilon(config)
     dafm_path = config.files.get("dafm_aim_ed_cattle_profile_2020")
-    if age_sex_mode == "dafm_log_odds":
+    if age_sex_mode == "dafm_log_odds" or dairy_anchor_mode == "aim_residual":
         if dafm_path is None or not dafm_path.exists():
             raise FileNotFoundError(dafm_path)
 
@@ -453,6 +727,7 @@ def build_cattle_panel(config: SpatialConfig) -> pd.DataFrame:
         age_sex_mode=age_sex_mode,
         dafm_path=dafm_path,
         logit_epsilon=logit_epsilon,
+        dairy_anchor_mode=dairy_anchor_mode,
     )
     expected_counties = set(baseline["County"].unique())
     age_signal = (
