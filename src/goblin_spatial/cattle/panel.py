@@ -5,7 +5,10 @@ reconciliation and 2015-2025 annual ED cattle reconstruction stages.
 
 Fine-scale CSO ED data provide the within-county spatial pattern. Annual CSO
 AAA10 county statistics provide the controlling cattle totals and age-sex
-composition. The 2020 ED baseline is copied exactly into the annual panel.
+composition. The 2020 ED publication is first corrected for dairy cells whose
+published zero is supported as a suppression candidate by the 2010 AVA42
+census, then reconciled to the 2020 AAA10 county controls. The reconciled 2020
+state is the fixed spatial anchor for the annual panel.
 """
 
 from __future__ import annotations
@@ -57,6 +60,177 @@ def _as_nonnegative_integer(frame: pd.DataFrame, columns: list[str], label: str)
         frame[column] = np.rint(values).astype(np.int64)
 
 
+def _normalise_csoed_key(value) -> str:
+    """Return a stable key for ordinary and composite CSO ED codes."""
+
+    parts = [part.strip() for part in str(value).strip().split("/") if part.strip()]
+    if not parts:
+        raise ValueError("empty CSOED code")
+    try:
+        numeric = sorted(int(part) for part in parts)
+    except ValueError as exc:
+        raise ValueError(f"invalid CSOED code: {value}") from exc
+    return "/".join(str(part) for part in numeric)
+
+
+def _bounded_allocate(weights, capacities, target: int) -> np.ndarray:
+    """Allocate an integer target by weights without exceeding row capacity."""
+
+    weights = np.asarray(weights, dtype=float)
+    capacities = np.asarray(capacities, dtype=np.int64)
+    target = int(target)
+
+    if weights.shape != capacities.shape:
+        raise ValueError("weights and capacities must have the same shape")
+    if target < 0 or target > int(capacities.sum()):
+        raise ValueError("allocation target exceeds available capacity")
+    if (capacities < 0).any() or (~np.isfinite(weights)).any() or (weights < 0).any():
+        raise ValueError("invalid allocation weights or capacities")
+    if target == 0:
+        return np.zeros(len(capacities), dtype=np.int64)
+
+    remaining_capacity = capacities.astype(float).copy()
+    fractional = np.zeros(len(capacities), dtype=float)
+    remaining = float(target)
+
+    for _ in range(len(capacities) + 2):
+        if remaining <= 1e-10:
+            break
+        active = remaining_capacity > 1e-12
+        if not active.any():
+            break
+        active_weights = np.where(active, weights, 0.0)
+        if float(active_weights.sum()) <= 0:
+            active_weights = np.where(active, remaining_capacity, 0.0)
+        proposal = remaining * active_weights / active_weights.sum()
+        take = np.minimum(proposal, remaining_capacity)
+        fractional += take
+        remaining_capacity -= take
+        remaining = float(target - fractional.sum())
+
+    if abs(remaining) > 1e-7:
+        raise AssertionError("bounded allocation failed in fractional space")
+
+    allocation = np.floor(fractional + 1e-12).astype(np.int64)
+    left = target - int(allocation.sum())
+    if left:
+        remainder = fractional - allocation
+        eligible = allocation < capacities
+        order = np.argsort(-np.where(eligible, remainder, -1.0), kind="stable")
+        for index in order:
+            if left == 0:
+                break
+            if allocation[index] < capacities[index]:
+                allocation[index] += 1
+                left -= 1
+
+    if left != 0 or int(allocation.sum()) != target:
+        raise AssertionError("bounded allocation failed exact closure")
+    if (allocation < 0).any() or (allocation > capacities).any():
+        raise AssertionError("bounded allocation violated row capacity")
+    return allocation
+
+
+def _load_dairy_suppression_support(path) -> set[str]:
+    """Load the frozen 2010-informed support mask selected by Stage A."""
+
+    support = pd.read_csv(path, dtype={"CSOED": str, "AVA42_2010_DAIRY_STATUS": str})
+    required = ["CSOED", "AVA42_2010_DAIRY_STATUS"]
+    _require_columns(support, required, "2020 dairy suppression support")
+
+    allowed = {"ZERO_2020__WITHHELD_2010", "ZERO_2020__POSITIVE_2010"}
+    if not set(support["AVA42_2010_DAIRY_STATUS"].dropna().unique()).issubset(allowed):
+        raise ValueError("unexpected AVA42 dairy-support status")
+    support["KEY"] = support["CSOED"].map(_normalise_csoed_key)
+    if support["KEY"].duplicated().any():
+        raise AssertionError("duplicate CSOED values in dairy suppression support")
+    return set(support["KEY"])
+
+
+def _apply_suppression_aware_dairy_anchor(
+    ed: pd.DataFrame,
+    county_2020: pd.DataFrame,
+    support_source,
+) -> pd.DataFrame:
+    """Apply the pre-registered V1b 2020 dairy-anchor correction.
+
+    Published positive dairy counts are left unchanged. For each county, the
+    AAA10 dairy gap is placed only in published-zero EDs supported by 2010
+    AVA42 evidence (withheld or previously positive dairy). Within that support
+    mask, the gap is weighted by the published 2020 OTHER_CATTLE population.
+    Added dairy is reclassified from OTHER_CATTLE, so each ED TOTAL_CATTLE is
+    unchanged before county reconciliation.
+    """
+
+    out = ed.copy()
+    published_dairy = out["DAIRY_COW"].copy()
+    support = _load_dairy_suppression_support(support_source)
+    out["_CSOED_KEY"] = out["CSOED"].map(_normalise_csoed_key)
+
+    missing_support = support - set(out["_CSOED_KEY"])
+    if missing_support:
+        raise AssertionError(
+            f"dairy suppression support contains {len(missing_support)} EDs outside the 2020 frame"
+        )
+
+    county_lookup = county_2020.set_index("County")
+    for county_name, idx in out.groupby("County").groups.items():
+        target = int(county_lookup.loc[county_name, "Dairy cows__HEAD"])
+        observed = int(out.loc[idx, "DAIRY_COW"].sum())
+        gap = target - observed
+        if gap < 0:
+            raise AssertionError(
+                f"{county_name}: published ED dairy exceeds AAA10 county control"
+            )
+        if gap == 0:
+            continue
+
+        candidate = (
+            out.loc[idx, "_CSOED_KEY"].isin(support)
+            & out.loc[idx, "DAIRY_COW"].eq(0)
+            & out.loc[idx, "TOTAL_CATTLE"].gt(0)
+        ).to_numpy()
+        capacities = np.where(
+            candidate,
+            out.loc[idx, "OTHER_CATTLE"].to_numpy(dtype=np.int64),
+            0,
+        )
+        weights = np.where(
+            candidate,
+            out.loc[idx, "OTHER_CATTLE"].to_numpy(dtype=float),
+            0.0,
+        )
+        if int(capacities.sum()) < gap:
+            raise AssertionError(
+                f"{county_name}: 2010-informed dairy support cannot carry county gap"
+            )
+
+        added = _bounded_allocate(weights, capacities, gap)
+        out.loc[idx, "DAIRY_COW"] = (
+            out.loc[idx, "DAIRY_COW"].to_numpy(dtype=np.int64) + added
+        )
+        out.loc[idx, "OTHER_CATTLE"] = (
+            out.loc[idx, "OTHER_CATTLE"].to_numpy(dtype=np.int64) - added
+        )
+
+    positive = published_dairy > 0
+    if not np.array_equal(
+        out.loc[positive, "DAIRY_COW"].to_numpy(dtype=np.int64),
+        published_dairy.loc[positive].to_numpy(dtype=np.int64),
+    ):
+        raise AssertionError("suppression correction changed published positive dairy cells")
+    if (out["OTHER_CATTLE"] < 0).any():
+        raise AssertionError("suppression correction produced negative OTHER_CATTLE")
+    identity = (
+        out["TOTAL_CATTLE"] - out["DAIRY_COW"] - out["OTHER_COW"] - out["OTHER_CATTLE"]
+    )
+    if int(identity.abs().max()) != 0:
+        raise AssertionError("suppression correction changed ED cattle accounting")
+
+    out = out.drop(columns="_CSOED_KEY")
+    return out
+
+
 def _load_aaa10(path) -> pd.DataFrame:
     county = pd.read_csv(path)
     required = [
@@ -88,8 +262,13 @@ def _load_aaa10(path) -> pd.DataFrame:
     return county
 
 
-def _build_2020_baseline(ed_source, county: pd.DataFrame, expected_eds: int) -> pd.DataFrame:
-    """Reconcile the fixed 2020 ED cattle baseline to AAA10 county controls."""
+def _build_2020_baseline(
+    ed_source,
+    county: pd.DataFrame,
+    expected_eds: int,
+    dairy_support_source=None,
+) -> pd.DataFrame:
+    """Build the suppression-aware 2020 ED cattle anchor and reconcile to AAA10."""
 
     ed = pd.read_csv(ed_source)
     required = [
@@ -124,6 +303,13 @@ def _build_2020_baseline(ed_source, county: pd.DataFrame, expected_eds: int) -> 
     ed_counties = set(ed["County"].unique())
     if set(county_2020["County"].unique()) != ed_counties:
         raise AssertionError("county coverage differs between ED baseline and AAA10")
+
+    if dairy_support_source is not None:
+        ed = _apply_suppression_aware_dairy_anchor(
+            ed,
+            county_2020,
+            dairy_support_source,
+        )
 
     controls = {
         "DAIRY_COW": "Dairy cows__HEAD",
@@ -237,13 +423,24 @@ def build_cattle_panel(config: SpatialConfig) -> pd.DataFrame:
 
     ed_path = config.files["cso_ed_2020"]
     county_path = config.files["cso_cattle_county"]
+    dairy_support_path = config.files.get("cattle_dairy_suppression_support_2020")
     if not ed_path.exists():
         raise FileNotFoundError(ed_path)
     if not county_path.exists():
         raise FileNotFoundError(county_path)
+    if dairy_support_path is None or not dairy_support_path.exists():
+        raise FileNotFoundError(
+            dairy_support_path
+            or "files.cattle_dairy_suppression_support_2020 is not configured"
+        )
 
     county = _load_aaa10(county_path)
-    baseline = _build_2020_baseline(ed_path, county, config.expected_eds)
+    baseline = _build_2020_baseline(
+        ed_path,
+        county,
+        config.expected_eds,
+        dairy_support_source=dairy_support_path,
+    )
     expected_counties = set(baseline["County"].unique())
 
     if len(expected_counties) != 26:
