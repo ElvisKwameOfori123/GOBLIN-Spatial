@@ -43,6 +43,7 @@ jobs:
             tests/test_export_schema.py \
             tests/test_historical_validation.py \
             tests/test_input_data.py \
+            tests/test_sheep_annual_panel.py \
             tests/test_standard_output.py
       - name: Run full 2015-2025 historical regression
         run: pytest -q -s tests/test_full_baseline_regression.py
