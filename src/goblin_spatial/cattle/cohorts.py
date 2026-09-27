@@ -4,12 +4,14 @@ The CSO ED panel is the controlling livestock population. GOBLIN cohort data
 supply national biological relationships used only to subdivide the six
 existing CSO pre-adult age-sex containers into DxD, DxB and BxB cohorts.
 
-Genetic support is ED-informed. Dairy cows support dairy-origin DxD/DxB
-cohorts and other/suckler cows support BxB cohorts. A sparse set of
-receiver/rearing EDs is admitted where the ED's own young-stock-to-adult-cow
-structure indicates bought-in cattle and where that support is required to
-reproduce the national GOBLIN cohort margins. County context is not used to
-make every ED eligible for every genetic cohort.
+The production spatial prior is hierarchical rather than cow-gated. DAFM/AIM
+2020 beef/dairy composition supplies an ED cattle-type signal where it is
+cross-source coherent, the corresponding county signal supplies the fallback,
+and GOBLIN supplies the national age-sex-specific genetic margins. Adult dairy
+and suckler cows contribute soft biological evidence for the DxB versus BxB
+split but never create structural zeros. Only a zero CSO age-sex container is
+a genetic structural zero. Exact ED rows and national genetic margins are
+restored by IPF and exact integerisation.
 """
 
 from __future__ import annotations
@@ -17,8 +19,9 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from goblin_spatial.cattle.age_sex import _normalise_county, _normalise_ed_name
 from goblin_spatial.config import SpatialConfig
-from goblin_spatial.reconciliation import hamilton_allocate
+from goblin_spatial.reconciliation import hamilton_allocate, integerise_matrix, ipf_reconcile
 
 
 YEARS = tuple(range(2015, 2026))
@@ -181,6 +184,186 @@ def _build_biological_controls(
             coefficients[(year, container)] = coeff
 
     return targets, coefficients
+
+
+def _clip_probability(value: float, epsilon: float) -> float:
+    return float(np.clip(float(value), epsilon, 1.0 - epsilon))
+
+
+def _logit(value: float, epsilon: float) -> float:
+    p = _clip_probability(value, epsilon)
+    return float(np.log(p / (1.0 - p)))
+
+
+def _logistic(value: np.ndarray | float) -> np.ndarray | float:
+    return 1.0 / (1.0 + np.exp(-np.asarray(value, dtype=float)))
+
+
+def _build_aim_genetic_signature(
+    cattle: pd.DataFrame,
+    dafm_path,
+    epsilon: float = 1.0e-6,
+) -> tuple[pd.DataFrame, float]:
+    """Return a 2020 AIM-informed dairy-type follower signal by ED.
+
+    DAFM/AIM broad dairy/beef composition is used as a spatial composition
+    signal, never as a cattle-count control. For a matched ED, the AIM dairy
+    share is placed on the fixed CSO total and the fixed CSO dairy-cow count is
+    removed. The residual is expressed as a share of fixed CSO OTHER_CATTLE.
+
+    Cross-source residuals outside (0, 1), unmatched EDs and EDs without a
+    usable denominator fall back to the corresponding county signal. County
+    signals use all DAFM rows, including DED < 5 HERDS aggregates. No fallback
+    creates a genetic zero.
+    """
+
+    baseline = cattle.loc[cattle["YEAR"] == 2020].copy().sort_values("CSOED")
+    required_ed = {
+        "CSOED",
+        "County",
+        "ED",
+        "TOTAL_CATTLE",
+        "DAIRY_COW",
+        "OTHER_CATTLE",
+    }
+    missing_ed = sorted(required_ed - set(baseline.columns))
+    if missing_ed:
+        raise ValueError(f"cattle baseline missing AIM genetic fields: {missing_ed}")
+    if baseline["CSOED"].duplicated().any():
+        raise AssertionError("2020 AIM genetic baseline contains duplicate EDs")
+
+    dafm = pd.read_csv(dafm_path)
+    required = [
+        "AVERAGE_YEAR",
+        "COUNTY",
+        "ELECTORAL_DIVISION",
+        "AVERAGE_NUMBER_CATTLE",
+        "AVERAGE_CATTLE_DAIRY",
+        "AVERAGE_CATTLE_BEEF",
+    ]
+    missing = [column for column in required if column not in dafm.columns]
+    if missing:
+        raise ValueError(f"DAFM cattle type profile missing required columns: {missing}")
+
+    years = pd.to_numeric(dafm["AVERAGE_YEAR"], errors="raise").astype(int)
+    if set(years.unique()) != {2020}:
+        raise ValueError("DAFM cattle type profile must contain only 2020")
+
+    for column in required[3:]:
+        values = pd.to_numeric(dafm[column], errors="raise").astype(float)
+        if (values < 0).any() or not np.isfinite(values).all():
+            raise ValueError(f"DAFM cattle type profile has invalid values in {column}")
+        dafm[column] = values
+
+    dafm["County"] = dafm["COUNTY"].map(_normalise_county)
+    dafm["_NAME_KEY"] = dafm["ELECTORAL_DIVISION"].map(_normalise_ed_name)
+
+    county_aim = dafm.groupby("County")[
+        ["AVERAGE_NUMBER_CATTLE", "AVERAGE_CATTLE_DAIRY"]
+    ].sum()
+
+    low_herd = dafm["ELECTORAL_DIVISION"].astype(str).str.contains(
+        r"DED\s*<\s*5\s*HERDS", case=False, regex=True, na=False
+    )
+    local = (
+        dafm.loc[~low_herd]
+        .groupby(["County", "_NAME_KEY"])[
+            ["AVERAGE_NUMBER_CATTLE", "AVERAGE_CATTLE_DAIRY"]
+        ]
+        .sum()
+    )
+
+    baseline["County"] = baseline["County"].map(_normalise_county)
+    county_cso = baseline.groupby("County")[
+        ["TOTAL_CATTLE", "DAIRY_COW", "OTHER_CATTLE"]
+    ].sum()
+
+    national_aim_total = float(dafm["AVERAGE_NUMBER_CATTLE"].sum())
+    national_aim_dairy = float(dafm["AVERAGE_CATTLE_DAIRY"].sum())
+    if national_aim_total <= 0:
+        raise AssertionError("DAFM national cattle total is zero")
+    national_dairy_share = national_aim_dairy / national_aim_total
+    national_other = float(baseline["OTHER_CATTLE"].sum())
+    if national_other <= 0:
+        raise AssertionError("CSO national OTHER_CATTLE is zero")
+    q_national_raw = (
+        float(baseline["TOTAL_CATTLE"].sum()) * national_dairy_share
+        - float(baseline["DAIRY_COW"].sum())
+    ) / national_other
+    q_national = _clip_probability(q_national_raw, epsilon)
+
+    county_q: dict[str, float] = {}
+    for county_name, cso_values in county_cso.iterrows():
+        if county_name not in county_aim.index:
+            county_q[county_name] = q_national
+            continue
+        aim_values = county_aim.loc[county_name]
+        aim_total = float(aim_values["AVERAGE_NUMBER_CATTLE"])
+        other = float(cso_values["OTHER_CATTLE"])
+        if aim_total <= 0 or other <= 0:
+            county_q[county_name] = q_national
+            continue
+        aim_dairy_share = float(aim_values["AVERAGE_CATTLE_DAIRY"]) / aim_total
+        raw = (
+            float(cso_values["TOTAL_CATTLE"]) * aim_dairy_share
+            - float(cso_values["DAIRY_COW"])
+        ) / other
+        county_q[county_name] = (
+            _clip_probability(raw, epsilon)
+            if 0.0 < raw < 1.0
+            else q_national
+        )
+
+    rows: list[dict] = []
+    for _, row in baseline.iterrows():
+        county_name = str(row["County"])
+        fallback = float(county_q.get(county_name, q_national))
+        matched = False
+        local_valid = False
+        local_q = np.nan
+        aim_total = 0.0
+        aim_dairy = 0.0
+
+        keys = {
+            _normalise_ed_name(part)
+            for part in str(row["ED"]).split("/")
+            if _normalise_ed_name(part)
+        }
+        for key in keys:
+            lookup = (county_name, key)
+            if lookup in local.index:
+                values = local.loc[lookup]
+                aim_total += float(values["AVERAGE_NUMBER_CATTLE"])
+                aim_dairy += float(values["AVERAGE_CATTLE_DAIRY"])
+                matched = True
+
+        other = float(row["OTHER_CATTLE"])
+        if matched and aim_total > 0 and other > 0:
+            aim_dairy_share = aim_dairy / aim_total
+            raw = (
+                float(row["TOTAL_CATTLE"]) * aim_dairy_share
+                - float(row["DAIRY_COW"])
+            ) / other
+            if 0.0 < raw < 1.0:
+                local_q = _clip_probability(raw, epsilon)
+                local_valid = True
+
+        rows.append(
+            {
+                "CSOED": row["CSOED"],
+                "AIM_TYPE_MATCHED": bool(matched),
+                "AIM_LOCAL_SIGNAL_VALID": bool(local_valid),
+                "AIM_DAIRY_FOLLOWER_Q": float(local_q if local_valid else fallback),
+                "AIM_DAIRY_FOLLOWER_Q_COUNTY": fallback,
+            }
+        )
+
+    signal = pd.DataFrame(rows)
+    if signal["CSOED"].duplicated().any():
+        raise AssertionError("AIM genetic signature contains duplicate CSOED")
+    if not signal["AIM_DAIRY_FOLLOWER_Q"].between(0.0, 1.0).all():
+        raise AssertionError("AIM genetic signal is outside [0, 1]")
+    return signal, q_national
 
 
 def _support_has_capacity(
@@ -424,14 +607,109 @@ def _allocate_genetics(
     return allocation
 
 
+def _allocate_genetics_aim(
+    row_totals: np.ndarray,
+    col_targets: np.ndarray,
+    coeff: np.ndarray,
+    dairy_cows: np.ndarray,
+    suckler_cows: np.ndarray,
+    dairy_follower_q: np.ndarray,
+    q_national: float,
+    epsilon: float = 1.0e-6,
+) -> np.ndarray:
+    """Allocate one age-sex container using the AIM hierarchical prior.
+
+    AIM controls only the ED spatial prior. GOBLIN/COHORTS controls the exact
+    national DxD/DxB/BxB margins, and the fixed CSO age-sex container controls
+    every ED row. Adult cows provide soft evidence for the DxB versus BxB
+    conditional split, pooled with a national-market component; they are never
+    support gates.
+    """
+
+    rows = np.asarray(row_totals, dtype=np.int64)
+    cols = np.asarray(col_targets, dtype=np.int64)
+    coeff = np.asarray(coeff, dtype=float)
+    dairy = np.asarray(dairy_cows, dtype=float)
+    suckler = np.asarray(suckler_cows, dtype=float)
+    q = np.asarray(dairy_follower_q, dtype=float)
+
+    if int(rows.sum()) != int(cols.sum()):
+        raise AssertionError("age-sex row totals and genetic targets differ")
+    if (rows < 0).any() or (cols < 0).any():
+        raise AssertionError("negative genetic allocation margins")
+    if len(rows) != len(q) or len(rows) != len(dairy) or len(rows) != len(suckler):
+        raise ValueError("AIM genetics arrays have inconsistent lengths")
+    if not np.isfinite(q).all() or ((q <= 0) | (q >= 1)).any():
+        raise ValueError("AIM dairy follower signal must be strictly inside (0, 1)")
+
+    total = int(rows.sum())
+    if total == 0:
+        return np.zeros((len(rows), len(GENETICS)), dtype=np.int64)
+
+    p_n = cols.astype(float) / float(total)
+    qn = _clip_probability(q_national, epsilon)
+
+    if p_n[0] <= 0:
+        p_dxd = np.zeros(len(rows), dtype=float)
+    elif p_n[0] >= 1:
+        p_dxd = np.ones(len(rows), dtype=float)
+    else:
+        spatial_shift = np.array(
+            [_logit(value, epsilon) - _logit(qn, epsilon) for value in q],
+            dtype=float,
+        )
+        p_dxd = np.asarray(
+            _logistic(_logit(float(p_n[0]), epsilon) + spatial_shift),
+            dtype=float,
+        )
+        p_dxd = np.clip(p_dxd, epsilon, 1.0 - epsilon)
+
+    remaining = np.maximum(0.0, 1.0 - p_dxd)
+    beef_target = int(cols[1] + cols[2])
+    market_dxb = float(cols[1] / beef_target) if beef_target > 0 else 0.5
+
+    home_dxb = dairy * float(coeff[1])
+    home_bxb = suckler * float(coeff[2])
+    market_pool = rows.astype(float) * remaining
+    weight_dxb = home_dxb + market_dxb * market_pool
+    weight_bxb = home_bxb + (1.0 - market_dxb) * market_pool
+    weight_total = weight_dxb + weight_bxb
+
+    conditional_dxb = np.full(len(rows), market_dxb, dtype=float)
+    positive = weight_total > 0
+    conditional_dxb[positive] = weight_dxb[positive] / weight_total[positive]
+    conditional_dxb = np.clip(conditional_dxb, epsilon, 1.0 - epsilon)
+
+    probabilities = np.column_stack(
+        [
+            p_dxd,
+            remaining * conditional_dxb,
+            remaining * (1.0 - conditional_dxb),
+        ]
+    )
+    probabilities = probabilities / probabilities.sum(axis=1, keepdims=True)
+    prior = rows[:, None].astype(float) * probabilities
+    prior[rows == 0, :] = 0.0
+
+    reconciled = ipf_reconcile(prior, rows, cols)
+    allocation = integerise_matrix(reconciled, rows, cols)
+
+    if not np.array_equal(allocation.sum(axis=1), rows):
+        raise AssertionError("AIM genetics changed ED age-sex rows")
+    if not np.array_equal(allocation.sum(axis=0), cols):
+        raise AssertionError("AIM genetics failed national GOBLIN margins")
+    return allocation
+
+
 def add_cattle_cohorts(cattle_panel: pd.DataFrame, config: SpatialConfig) -> pd.DataFrame:
     """Express the fixed ED cattle population in the 21 GOBLIN cattle cohorts.
 
     The spatial distribution and age-sex structure are fixed by the CSO ED
     cattle panel. GOBLIN supplies national DxD/DxB/BxB biological margins.
-    The ED's own adult-cow structure supplies genetic support, with sparse
-    receiver/rearing exceptions inferred from ED young-stock structure. No ED,
-    county or national cattle total is changed.
+    In the production AIM-hierarchical mode, DAFM/AIM supplies the local
+    broad cattle-type pattern, county AIM supplies fallback context, and adult
+    cows enter only as soft evidence for DxB versus BxB. No cow category is a
+    support gate and no ED, county or national cattle total is changed.
     """
 
     cattle = cattle_panel.copy()
@@ -485,12 +763,31 @@ def add_cattle_cohorts(cattle_panel: pd.DataFrame, config: SpatialConfig) -> pd.
         raise FileNotFoundError(goblin_path)
     goblin = _load_goblin(goblin_path)
     national_targets, coefficients = _build_biological_controls(cattle, goblin)
-    (
-        dairy_support_ids,
-        bxb_support_ids,
-        dairy_receiver_scores,
-        bxb_receiver_scores,
-    ) = _build_ed_genetic_support(cattle, national_targets)
+
+    genetics_mode = str(
+        config.raw.get("cattle", {}).get("genetics_prior", "cow_support")
+    ).strip().lower()
+    if genetics_mode not in {"cow_support", "aim_hierarchical"}:
+        raise ValueError(f"unsupported cattle genetics_prior: {genetics_mode}")
+
+    dafm_signal = None
+    q_national = None
+    if genetics_mode == "aim_hierarchical":
+        dafm_path = config.files.get("dafm_aim_ed_cattle_profile_2020")
+        if dafm_path is None or not dafm_path.exists():
+            raise FileNotFoundError(dafm_path)
+        epsilon = float(config.raw.get("cattle", {}).get("dafm_logit_epsilon", 1.0e-6))
+        dafm_signal, q_national = _build_aim_genetic_signature(
+            cattle, dafm_path, epsilon=epsilon
+        )
+        dafm_signal = dafm_signal.set_index("CSOED")
+    else:
+        (
+            dairy_support_ids,
+            bxb_support_ids,
+            dairy_receiver_scores,
+            bxb_receiver_scores,
+        ) = _build_ed_genetic_support(cattle, national_targets)
 
     cattle["dairy_cows"] = cattle["DAIRY_COW"].astype(np.int64)
     cattle["suckler_cows"] = cattle["OTHER_COW"].astype(np.int64)
@@ -503,47 +800,69 @@ def add_cattle_cohorts(cattle_panel: pd.DataFrame, config: SpatialConfig) -> pd.
         year_index = cattle.index[cattle["YEAR"] == year]
         year_frame = cattle.loc[year_index].copy()
 
-        dairy_support = year_frame["CSOED"].isin(dairy_support_ids).to_numpy()
-        bxb_support = year_frame["CSOED"].isin(bxb_support_ids).to_numpy()
+        if genetics_mode == "cow_support":
+            dairy_support = year_frame["CSOED"].isin(dairy_support_ids).to_numpy()
+            bxb_support = year_frame["CSOED"].isin(bxb_support_ids).to_numpy()
 
-        dairy_score = year_frame["DAIRY_COW"].to_numpy(dtype=float)
-        bxb_score = year_frame["OTHER_COW"].to_numpy(dtype=float)
+            dairy_score = year_frame["DAIRY_COW"].to_numpy(dtype=float)
+            bxb_score = year_frame["OTHER_COW"].to_numpy(dtype=float)
 
-        dairy_receivers = (dairy_score == 0) & dairy_support
-        if dairy_receivers.any():
-            receiver_values = year_frame.loc[dairy_receivers, "CSOED"].map(
-                dairy_receiver_scores
-            )
-            dairy_score[dairy_receivers] = np.maximum(
-                receiver_values.to_numpy(dtype=float), 1e-9
-            )
+            dairy_receivers = (dairy_score == 0) & dairy_support
+            if dairy_receivers.any():
+                receiver_values = year_frame.loc[dairy_receivers, "CSOED"].map(
+                    dairy_receiver_scores
+                )
+                dairy_score[dairy_receivers] = np.maximum(
+                    receiver_values.to_numpy(dtype=float), 1e-9
+                )
 
-        bxb_receivers = (bxb_score == 0) & bxb_support
-        if bxb_receivers.any():
-            receiver_values = year_frame.loc[bxb_receivers, "CSOED"].map(
-                bxb_receiver_scores
-            )
-            bxb_score[bxb_receivers] = np.maximum(
-                receiver_values.to_numpy(dtype=float), 1e-9
-            )
+            bxb_receivers = (bxb_score == 0) & bxb_support
+            if bxb_receivers.any():
+                receiver_values = year_frame.loc[bxb_receivers, "CSOED"].map(
+                    bxb_receiver_scores
+                )
+                bxb_score[bxb_receivers] = np.maximum(
+                    receiver_values.to_numpy(dtype=float), 1e-9
+                )
 
-        dairy_score[~dairy_support] = 0.0
-        bxb_score[~bxb_support] = 0.0
+            dairy_score[~dairy_support] = 0.0
+            bxb_score[~bxb_support] = 0.0
+        else:
+            q_values = year_frame["CSOED"].map(
+                dafm_signal["AIM_DAIRY_FOLLOWER_Q"]
+            )
+            if q_values.isna().any():
+                raise AssertionError("missing AIM genetic signature for model ED")
+            q_values = q_values.to_numpy(dtype=float)
 
         for container, mapping in CONTAINERS.items():
             row_totals = year_frame[container].to_numpy(dtype=np.int64)
             col_targets = national_targets[(year, container)]
             coeff = coefficients[(year, container)]
 
-            allocation = _allocate_genetics(
-                row_totals,
-                col_targets,
-                coeff,
-                dairy_support,
-                bxb_support,
-                dairy_score,
-                bxb_score,
-            )
+            if genetics_mode == "aim_hierarchical":
+                allocation = _allocate_genetics_aim(
+                    row_totals,
+                    col_targets,
+                    coeff,
+                    year_frame["DAIRY_COW"].to_numpy(dtype=float),
+                    year_frame["OTHER_COW"].to_numpy(dtype=float),
+                    q_values,
+                    float(q_national),
+                    epsilon=float(
+                        config.raw.get("cattle", {}).get("dafm_logit_epsilon", 1.0e-6)
+                    ),
+                )
+            else:
+                allocation = _allocate_genetics(
+                    row_totals,
+                    col_targets,
+                    coeff,
+                    dairy_support,
+                    bxb_support,
+                    dairy_score,
+                    bxb_score,
+                )
 
             for j, genetic in enumerate(GENETICS):
                 cattle.loc[year_index, mapping[genetic]] = allocation[:, j]
