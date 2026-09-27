@@ -36,6 +36,7 @@ jobs:
             tests/test_cattle.py \
             tests/test_cattle_annual_age_sex.py \
             tests/test_cattle_annual_genetics.py \
+            tests/test_cattle_goblin_calibration.py \
             tests/test_cattle_annual_panel.py \
             tests/test_cattle_two_anchor.py \
             tests/test_cli_data_boundary.py \
