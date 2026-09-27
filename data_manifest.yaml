@@ -3,6 +3,15 @@ release: "goblin-spatial-v1"
 status: "verified"
 
 datasets:
+  cso_ed_agricultural_baseline_2010:
+    stage: "01"
+    module: [baseline, cattle]
+    description: "2010 CSO Electoral Division livestock geography used as the earlier cattle spatial anchor."
+    source: "git"
+    path: "data/inputs/baseline/CSO_ED2010.csv"
+    sha256: "973adba516b84c115563049e3de2be73f7fbc15efafcee56b08b311034c15661"
+    required: true
+
   cso_ed_agricultural_baseline_2020:
     stage: "01"
     module: [baseline, cattle, sheep, land_farm_structure]
