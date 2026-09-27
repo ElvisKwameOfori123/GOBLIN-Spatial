@@ -317,6 +317,7 @@ def _allocate_dairy_anchor_residual(
     aim_dairy_head: np.ndarray,
     aim_county_dairy_head: float,
     matched: np.ndarray,
+    eligible_from_2010: np.ndarray | None = None,
 ) -> np.ndarray:
     """Preserve published ED dairy counts and allocate only the county gap.
 
@@ -333,6 +334,12 @@ def _allocate_dairy_anchor_residual(
     other_cows = np.asarray(reconciled_other_cows, dtype=np.int64)
     aim_dairy = np.asarray(aim_dairy_head, dtype=float)
     matched = np.asarray(matched, dtype=bool)
+    if eligible_from_2010 is None:
+        eligible_2010 = np.ones(len(published), dtype=bool)
+    else:
+        eligible_2010 = np.asarray(eligible_from_2010, dtype=bool)
+        if len(eligible_2010) != len(published):
+            raise ValueError("2010 dairy eligibility length differs from ED margins")
     target = int(target)
 
     gap = target - int(published.sum())
@@ -345,7 +352,12 @@ def _allocate_dairy_anchor_residual(
     # Preserve genuine no-adult-cow receiver/rearing EDs. AIM dairy-type cattle
     # in such EDs may be followers and are not evidence of resident dairy cows.
     adult_cow_support = (published > 0) | (other_cows > 0)
-    capacity = np.where(adult_cow_support, capacity, 0).astype(np.int64)
+    receiver_eligible = adult_cow_support & eligible_2010
+    # Already-published 2020 dairy counts are always retained. The 2010 rule
+    # governs only whether an ED with published 2020 zero may receive part of
+    # the unresolved county residual.
+    receiver_eligible = receiver_eligible | (published > 0)
+    capacity = np.where(receiver_eligible, capacity, 0).astype(np.int64)
 
     if gap > int(capacity.sum()):
         raise AssertionError("county dairy gap exceeds eligible reconciled cattle capacity")
@@ -360,12 +372,12 @@ def _allocate_dairy_anchor_residual(
     expected[matched] = target * aim_dairy[matched] / county_aim
     weights = np.maximum(0.0, expected - published.astype(float))
     weights[~matched] = 0.0
-    weights[~adult_cow_support] = 0.0
+    weights[~receiver_eligible] = 0.0
 
     if float(weights.sum()) <= 0:
-        weights = np.where(matched & adult_cow_support, aim_dairy, 0.0)
+        weights = np.where(matched & receiver_eligible, aim_dairy, 0.0)
     if float(weights.sum()) <= 0:
-        weights = np.where(adult_cow_support, published.astype(float), 0.0)
+        weights = np.where(receiver_eligible, published.astype(float), 0.0)
 
     addition = _bounded_weighted_allocate(weights, capacity, gap)
     reconciled = published + addition
@@ -508,6 +520,7 @@ def _build_2020_baseline(
     dafm_path=None,
     logit_epsilon: float = DEFAULT_LOGIT_EPSILON,
     dairy_anchor_mode: str = "positive_proportional",
+    ed_2010_path=None,
 ) -> pd.DataFrame:
     """Reconcile the fixed 2020 ED cattle baseline to AAA10 county controls."""
 
@@ -553,10 +566,20 @@ def _build_2020_baseline(
 
     published_dairy = ed["DAIRY_COW"].to_numpy(dtype=np.int64).copy()
     aim_dairy_signal = None
+    dairy_eligible_2010 = np.ones(len(ed), dtype=bool)
     if dairy_anchor_mode == "aim_residual":
         if dafm_path is None:
             raise ValueError("AIM residual dairy anchor requires a DAFM profile path")
+        if ed_2010_path is None:
+            raise ValueError("AIM residual dairy anchor requires the 2010 ED cattle source")
         aim_dairy_signal = _build_aim_dairy_anchor_signal(ed, dafm_path)
+
+        source_2010 = _load_cso_ed_2010(ed_2010_path).set_index("_ED_KEY")
+        keys_2020 = ed["CSOED"].map(canonical_ed_key)
+        dairy_2010 = keys_2020.map(source_2010["DAIRY_COW"])
+        # A published 2010 zero is direct evidence against inventing dairy cows
+        # in a 2020 published-zero ED. A 2010 blank carries no such evidence.
+        dairy_eligible_2010 = ~(dairy_2010.fillna(-1.0).eq(0.0)).to_numpy(dtype=bool)
 
     controls = {
         "OTHER_COW": "Other cows__HEAD",
@@ -594,6 +617,7 @@ def _build_2020_baseline(
                 county_signal["AIM_DAIRY_TYPE_HEAD"].to_numpy(dtype=float),
                 float(county_signal["AIM_COUNTY_DAIRY_TYPE_HEAD"].iloc[0]),
                 county_signal["AIM_DAIRY_MATCHED"].to_numpy(dtype=bool),
+                dairy_eligible_2010[idx],
             )
         ed.loc[idx, "DAIRY_COW"] = dairy
 
@@ -727,6 +751,11 @@ def build_cattle_panel(config: SpatialConfig) -> pd.DataFrame:
             raise FileNotFoundError(dafm_path)
 
     county = _load_aaa10(county_path)
+    ed_2010_path = config.files.get("cso_ed_2010")
+    if dairy_anchor_mode == "aim_residual":
+        if ed_2010_path is None or not ed_2010_path.exists():
+            raise FileNotFoundError(ed_2010_path)
+
     baseline = _build_2020_baseline(
         ed_path,
         county,
@@ -735,6 +764,7 @@ def build_cattle_panel(config: SpatialConfig) -> pd.DataFrame:
         dafm_path=dafm_path,
         logit_epsilon=logit_epsilon,
         dairy_anchor_mode=dairy_anchor_mode,
+        ed_2010_path=ed_2010_path,
     )
     expected_counties = set(baseline["County"].unique())
     age_signal = (
@@ -745,7 +775,6 @@ def build_cattle_panel(config: SpatialConfig) -> pd.DataFrame:
 
     historical_weights: pd.DataFrame | None = None
     if weight_mode == "two_anchor_2010_2020":
-        ed_2010_path = config.files.get("cso_ed_2010")
         if ed_2010_path is None or not ed_2010_path.exists():
             raise FileNotFoundError(ed_2010_path)
         ed_2010 = _load_cso_ed_2010(ed_2010_path)
