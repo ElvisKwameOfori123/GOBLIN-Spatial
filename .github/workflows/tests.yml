@@ -85,6 +85,7 @@ jobs:
           test -f data/processed/validation/historical/cattle_genetics_summary.csv
           test -f data/processed/validation/historical/cattle_genetics_ed_2020.csv
           test -f data/processed/validation/historical/cattle_genetics_national_margins.csv
+          test -f data/processed/validation/historical/cattle_genetics_dafm_type_check_2020.csv
           python - <<'PY'
           import pandas as pd
 
