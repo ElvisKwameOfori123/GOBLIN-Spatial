@@ -14,6 +14,7 @@ paths:
   processed: data/processed
 
 files:
+  cso_ed_2010: data/inputs/baseline/CSO_ED2010.csv
   cso_ed_2020: data/inputs/baseline/01_CSO_ED_Agricultural_Baseline_2020.csv
   cso_cattle_county: data/inputs/baseline/01_CSO_AAA10_Cattle_County_2015_2025.csv
   cso_sheep_workbook: data/inputs/baseline/03_CSO_AAA09_Sheep_County_Region_2015_2025.xlsx
