@@ -90,11 +90,19 @@ def _load_ed_2020(path) -> pd.DataFrame:
     if int(identity.abs().max()) != 0:
         raise AssertionError("published 2020 ED identity D + S + O = T does not close")
     ed["_ED_KEY"] = ed["CSOED"].map(canonical_ed_key)
+    if ed["_ED_KEY"].duplicated().any():
+        raise AssertionError("duplicate canonical ED key in 2020 ED cattle data")
     return ed.sort_values(["County", "CSOED"], kind="stable").reset_index(drop=True)
 
 
 def _county_controls(county: pd.DataFrame, year: int) -> pd.DataFrame:
-    frame = county.loc[county["Year"] == year].set_index("County")
+    frame = county.loc[county["Year"] == year].copy()
+    if frame.empty:
+        raise AssertionError(f"{year}: no AAA10 county controls")
+    if frame["County"].duplicated().any():
+        duplicates = sorted(frame.loc[frame["County"].duplicated(False), "County"].unique())
+        raise AssertionError(f"{year}: duplicate AAA10 county controls: {duplicates}")
+    frame = frame.set_index("County")
     controls = pd.DataFrame(
         {
             "DAIRY_COW": frame["Dairy cows__HEAD"].astype(np.int64),
@@ -111,6 +119,8 @@ def _county_controls(county: pd.DataFrame, year: int) -> pd.DataFrame:
 
 
 def _attach_2010(ed: pd.DataFrame, ed_2010: pd.DataFrame) -> pd.DataFrame:
+    if ed_2010["_ED_KEY"].duplicated().any():
+        raise AssertionError("duplicate canonical ED key in 2010 ED cattle data")
     source = ed_2010.set_index("_ED_KEY")
     missing = sorted(set(ed["_ED_KEY"]) - set(source.index))
     if missing:
@@ -129,6 +139,8 @@ def _check_2010_consistency(ed: pd.DataFrame) -> None:
     if ((d + s + o - t).abs()[full] > 0).any():
         raise AssertionError("published 2010 ED rows with D + S + O != T")
     parts = d.fillna(0) + s.fillna(0) + o.fillna(0)
+    if (t.eq(0) & parts.gt(0)).any():
+        raise AssertionError("published 2010 ED has positive cattle components with zero total")
     if (t.notna() & (parts > t)).any():
         raise AssertionError("published 2010 ED components exceed the 2010 total")
 
@@ -154,7 +166,15 @@ def _size_shares(ed: pd.DataFrame) -> pd.DataFrame:
         s2010.loc[t10.index[blank]] = c20.loc[t10.index[blank]]
         remaining = max(0.0, 1.0 - float(c20.loc[t10.index[blank]].sum()))
         s2010.loc[published.index] = published / published.sum() * remaining
-    return pd.DataFrame({"SIZE_2010": s2010, "SIZE_2020": s2020})
+
+    shares = pd.DataFrame({"SIZE_2010": s2010, "SIZE_2020": s2020})
+    if (shares < -1e-12).any().any():
+        raise AssertionError("negative ED total-cattle share")
+    for column in shares.columns:
+        closure = shares.assign(County=ed["County"]).groupby("County")[column].sum()
+        if float((closure - 1.0).abs().max()) > 1e-9:
+            raise AssertionError(f"{column}: within-county ED shares do not sum to one")
+    return shares
 
 
 def _reference_mix_2020(
@@ -164,6 +184,9 @@ def _reference_mix_2020(
 
     counts = ed[list(COMPONENTS)].astype(float).copy()
     seeded = pd.Series(0.0, index=ed.index)
+    seeded_by_component = pd.DataFrame(
+        0.0, index=ed.index, columns=("DAIRY_COW", "OTHER_COW")
+    )
     for county_name, idx in ed.groupby("County").groups.items():
         for component in ("DAIRY_COW", "OTHER_COW"):
             shortfall = float(controls_2020.loc[county_name, component]) - float(
@@ -187,10 +210,13 @@ def _reference_mix_2020(
             counts.loc[idx, component] += seed
             counts.loc[idx, "OTHER_CATTLE"] -= seed
             seeded.loc[idx] += seed
+            seeded_by_component.loc[idx, component] += seed
 
     total = counts.sum(axis=1)
     mix = counts.div(total.where(total > 0), axis=0)
     mix["SEEDED_HEAD_2020_REFERENCE"] = seeded
+    mix["SEEDED_DAIRY_COW_2020_REFERENCE"] = seeded_by_component["DAIRY_COW"]
+    mix["SEEDED_OTHER_COW_2020_REFERENCE"] = seeded_by_component["OTHER_COW"]
     return mix
 
 
@@ -316,6 +342,7 @@ def _calibrate_county(
     mix: np.ndarray,
     col_targets: np.ndarray,
     possible: np.ndarray,
+    label: str = "county calibration",
 ) -> tuple[np.ndarray, int]:
     """IPF + exact integerisation; returns allocation and fallback level used."""
 
@@ -332,7 +359,9 @@ def _calibrate_county(
         except (ValueError, RuntimeError):
             continue
         return _integerise_keep_zeros(fitted, row_totals, col_targets), level
-    raise RuntimeError("county calibration infeasible without relaxing a structural zero")
+    raise RuntimeError(
+        f"{label}: calibration infeasible without relaxing a structural zero"
+    )
 
 
 def build_annual_ed_panel(
@@ -393,11 +422,27 @@ def build_annual_ed_panel(
                 county_mix = cols / max(1, cols.sum())
                 allowed = possible[idx][empty] * county_mix[None, :]
                 none = allowed.sum(axis=1) <= 0
-                allowed[none] = county_mix
+                if none.any():
+                    bad = idx[empty][none]
+                    bad_eds = ed.loc[bad, "CSOED"].astype(str).tolist()
+                    raise RuntimeError(
+                        f"{county_name} {year}: cattle-bearing EDs have no "
+                        f"census-supported composition: {bad_eds}"
+                    )
                 m[empty] = allowed / allowed.sum(axis=1, keepdims=True)
-            allocation, level = _calibrate_county(rows, m, cols, possible[idx])
+            allocation, level = _calibrate_county(
+                rows, m, cols, possible[idx], label=f"{county_name} {year}"
+            )
             values[idx] = allocation
-            log_rows.append({"YEAR": year, "County": county_name, "SUPPORT_FALLBACK_LEVEL": level})
+            log_rows.append(
+                {
+                    "RECORD_TYPE": "CALIBRATION",
+                    "YEAR": year,
+                    "County": county_name,
+                    "SUPPORT_FALLBACK_LEVEL": level,
+                    "SEED_REFERENCE_MIX": bool(seed_reference_mix),
+                }
+            )
 
         for j, component in enumerate(COMPONENTS):
             frame[component] = values[:, j]
@@ -406,8 +451,40 @@ def build_annual_ed_panel(
         frames.append(frame)
 
     panel = pd.concat(frames, ignore_index=True)
-    _validate(panel, ed, county)
-    log = pd.DataFrame(log_rows)
+    _validate(panel, ed, county, expected_eds=config.expected_eds)
+
+    audit_rows = []
+    for county_name, idx in ed.groupby("County").groups.items():
+        observed = ed.loc[idx, list(COLUMNS)].sum()
+        target = controls_2020.loc[county_name, list(COLUMNS)]
+        audit = {
+            "RECORD_TYPE": "2020_SOURCE_DISCREPANCY",
+            "YEAR": KNOWN_YEAR,
+            "County": county_name,
+            "SUPPORT_FALLBACK_LEVEL": np.nan,
+            "SEED_REFERENCE_MIX": bool(seed_reference_mix),
+            "REFERENCE_SEEDED_DAIRY_COW": float(
+                mix20.loc[idx, "SEEDED_DAIRY_COW_2020_REFERENCE"].sum()
+            ),
+            "REFERENCE_SEEDED_OTHER_COW": float(
+                mix20.loc[idx, "SEEDED_OTHER_COW_2020_REFERENCE"].sum()
+            ),
+        }
+        audit["REFERENCE_SEEDED_TOTAL"] = (
+            audit["REFERENCE_SEEDED_DAIRY_COW"]
+            + audit["REFERENCE_SEEDED_OTHER_COW"]
+        )
+        for column in COLUMNS:
+            audit[f"ED_{column}"] = int(observed[column])
+            audit[f"AAA10_{column}"] = int(target[column])
+            audit[f"DIFF_{column}"] = int(observed[column] - target[column])
+        audit_rows.append(audit)
+
+    log = pd.concat(
+        [pd.DataFrame(log_rows), pd.DataFrame(audit_rows)],
+        ignore_index=True,
+        sort=False,
+    )
     shortfall = 0.0
     for county_name, idx in ed.groupby("County").groups.items():
         for component in ("DAIRY_COW", "OTHER_COW"):
@@ -422,7 +499,26 @@ def build_annual_ed_panel(
     return panel, log
 
 
-def _validate(panel: pd.DataFrame, ed: pd.DataFrame, county: pd.DataFrame) -> None:
+def _validate(
+    panel: pd.DataFrame,
+    ed: pd.DataFrame,
+    county: pd.DataFrame,
+    expected_eds: int,
+) -> None:
+    expected_rows = expected_eds * len(YEARS)
+    if len(panel) != expected_rows:
+        raise AssertionError(f"expected {expected_rows:,} ED-year rows, found {len(panel):,}")
+    if panel[["YEAR", "CSOED"]].duplicated().any():
+        raise AssertionError("duplicate YEAR x CSOED rows in annual panel")
+    if set(panel["YEAR"].unique()) != set(YEARS):
+        raise AssertionError("annual panel years are not exactly 2015-2025")
+    coverage = panel.groupby("YEAR")["CSOED"].nunique()
+    if not coverage.eq(expected_eds).all():
+        raise AssertionError("ED coverage is incomplete in one or more years")
+    if panel["CSOED"].nunique() != expected_eds:
+        raise AssertionError("annual panel ED universe differs from the expected frame")
+    if not all(np.issubdtype(panel[column].dtype, np.integer) for column in COLUMNS):
+        raise AssertionError("annual cattle counts must be integer-valued")
     if (panel[list(COLUMNS)] < 0).any().any():
         raise AssertionError("negative cattle value in annual panel")
     identity = panel[list(COMPONENTS)].sum(axis=1) - panel["TOTAL_CATTLE"]
@@ -431,6 +527,8 @@ def _validate(panel: pd.DataFrame, ed: pd.DataFrame, county: pd.DataFrame) -> No
 
     known = panel.loc[panel["YEAR"] == KNOWN_YEAR].set_index("CSOED")[list(COLUMNS)]
     published = ed.set_index("CSOED")[list(COLUMNS)]
+    if set(known.index) != set(published.index):
+        raise AssertionError("2020 ED universe differs from the published census")
     if not known.loc[published.index].equals(published):
         raise AssertionError("2020 published ED values were changed")
 
