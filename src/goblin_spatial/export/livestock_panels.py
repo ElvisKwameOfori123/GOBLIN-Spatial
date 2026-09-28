@@ -57,6 +57,16 @@ if CSO_13 != CSO_13_COHORTS:
 CSO_TOTALS = ["TOTAL_CATTLE", "OTHER_CATTLE", "TOTAL_SHEEP"]
 COHORTS_31 = [*FINAL_21_COHORTS, *GOBLIN_SHEEP_10]
 PROVENANCE = ["CATTLE_PROVENANCE", "SHEEP_PROVENANCE"]
+CONTEXT_COLUMNS = [
+    "AREA_FARMED",
+    "ALL_GRASSLAND",
+    "TOTAL_CEREALS",
+    "OTHER_CROPS_HA",
+    "AGRICULTURAL_HOLDINGS",
+    "AVERAGE_SIZE_OF_HOLDINGS",
+    "AVERAGE_AGE_OF_HOLDER",
+    "MEDIAN_AGE_OF_HOLDER",
+]
 CONTROL_PREFIX = {c: f"CSO_{c}" for c in [*CSO_TOTALS, *CSO_13]}
 NAME_13 = "CSO_13_Cohort_Annual_Panel_2015_2025"
 NAME_31 = "GOBLIN_31_Cohort_Annual_Panel_2015_2025"
@@ -100,6 +110,41 @@ def build_livestock_panels(config: SpatialConfig) -> tuple[pd.DataFrame, pd.Data
     if not checks["PASS"].all():
         failed = checks.loc[~checks["PASS"], "CHECK"].tolist()
         raise AssertionError(f"livestock panel checks failed: {failed}")
+    return panel13, panel31
+
+
+def project_enriched_livestock_panels(
+    master: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Project the canonical CSO-13 and GOBLIN-31 products from an enriched master.
+
+    The master must already contain the finished livestock chains. Historical
+    land and farm-structure variables are copied onto both public panels without
+    changing livestock values.
+    """
+
+    ids = [column for column in ID_COLS if column in master.columns]
+    context = [column for column in CONTEXT_COLUMNS if column in master.columns]
+    provenance = [column for column in PROVENANCE if column in master.columns]
+    required = {*CSO_TOTALS, *CSO_13, *COHORTS_31}
+    missing = sorted(required - set(master.columns))
+    if missing:
+        raise ValueError(f"enriched master missing livestock fields: {missing}")
+
+    panel13 = master[
+        ids + CSO_TOTALS + CSO_13 + context + provenance
+    ].copy()
+    panel31 = master[
+        ids + CSO_TOTALS + CSO_13 + COHORTS_31 + context + provenance
+    ].copy()
+    panel31 = panel31.rename(columns=CONTROL_PREFIX)
+
+    for frame in (panel13, panel31):
+        if frame[["YEAR", "CSOED"]].duplicated().any():
+            raise AssertionError("enriched livestock projection has duplicate YEAR-CSOED rows")
+        frame.sort_values(["YEAR", "CSOED"], kind="stable", inplace=True)
+        frame.reset_index(drop=True, inplace=True)
+
     return panel13, panel31
 
 
