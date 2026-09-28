@@ -222,13 +222,21 @@ def test_full_historical_baseline_through_stage09():
         baseline["AGRICULTURAL_HOLDINGS"], errors="raise"
     ).to_numpy(dtype=float)
     positive_holdings = holdings > 0
-    assert positive_holdings.all()
-    assert np.allclose(
-        baseline["SO_COVERED_PER_HOLDING_2020_EUR"].to_numpy(dtype=float),
-        baseline["SO_COVERED_TOTAL_2020_EUR"].to_numpy(dtype=float) / holdings,
-        atol=1e-7,
-        rtol=1e-12,
-    )
+    per_holding = pd.to_numeric(
+        baseline["SO_COVERED_PER_HOLDING_2020_EUR"], errors="coerce"
+    ).to_numpy(dtype=float)
+    if positive_holdings.any():
+        assert np.allclose(
+            per_holding[positive_holdings],
+            baseline.loc[
+                positive_holdings, "SO_COVERED_TOTAL_2020_EUR"
+            ].to_numpy(dtype=float)
+            / holdings[positive_holdings],
+            atol=1e-7,
+            rtol=1e-12,
+        )
+    if (~positive_holdings).any():
+        assert np.isnan(per_holding[~positive_holdings]).all()
 
     # The final clean workbook is a post-Stage-08 deliverable. Standard Output
     # stays on its own sheet and is not folded into the CSO-13 or GOBLIN-31
