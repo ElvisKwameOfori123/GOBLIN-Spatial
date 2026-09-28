@@ -60,10 +60,12 @@ def main() -> None:
 
     overview_rows: list[dict[str, object]] = []
 
-    # 1. Independent county-level sheep comparison against DAFM census totals.
+    # 1. DAFM county-pattern fidelity diagnostic.
+    # The same DAFM ewe geography informs the production county-movement prior,
+    # so this is not independent validation of the sheep reconstruction.
     dafm_diag, dafm_summary = validate_dafm_sheep_counties(
         master,
-        cfg.files["dafm_sheep_county_validation"],
+        cfg.files["dafm_sheep_county_pattern"],
     )
     dafm_diag.to_csv(output_dir / "dafm_county_sheep_diagnostics.csv", index=False)
     dafm_summary.to_csv(output_dir / "dafm_county_sheep_summary.csv", index=False)
@@ -71,20 +73,20 @@ def main() -> None:
         overview_rows.extend(
             [
                 {
-                    "VALIDATION_FAMILY": "EXTERNAL_DAFM_SHEEP",
+                    "VALIDATION_FAMILY": "DAFM_SHEEP_PATTERN_FIDELITY",
                     "SCOPE": str(int(row["YEAR"])),
                     "METRIC": "MAE_HEAD",
                     "VALUE": row["MAE"],
-                    "INTERPRETATION": "Independent county sheep comparison; CSO remains the controlling model source.",
+                    "INTERPRETATION": "Pattern-fidelity diagnostic against the DAFM county source used for relative county movement; CSO/AAA09 remains the population control.",
                 },
                 *(
                     [
                         {
-                            "VALIDATION_FAMILY": "EXTERNAL_DAFM_SHEEP",
+                            "VALIDATION_FAMILY": "DAFM_SHEEP_PATTERN_FIDELITY",
                             "SCOPE": str(int(row["YEAR"])),
                             "METRIC": "SPEARMAN_RHO",
                             "VALUE": row["SPEARMAN_RHO"],
-                            "INTERPRETATION": "County spatial-ranking agreement with DAFM sheep census totals.",
+                            "INTERPRETATION": "County spatial-ranking fidelity to the DAFM ewe geography used in the production allocation prior; not independent validation.",
                         }
                     ]
                     if np.isfinite(row["SPEARMAN_RHO"])
