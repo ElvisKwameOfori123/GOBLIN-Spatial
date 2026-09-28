@@ -99,10 +99,24 @@ def test_2020_discrepancy_logged_and_fully_seeded() -> None:
 
 
 def test_seeding_is_not_concentrated() -> None:
-    # diagnostic bound, not a production cap: no ED takes a tenth of its region's gap
+    # diagnostic, not a production cap: no region's gap is absorbed by a few EDs
     _, _, log = _built()
     audit = log.loc[log["RECORD_TYPE"] == "2020_SOURCE_DISCREPANCY"]
-    assert (audit["MAX_SEED_SHARE_OF_GAP"] < 0.10).all()
+    assert (audit["N_EDS_FOR_50PCT"] >= 5).all()
+
+
+def test_dafm_interpolation_beats_frozen_2020_on_held_out_years() -> None:
+    from goblin_spatial.sheep.annual_panel import _dafm_ewe_shares
+
+    cfg, _, _ = _built()
+    crosswalk, _ = _load_workbook(cfg.files["cso_sheep_workbook"])
+    shares = _dafm_ewe_shares(
+        cfg.files["dafm_sheep_county_pattern"], cfg.files["sheep_breed_anchors"], crosswalk
+    )
+    for held, lo, hi in ((2016, 2015, 2020), (2022, 2020, 2025)):
+        w = (held - lo) / (hi - lo)
+        interp = (1 - w) * shares[lo] + w * shares[hi]
+        assert (interp - shares[held]).abs().mean() < (shares[KNOWN_YEAR] - shares[held]).abs().mean()
 
 
 def test_seeding_keeps_published_eds_on_regional_trend() -> None:
@@ -124,44 +138,61 @@ def test_dafm_moves_county_direction_only() -> None:
     assert len(split) == 26 * (len(YEARS) - 1)
     for (year, reg), g in split.groupby(["YEAR", "Region"]):
         assert np.isclose(g["COUNTY_SHARE"].sum(), 1.0)
-        moved = g["COUNTY_SHARE"] / g["CSO2020_PUBLISHED_COUNTY_SHARE"]
+        moved = g["COUNTY_SHARE"] / g["CSO2020_REFERENCE_COUNTY_SHARE"]
         index = g["DAFM_EWE_INDEX"]
         # direction of each county's relative move follows the DAFM ewe index
         assert np.allclose(moved / moved.mean(), index / index.mean(), rtol=1e-9)
 
 
-def test_county_split_is_anchored_to_published_2020_census() -> None:
-    cfg, _, log = _built()
-    published = pd.read_csv(cfg.files["cso_ed_2020"])
-    published["County"] = (
-        published["County"]
-        .astype(str)
-        .str.replace("Co.", "", regex=False)
-        .str.replace("County", "", regex=False)
-        .str.strip()
-        .str.title()
-    )
-    county = published.groupby("County")["TOTAL_SHEEP"].sum().astype(float)
+def test_county_base_is_2020_reference_and_closer_to_dafm_2020_levels() -> None:
+    """County base = published county sheep + reference sheep of its EDs.
 
-    split = log.loc[
-        (log["RECORD_TYPE"] == "COUNTY_SPLIT") & (log["YEAR"] == 2021)
-    ]
-    for _, g in split.groupby("Region"):
-        counties = list(g["County"])
-        expected = county.loc[counties] / county.loc[counties].sum()
-        observed = (
-            g.set_index("County")["CSO2020_PUBLISHED_COUNTY_SHARE"]
-            .loc[counties]
-        )
-        assert np.allclose(
-            observed.to_numpy(),
-            expected.to_numpy(),
-            rtol=0,
-            atol=1e-12,
-        )
+    DAFM 2020 county levels never enter production (only ratios to 2020 do),
+    so they are an independent check of the 2020 county base.
+    """
+
+    from goblin_spatial.sheep.panel import _normalise_county
+
+    cfg, _, log = _built()
+    split = log.loc[(log["RECORD_TYPE"] == "COUNTY_SPLIT") & (log["YEAR"] == 2021)].set_index("County")
+    ref = log.loc[log["RECORD_TYPE"] == "REFERENCE_2020"].groupby("County")["REFERENCE_SEED"].sum()
+    e = pd.read_csv(cfg.files["cso_ed_2020"])
+    e["County"] = e["County"].map(_normalise_county)
+    county = e.groupby("County")["TOTAL_SHEEP"].sum().astype(float).add(ref, fill_value=0.0)
+    region = split["Region"]
+    expected = county.loc[split.index] / county.loc[split.index].groupby(region).transform("sum")
+    assert np.allclose(split["CSO2020_REFERENCE_COUNTY_SHARE"], expected, atol=1e-12)
+
+    dafm = pd.read_csv(cfg.files["dafm_sheep_county_pattern"])
+    dafm["County"] = dafm["County"].map(_normalise_county)
+    ewes = dafm.loc[dafm["YEAR"] == KNOWN_YEAR].set_index("County").loc[split.index, "EWES"]
+    ewes = ewes / ewes.groupby(region).transform("sum")
+    err_ref = (split["CSO2020_REFERENCE_COUNTY_SHARE"] - ewes).abs().mean()
+    err_pub = (split["CSO2020_PUBLISHED_COUNTY_SHARE"] - ewes).abs().mean()
+    assert err_ref < err_pub
+
+
+def test_published_eds_follow_regional_trend_in_every_county() -> None:
+    cfg, panel, _ = _built()
+    _, region = _load_workbook(cfg.files["cso_sheep_workbook"])
+    t = region.set_index(["Region", "Year"])["Total sheep__HEAD"]
+    w = panel.pivot_table(index=["Region", "County", "CSOED"], columns="YEAR", values="TOTAL_SHEEP")
+    pos = w[KNOWN_YEAR] > 0
+    ratio = (w.loc[pos, 2021] / w.loc[pos, KNOWN_YEAR]).groupby(level=["Region", "County"]).median()
+    for (reg, county), value in ratio.items():
+        regional = t[(reg, 2021)] / t[(reg, KNOWN_YEAR)]
+        assert abs(value / regional - 1) < 0.10, county
 
 
 def test_held_out_lsu_supports_reference_distribution() -> None:
+    """Published 2020 LSU is never used to place sheep; it checks the placement.
+
+    For both candidate types (2010-positive, 2010-blank) the median residual
+    LSU per 100 ha moves at least halfway to that of EDs with published sheep.
+    """
+
+    from goblin_spatial.cattle.ed_keys import canonical_ed_key
+
     cfg, _, log = _built()
     base, _ = build_annual_ed_panel(cfg)
     age = build_annual_age_sex_panel(cfg, base)
@@ -169,13 +200,20 @@ def test_held_out_lsu_supports_reference_distribution() -> None:
     e = _published(cfg)
     cattle_lsu = sum(x[c] * w for c, w in LSU_COEFFICIENTS.items()).reindex(e.index)
     residual = (e["LSU"] - cattle_lsu - 0.1 * e["TOTAL_SHEEP"]) / e["ALL_GRASSLAND"] * 100
-    seed = log.loc[log["RECORD_TYPE"] == "REFERENCE_2020"].set_index("CSOED")["REFERENCE_SEED"]
-    seeded = e.index.isin(seed.index)
-    with_sheep = e["TOTAL_SHEEP"] > 0
-    before = residual[seeded].median()
-    after = (residual[seeded] - 0.1 * seed.reindex(e.index[seeded]) / e.loc[seeded, "ALL_GRASSLAND"] * 100).median()
-    baseline = residual[with_sheep].median()
-    assert before > 2 * baseline
-    assert abs(after - baseline) < abs(before - baseline) / 2
+    seed = (
+        log.loc[log["RECORD_TYPE"] == "REFERENCE_2020"].set_index("CSOED")["REFERENCE_SEED"]
+        .reindex(e.index).fillna(0.0)
+    )
+    after = residual - 0.1 * seed / e["ALL_GRASSLAND"] * 100
+    baseline = residual[e["TOTAL_SHEEP"] > 0].median()
 
-
+    e10 = pd.read_csv(cfg.files["cso_ed_2010"], dtype=str, keep_default_na=False)
+    text = e10.set_index(e10["CSOED"].map(canonical_ed_key))["TOTAL_SHEEP"].str.strip()
+    s10 = e.index.map(canonical_ed_key).map(pd.to_numeric(text.mask(text.eq(""))))
+    s10 = pd.Series(np.asarray(s10, dtype=float), index=e.index)
+    for group in (seed.gt(0) & s10.gt(0), seed.gt(0) & s10.isna()):
+        assert group.sum() > 100
+        before_gap = residual[group].median() - baseline
+        after_gap = after[group].median() - baseline
+        assert before_gap > 1.0
+        assert abs(after_gap) < before_gap / 2

@@ -16,19 +16,27 @@ Unknown years (2015-2019, 2021-2025)
        unknown years only. Each region's AAA09 2020 minus published ED sum is
        spread over EDs published with zero sheep that were positive in 2010,
        or blank in 2010 with cattle in 2020. EDs zero in both censuses are
-       excluded. Weights: the 2010 sheep count where positive; ED grassland x
-       the region's sheep density (published sheep per ha of grassland in EDs
-       with sheep) where 2010 is blank. This is not an estimate of observed
+       excluded. Weights: the 2010 sheep count where positive; where 2010 is
+       blank, ED grassland x the region's density in EDs with published sheep
+       x a national small-flock factor (2010 sheep per ha in the 2010-positive
+       candidates over the density of EDs with published sheep), so both
+       weight types sit on the same scale. This is not an estimate of observed
        2020 sheep. The published 2020 LSU is not used here; it stays a
        held-out check.
 
-    2. County split within region. The published 2020 census county share of
-       its region is moved by a DAFM breeding-ewe index
+    2. County split within region. The county's share of its region in the
+       2020 reference distribution (published county sheep plus the reference
+       sheep of its EDs) is moved by a DAFM breeding-ewe index
            m(c, t) = s_DAFM_ewes(c | r, t) / s_DAFM_ewes(c | r, 2020)
        with DAFM anchors 2015, 2016, 2020, 2022, 2025 (linear in the share
        between anchors), then renormalised inside the region and
        Hamilton-rounded to the AAA09 regional total. DAFM sets direction
-       only; CSO sets the level.
+       only; CSO sets the level. County and ED use the same 2020 reference,
+       so a county's total carries the reference sheep its EDs carry. (With
+       published county shares instead, published-sheep EDs in Limerick fall
+       to 0.46x from 2020 to 2021 while the Mid-West grows 1.02x; the
+       reference county shares are also closer to DAFM 2020 county levels,
+       which production never uses.)
 
     3. ED split within county. Each ED's share of its county moves linearly
        from its 2010 share to its 2020 reference share (lambda = (t-2010)/10)
@@ -43,6 +51,10 @@ Unknown years (2015-2019, 2021-2025)
        proportion to ED TOTAL_SHEEP and integerised without changing any ED
        total. No county class totals are invented. In 2020 the class vector
        is scaled to the published regional ED sum.
+
+Stage boundary: this module ends at CSO-level sheep (ED TOTAL_SHEEP and the
+four AAA09 classes). DAFM breed composition, the 10 GOBLIN sheep cohorts and
+any GOBLIN/COHORTS calibration are later, separate stages.
 """
 
 from __future__ import annotations
@@ -183,6 +195,17 @@ def _reference_2020(ed: pd.DataFrame, region: pd.DataFrame, apply_seed: bool = T
     blank_2010 = s10.isna()
     eligible = published.eq(0) & (positive_2010 | (blank_2010 & ed["TOTAL_CATTLE"].gt(0)))
 
+    # One density scale for 2010-blank candidates. The regional density of EDs
+    # with published sheep overstates small-flock EDs, so it is scaled by a
+    # national small-flock factor: 2010 sheep per ha in the 2010-positive
+    # candidates over the density of EDs with published sheep. Both weight
+    # types are then on the scale of the EDs that faded from the 2020 census.
+    has_all = published.gt(0)
+    faded = eligible & positive_2010
+    sheep_density_national = float(published[has_all].sum() / ed.loc[has_all, "ALL_GRASSLAND"].sum())
+    faded_density_national = float(s10[faded].sum() / ed.loc[faded, "ALL_GRASSLAND"].sum())
+    small_flock_factor = faded_density_national / sheep_density_national
+
     audit = []
     for region_name, idx in ed.groupby("Region").groups.items():
         idx = np.asarray(idx)
@@ -202,7 +225,7 @@ def _reference_2020(ed: pd.DataFrame, region: pd.DataFrame, apply_seed: bool = T
             raise AssertionError(
                 f"{region_name}: positive published sheep but no positive grassland support"
             )
-        density = observed / grassland_support if grassland_support > 0 else 0.0
+        density = (observed / grassland_support if grassland_support > 0 else 0.0) * small_flock_factor
 
         weight = pd.Series(0.0, index=idx)
         el = eligible.loc[idx]
@@ -235,7 +258,8 @@ def _reference_2020(ed: pd.DataFrame, region: pd.DataFrame, apply_seed: bool = T
                 "N_ELIGIBLE": int(el.sum()),
                 "N_ELIGIBLE_2010_POSITIVE": int((el & positive_2010.loc[idx]).sum()),
                 "N_ELIGIBLE_2010_BLANK": int(blank_el.sum()),
-                "REGION_SHEEP_PER_HA_GRASSLAND": density,
+                "BLANK_CANDIDATE_SHEEP_PER_HA": density,
+                "SMALL_FLOCK_FACTOR": small_flock_factor,
                 "SEED_SCALE_ON_WEIGHTS": scale,
                 "MAX_SEED": float(seed.max()) if len(seed) else 0.0,
                 "MAX_SEED_SHARE_OF_GAP": float(seed.max() / gap) if gap > 0 and seed.sum() > 0 else 0.0,
@@ -319,11 +343,10 @@ def build_annual_sheep_panel(config: SpatialConfig, seed_reference: bool = True)
     reference, audit = _reference_2020(ed, region, apply_seed=seed_reference)
     shares = _ed_shares(ed, reference)
 
-    # County geography and ED support are deliberately separated.
-    # County shares start from the published 2020 census county distribution;
-    # reference seeding affects only the within-county ED distribution used for
-    # years without ED observations.
+    # County and ED use the same 2020 reference so each county total carries
+    # the reference sheep of its own EDs.
     county_published = ed.groupby("County")["TOTAL_SHEEP"].sum().astype(float)
+    county_reference = reference.groupby(ed["County"]).sum()
     county_region = crosswalk.set_index("County")["Region"]
 
     identifiers = [c for c in IDENTIFIER_CANDIDATES if c in ed.columns]
@@ -342,10 +365,8 @@ def build_annual_sheep_panel(config: SpatialConfig, seed_reference: bool = True)
             ed_share = (1.0 - weight) * shares["SHARE_2010"] + weight * shares["SHARE_2020"]
             for region_name in sorted(county_region.unique()):
                 counties = sorted(county_region.index[county_region == region_name])
-                base = (
-                    county_published.loc[counties]
-                    / county_published.loc[counties].sum()
-                )
+                base = county_reference.loc[counties] / county_reference.loc[counties].sum()
+                published_share = county_published.loc[counties] / county_published.loc[counties].sum()
                 moved = base * m.loc[counties]
                 moved = moved / moved.sum()
                 target = int(region.loc[(region["Year"] == year) & (region["Region"] == region_name), "Total sheep__HEAD"].iloc[0])
@@ -360,7 +381,8 @@ def build_annual_sheep_panel(config: SpatialConfig, seed_reference: bool = True)
                             "Region": region_name,
                             "County": county_name,
                             "SEED_REFERENCE": bool(seed_reference),
-                            "CSO2020_PUBLISHED_COUNTY_SHARE": float(base.loc[county_name]),
+                            "CSO2020_PUBLISHED_COUNTY_SHARE": float(published_share.loc[county_name]),
+                            "CSO2020_REFERENCE_COUNTY_SHARE": float(base.loc[county_name]),
                             "DAFM_EWE_INDEX": float(m.loc[county_name]),
                             "COUNTY_SHARE": float(moved.loc[county_name]),
                             "COUNTY_TOTAL": int(county_total),
