@@ -58,7 +58,10 @@ official WFD catchment
 
 County and WFD catchment are alternative reporting geographies, not a nested
 hierarchy. Signature ratios are calculated after additive populations are
-aggregated; ED percentages are never averaged to create a higher-level signature.
+aggregated; ED percentages are never averaged to create a higher-level
+signature. Average holding size is recomputed from aggregate farmed area and
+holdings, while average holder age is holdings-weighted. Median holder age is
+retained only at ED level because ED medians cannot be validly aggregated.
 
 ## Main paper checks
 
