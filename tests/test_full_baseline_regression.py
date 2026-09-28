@@ -15,6 +15,7 @@ import pandas as pd
 from goblin_spatial.baseline.signatures import build_signatures
 from goblin_spatial.cattle.cohorts import FINAL_21_COHORTS
 from goblin_spatial.config import load_config
+from goblin_spatial.export.workbook import IDENTIFIERS, STANDARD_OUTPUT
 from goblin_spatial.pipeline import run_baseline
 from goblin_spatial.sheep.cohorts import GOBLIN_SHEEP_10
 
@@ -175,6 +176,84 @@ def test_full_historical_baseline_through_stage09():
         values = pd.to_numeric(baseline[column], errors="raise")
         assert values.notna().all()
         assert (values >= -1e-9).all()
+
+    # Stage 08 is valuation-only. Component and total identities must close for
+    # every ED-year, and all counties must resolve to one of the two historic
+    # Irish IFS Standard Output regions.
+    assert set(baseline["FADN_REGION"].astype(str).unique()) <= {"381", "382"}
+    assert baseline["FADN_REGION_LABEL"].notna().all()
+
+    livestock_components = (
+        baseline["SO_DAIRY_COWS_2020_EUR"]
+        + baseline["SO_SUCKLER_COWS_2020_EUR"]
+        + baseline["SO_BULLS_2020_EUR"]
+        + baseline["SO_FOLLOWERS_2020_EUR"]
+        + baseline["SO_SHEEP_2020_EUR"]
+    )
+    assert np.allclose(
+        livestock_components.to_numpy(dtype=float),
+        baseline["SO_LIVESTOCK_2020_EUR"].to_numpy(dtype=float),
+        atol=1e-7,
+        rtol=1e-12,
+    )
+
+    assert np.allclose(
+        (
+            baseline["SO_LIVESTOCK_2020_EUR"]
+            + baseline["SO_CEREALS_2020_EUR"]
+            + baseline["SO_OTHER_CROPS_2020_EUR"]
+        ).to_numpy(dtype=float),
+        baseline["SO_COVERED_TOTAL_2020_EUR"].to_numpy(dtype=float),
+        atol=1e-7,
+        rtol=1e-12,
+    )
+    assert np.allclose(
+        (
+            baseline["SO_LIVESTOCK_2020_EUR"]
+            + baseline["SO_CEREALS_2020_EUR"]
+            + baseline["SO_OTHER_CROPS_CONSERVATIVE_2020_EUR"]
+        ).to_numpy(dtype=float),
+        baseline["SO_COVERED_TOTAL_CONSERVATIVE_2020_EUR"].to_numpy(dtype=float),
+        atol=1e-7,
+        rtol=1e-12,
+    )
+
+    holdings = pd.to_numeric(
+        baseline["AGRICULTURAL_HOLDINGS"], errors="raise"
+    ).to_numpy(dtype=float)
+    positive_holdings = holdings > 0
+    assert positive_holdings.all()
+    assert np.allclose(
+        baseline["SO_COVERED_PER_HOLDING_2020_EUR"].to_numpy(dtype=float),
+        baseline["SO_COVERED_TOTAL_2020_EUR"].to_numpy(dtype=float) / holdings,
+        atol=1e-7,
+        rtol=1e-12,
+    )
+
+    # The final clean workbook is a post-Stage-08 deliverable. Standard Output
+    # stays on its own sheet and is not folded into the CSO-13 or GOBLIN-31
+    # biological panel definitions.
+    workbook_path = Path(cfg.raw["outputs"]["clean_workbook"])
+    if not workbook_path.is_absolute():
+        workbook_path = cfg.project_root / workbook_path
+    assert workbook_path.exists()
+    workbook = pd.ExcelFile(workbook_path)
+    assert "Standard_Output" in workbook.sheet_names
+    standard_output_sheet = pd.read_excel(workbook_path, sheet_name="Standard_Output")
+    assert len(standard_output_sheet) == 31_427
+    assert not standard_output_sheet[["YEAR", "CSOED"]].duplicated().any()
+    assert list(standard_output_sheet.columns) == IDENTIFIERS + STANDARD_OUTPUT
+    for column in STANDARD_OUTPUT:
+        assert column in standard_output_sheet.columns
+
+    cso_workbook = pd.read_excel(
+        workbook_path, sheet_name="CSO_13_Cohort_All_Years", nrows=1
+    )
+    goblin_workbook = pd.read_excel(
+        workbook_path, sheet_name="GOBLIN_31_Cohort_All_Years", nrows=1
+    )
+    assert not any(column.startswith("SO_") for column in cso_workbook.columns)
+    assert not any(column.startswith("SO_") for column in goblin_workbook.columns)
 
     # Both supported scenario starting years must be complete historical states,
     # not partial slices. Scenario code may later choose either snapshot without
