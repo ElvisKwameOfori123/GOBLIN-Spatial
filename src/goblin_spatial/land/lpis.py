@@ -410,11 +410,19 @@ def build_ed_lpis_profile(
         raise ValueError("LPIS and ED geometry must both have a defined CRS")
 
     baseline_one = baseline.drop_duplicates(subset=[baseline_key_col]).copy()
-    baseline_keyed, ed_selected = select_baseline_ed_geometries(
+    baseline_keyed = baseline_one.copy()
+    baseline_keyed["CSOED_CANONICAL"] = baseline_keyed[baseline_key_col].map(
+        canonical_csoed
+    )
+    if baseline_keyed["CSOED_CANONICAL"].eq("").any():
+        raise ValueError(f"{baseline_key_col} contains blank ED identifiers")
+    if baseline_keyed["CSOED_CANONICAL"].duplicated().any():
+        raise ValueError("baseline contains duplicate canonical ED identifiers")
+    ed_selected = select_baseline_ed_geometries(
         baseline_one,
         ed_gdf,
-        baseline_key_col=baseline_key_col,
-        ed_key_col=ed_key_col,
+        baseline_key=baseline_key_col,
+        ed_key=ed_key_col,
     )
     ed_selected = ed_selected.to_crs(target_crs).copy()
     invalid_ed = ~ed_selected.geometry.is_valid
