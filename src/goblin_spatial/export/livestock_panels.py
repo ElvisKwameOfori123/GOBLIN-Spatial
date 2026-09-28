@@ -196,7 +196,8 @@ README = [
     ("Sheep chain", "AAA09 region -> county (CSO 2020 reference x DAFM breeding-ewe index) -> ED (2010 to 2020 share path) -> 4 AAA09 classes -> DAFM breed/system (2015 uses 2016 composition) -> 10 cohorts."),
     ("Upland / lowland", "Upland = mountain + mountain-cross breed type (DAFM): a breed/system proxy, not observed land location."),
     ("Provenance", "CATTLE_PROVENANCE and SHEEP_PROVENANCE say whether a row is the published 2020 census or a reconstructed year."),
-    ("Not included", "National GOBLIN/COHORTS calibration (GOBLIN_31_Cohort_Calibrated_Annual_Panel_2015_2025, reserved), land use, crops, farm structure, farmer age, Standard Output: later, separate steps on this same YEAR x CSOED backbone."),
+    ("Historical context", "Production-pipeline exports also carry AREA_FARMED, ALL_GRASSLAND, TOTAL_CEREALS, OTHER_CROPS_HA, AGRICULTURAL_HOLDINGS, AVERAGE_SIZE_OF_HOLDINGS, AVERAGE_AGE_OF_HOLDER and MEDIAN_AGE_OF_HOLDER. No historical forestry variable is included."),
+    ("Not included", "National GOBLIN/COHORTS calibration (GOBLIN_31_Cohort_Calibrated_Annual_Panel_2015_2025, reserved) and Standard Output remain later, separate steps on the same YEAR x CSOED backbone."),
     ("Checks", "Accounting checks run when the file was built. All must be TRUE."),
     ("Units", "Head of livestock (integers)."),
 ]
