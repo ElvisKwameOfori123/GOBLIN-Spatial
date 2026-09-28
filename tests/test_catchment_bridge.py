@@ -158,6 +158,8 @@ def test_structure_metrics_are_recomputed_after_aggregation():
             "AVERAGE_SIZE_OF_HOLDINGS": [99.0, 99.0],
             "AVERAGE_AGE_OF_HOLDER": [50.0, 70.0],
             "MEDIAN_AGE_OF_HOLDER": [48.0, 68.0],
+            "SO_COVERED_TOTAL_2020_EUR": [1000.0, 6000.0],
+            "SO_COVERED_TOTAL_CONSERVATIVE_2020_EUR": [900.0, 5400.0],
         }
     )
     crosswalk = pd.DataFrame(
@@ -176,11 +178,15 @@ def test_structure_metrics_are_recomputed_after_aggregation():
         "TOTAL_CATTLE",
         "AGRICULTURAL_HOLDINGS",
         "AREA_FARMED",
+        "SO_COVERED_TOTAL_2020_EUR",
+        "SO_COVERED_TOTAL_CONSERVATIVE_2020_EUR",
     ]
 
     county = aggregate_to_counties(master, additive_columns=additive)
     assert county.loc[0, "AVERAGE_SIZE_OF_HOLDINGS"] == pytest.approx(17.5)
     assert county.loc[0, "AVERAGE_AGE_OF_HOLDER"] == pytest.approx(65.0)
+    assert county.loc[0, "SO_COVERED_PER_HOLDING_2020_EUR"] == pytest.approx(175.0)
+    assert county.loc[0, "SO_COVERED_PER_HOLDING_CONSERVATIVE_2020_EUR"] == pytest.approx(157.5)
     assert "MEDIAN_AGE_OF_HOLDER" not in county.columns
 
     national = aggregate_to_national(master, additive_columns=additive)
@@ -188,6 +194,7 @@ def test_structure_metrics_are_recomputed_after_aggregation():
     assert national.loc[0, "GEOGRAPHY"] == "Ireland"
     assert national.loc[0, "AVERAGE_SIZE_OF_HOLDINGS"] == pytest.approx(17.5)
     assert national.loc[0, "AVERAGE_AGE_OF_HOLDER"] == pytest.approx(65.0)
+    assert national.loc[0, "SO_COVERED_PER_HOLDING_2020_EUR"] == pytest.approx(175.0)
     assert "MEDIAN_AGE_OF_HOLDER" not in national.columns
 
     wfd = aggregate_to_wfd_catchments(
@@ -199,6 +206,7 @@ def test_structure_metrics_are_recomputed_after_aggregation():
     upper = wfd.loc[wfd["WFD_CATCHMENT_ID"] == "026A"].iloc[0]
     assert blackwater["AVERAGE_SIZE_OF_HOLDINGS"] == pytest.approx(10.0)
     assert blackwater["AVERAGE_AGE_OF_HOLDER"] == pytest.approx(50.0)
+    assert blackwater["SO_COVERED_PER_HOLDING_2020_EUR"] == pytest.approx(100.0)
     assert upper["AVERAGE_SIZE_OF_HOLDINGS"] == pytest.approx(650.0 / 35.0)
     assert upper["AVERAGE_AGE_OF_HOLDER"] == pytest.approx(
         (5.0 * 50.0 + 30.0 * 70.0) / 35.0
@@ -208,6 +216,7 @@ def test_structure_metrics_are_recomputed_after_aggregation():
     colm = aggregate_wfd_to_colm(wfd, additive_columns=additive)
     assert "AVERAGE_SIZE_OF_HOLDINGS" in colm.columns
     assert "AVERAGE_AGE_OF_HOLDER" in colm.columns
+    assert "SO_COVERED_PER_HOLDING_2020_EUR" in colm.columns
     assert "MEDIAN_AGE_OF_HOLDER" not in colm.columns
 
 
@@ -228,3 +237,5 @@ def test_default_reporting_contract_carries_both_livestock_resolutions_and_so():
     assert "AVERAGE_AGE_OF_HOLDER" not in columns
     assert "AVERAGE_SIZE_OF_HOLDINGS" not in columns
     assert "MEDIAN_AGE_OF_HOLDER" not in columns
+    assert "SO_COVERED_PER_HOLDING_2020_EUR" not in columns
+    assert "SO_COVERED_PER_HOLDING_CONSERVATIVE_2020_EUR" not in columns
