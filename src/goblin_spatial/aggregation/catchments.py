@@ -136,6 +136,14 @@ DEFAULT_ADDITIVE_COLUMNS = tuple(
     )
 )
 
+NON_ADDITIVE_STRUCTURE_COLUMNS = (
+    "AVERAGE_SIZE_OF_HOLDINGS",
+    "AVERAGE_AGE_OF_HOLDER",
+    "MEDIAN_AGE_OF_HOLDER",
+    "SO_COVERED_PER_HOLDING_2020_EUR",
+    "SO_COVERED_PER_HOLDING_CONSERVATIVE_2020_EUR",
+)
+
 
 def _name_key(value: object) -> str:
     text = "" if value is None else str(value)
@@ -242,10 +250,75 @@ def _existing_additive(
     requested = (
         list(columns) if columns is not None else list(DEFAULT_ADDITIVE_COLUMNS)
     )
-    existing = [column for column in requested if column in master.columns]
+    existing = [
+        column
+        for column in requested
+        if column in master.columns and column not in NON_ADDITIVE_STRUCTURE_COLUMNS
+    ]
     if not existing:
         raise ValueError("No requested additive GOBLIN-Spatial columns were found.")
     return existing
+
+
+def _attach_structure_metrics(
+    frame: pd.DataFrame,
+    *,
+    age_numerator: pd.Series | np.ndarray | None = None,
+    age_denominator: pd.Series | np.ndarray | None = None,
+) -> pd.DataFrame:
+    """Attach valid higher-level farm-structure indicators.
+
+    Average holding size is recomputed from aggregate area and holdings.
+    Average holder age is holdings-weighted. Median holder age is deliberately
+    not propagated because an aggregate median cannot be recovered from ED
+    medians.
+    """
+
+    out = frame.copy()
+    if {"AREA_FARMED", "AGRICULTURAL_HOLDINGS"}.issubset(out.columns):
+        area = pd.to_numeric(out["AREA_FARMED"], errors="raise").to_numpy(dtype=float)
+        holdings = pd.to_numeric(
+            out["AGRICULTURAL_HOLDINGS"], errors="raise"
+        ).to_numpy(dtype=float)
+        out["AVERAGE_SIZE_OF_HOLDINGS"] = np.divide(
+            area,
+            holdings,
+            out=np.full(len(out), np.nan, dtype=float),
+            where=holdings > 0,
+        )
+
+    if age_numerator is not None and age_denominator is not None:
+        numerator = np.asarray(age_numerator, dtype=float)
+        denominator = np.asarray(age_denominator, dtype=float)
+        out["AVERAGE_AGE_OF_HOLDER"] = np.divide(
+            numerator,
+            denominator,
+            out=np.full(len(out), np.nan, dtype=float),
+            where=denominator > 0,
+        )
+
+    if "AGRICULTURAL_HOLDINGS" in out.columns:
+        holdings = pd.to_numeric(
+            out["AGRICULTURAL_HOLDINGS"], errors="raise"
+        ).to_numpy(dtype=float)
+        for total_column, per_holding_column in (
+            ("SO_COVERED_TOTAL_2020_EUR", "SO_COVERED_PER_HOLDING_2020_EUR"),
+            (
+                "SO_COVERED_TOTAL_CONSERVATIVE_2020_EUR",
+                "SO_COVERED_PER_HOLDING_CONSERVATIVE_2020_EUR",
+            ),
+        ):
+            if total_column in out.columns:
+                total = pd.to_numeric(
+                    out[total_column], errors="raise"
+                ).to_numpy(dtype=float)
+                out[per_holding_column] = np.divide(
+                    total,
+                    holdings,
+                    out=np.full(len(out), np.nan, dtype=float),
+                    where=holdings > 0,
+                )
+    return out
 
 
 def build_ed_catchment_crosswalk(
@@ -473,10 +546,24 @@ def aggregate_to_wfd_catchments(
     year_col: str = "YEAR",
     ed_key: str = "CSOED",
 ) -> pd.DataFrame:
-    """Aggregate the ED x year master to official WFD catchment x year."""
+    """Aggregate the ED x year master to official WFD catchment x year.
+
+    Additive quantities are split by ED-catchment area weights. Higher-level
+    average holding size is recomputed from aggregate area/holdings, while
+    average holder age is weighted by the holdings represented in each
+    fractional ED contribution.
+    """
     columns = _existing_additive(master, additive_columns)
     if master.duplicated([year_col, ed_key]).any():
         raise ValueError("Master must contain one row per ED x year.")
+
+    source_columns = [year_col, ed_key, *columns]
+    include_age = (
+        "AVERAGE_AGE_OF_HOLDER" in master.columns
+        and "AGRICULTURAL_HOLDINGS" in columns
+    )
+    if include_age:
+        source_columns.append("AVERAGE_AGE_OF_HOLDER")
 
     weights = crosswalk[
         [
@@ -486,7 +573,7 @@ def aggregate_to_wfd_catchments(
             "ED_CATCHMENT_WEIGHT",
         ]
     ].copy()
-    merged = master[[year_col, ed_key, *columns]].merge(
+    merged = master[source_columns].merge(
         weights,
         on=ed_key,
         how="left",
@@ -503,18 +590,44 @@ def aggregate_to_wfd_catchments(
         )
         raise ValueError(f"Crosswalk missing model EDs; examples={missing[:10]}")
 
-    weighted = merged[columns].multiply(
-        merged["ED_CATCHMENT_WEIGHT"],
+    w = pd.to_numeric(
+        merged["ED_CATCHMENT_WEIGHT"], errors="raise"
+    ).to_numpy(dtype=float)
+    weighted = merged[columns].apply(pd.to_numeric, errors="raise").multiply(
+        w,
         axis=0,
     )
     weighted[year_col] = merged[year_col].to_numpy()
     weighted["WFD_CATCHMENT_ID"] = merged["WFD_CATCHMENT_ID"].to_numpy()
     weighted["WFD_CATCHMENT"] = merged["WFD_CATCHMENT"].to_numpy()
 
-    out = weighted.groupby(
-        [year_col, "WFD_CATCHMENT_ID", "WFD_CATCHMENT"],
-        as_index=False,
-    )[columns].sum()
+    group_keys = [year_col, "WFD_CATCHMENT_ID", "WFD_CATCHMENT"]
+    out = weighted.groupby(group_keys, as_index=False)[columns].sum()
+
+    age_numerator = age_denominator = None
+    if include_age:
+        holdings = pd.to_numeric(
+            merged["AGRICULTURAL_HOLDINGS"], errors="raise"
+        ).to_numpy(dtype=float)
+        age = pd.to_numeric(
+            merged["AVERAGE_AGE_OF_HOLDER"], errors="coerce"
+        ).to_numpy(dtype=float)
+        valid = np.isfinite(age)
+        age_work = merged[group_keys].copy()
+        age_work["_AGE_NUM"] = np.where(valid, age * holdings * w, 0.0)
+        age_work["_AGE_DEN"] = np.where(valid, holdings * w, 0.0)
+        age_grouped = age_work.groupby(group_keys, as_index=False)[
+            ["_AGE_NUM", "_AGE_DEN"]
+        ].sum()
+        out = out.merge(age_grouped, on=group_keys, how="left", validate="one_to_one")
+        age_numerator = out.pop("_AGE_NUM")
+        age_denominator = out.pop("_AGE_DEN")
+
+    out = _attach_structure_metrics(
+        out,
+        age_numerator=age_numerator,
+        age_denominator=age_denominator,
+    )
     return out.sort_values(
         [year_col, "WFD_CATCHMENT_ID"],
         kind="stable",
@@ -531,34 +644,27 @@ def aggregate_wfd_to_colm(
     additive_columns: Iterable[str] | None = None,
     year_col: str = "YEAR",
 ) -> pd.DataFrame:
-    """Collapse the official 46 WFD units to Colm's 37 catchment groups."""
+    """Collapse the official 46 WFD units to Colm's 37 catchment groups.
+
+    Only additive quantities are summed. Farm-structure averages are recomputed
+    after aggregation rather than summed across WFD units.
+    """
     if "WFD_CATCHMENT" not in wfd_catchment_year.columns:
         raise ValueError("WFD catchment table is missing WFD_CATCHMENT.")
 
-    if additive_columns is None:
-        excluded = {
-            year_col,
-            "WFD_CATCHMENT_ID",
-            "WFD_CATCHMENT",
-            "COLM_CATCHMENT",
-        }
-        columns = [
-            column
-            for column in wfd_catchment_year.columns
-            if column not in excluded
-            and pd.api.types.is_numeric_dtype(wfd_catchment_year[column])
-        ]
-    else:
-        columns = [
-            column
-            for column in additive_columns
-            if column in wfd_catchment_year.columns
-        ]
-
+    columns = _existing_additive(wfd_catchment_year, additive_columns)
     id_cols = ["WFD_CATCHMENT"]
     if "WFD_CATCHMENT_ID" in wfd_catchment_year.columns:
         id_cols.append("WFD_CATCHMENT_ID")
-    work = wfd_catchment_year[[year_col, *id_cols, *columns]].copy()
+
+    source_columns = [year_col, *id_cols, *columns]
+    include_age = (
+        "AVERAGE_AGE_OF_HOLDER" in wfd_catchment_year.columns
+        and "AGRICULTURAL_HOLDINGS" in columns
+    )
+    if include_age:
+        source_columns.append("AVERAGE_AGE_OF_HOLDER")
+    work = wfd_catchment_year[source_columns].copy()
 
     if "WFD_CATCHMENT_ID" in work.columns:
         work["COLM_CATCHMENT"] = [
@@ -573,18 +679,39 @@ def aggregate_wfd_to_colm(
             to_colm_catchment_name
         )
 
-    unknown = sorted(
-        set(work["COLM_CATCHMENT"]) - set(COLM_CATCHMENTS)
-    )
+    unknown = sorted(set(work["COLM_CATCHMENT"]) - set(COLM_CATCHMENTS))
     if unknown:
         raise ValueError(
             f"Unexpected Colm catchment names after harmonisation: {unknown}"
         )
 
-    out = work.groupby(
-        [year_col, "COLM_CATCHMENT"],
-        as_index=False,
-    )[columns].sum()
+    group_keys = [year_col, "COLM_CATCHMENT"]
+    out = work.groupby(group_keys, as_index=False)[columns].sum()
+
+    age_numerator = age_denominator = None
+    if include_age:
+        holdings = pd.to_numeric(
+            work["AGRICULTURAL_HOLDINGS"], errors="raise"
+        ).to_numpy(dtype=float)
+        age = pd.to_numeric(
+            work["AVERAGE_AGE_OF_HOLDER"], errors="coerce"
+        ).to_numpy(dtype=float)
+        valid = np.isfinite(age)
+        age_work = work[group_keys].copy()
+        age_work["_AGE_NUM"] = np.where(valid, age * holdings, 0.0)
+        age_work["_AGE_DEN"] = np.where(valid, holdings, 0.0)
+        age_grouped = age_work.groupby(group_keys, as_index=False)[
+            ["_AGE_NUM", "_AGE_DEN"]
+        ].sum()
+        out = out.merge(age_grouped, on=group_keys, how="left", validate="one_to_one")
+        age_numerator = out.pop("_AGE_NUM")
+        age_denominator = out.pop("_AGE_DEN")
+
+    out = _attach_structure_metrics(
+        out,
+        age_numerator=age_numerator,
+        age_denominator=age_denominator,
+    )
     return out.sort_values(
         [year_col, "COLM_CATCHMENT"],
         kind="stable",
@@ -598,18 +725,87 @@ def aggregate_to_counties(
     year_col: str = "YEAR",
     county_col: str = "County",
 ) -> pd.DataFrame:
-    """Aggregate additive ED quantities to county x year."""
+    """Aggregate ED quantities to county x year with valid structure metrics."""
     columns = _existing_additive(master, additive_columns)
     if county_col not in master.columns:
         raise ValueError(f"Master is missing county column: {county_col}")
-    out = master.groupby(
-        [year_col, county_col],
-        as_index=False,
-    )[columns].sum()
+
+    group_keys = [year_col, county_col]
+    out = master.groupby(group_keys, as_index=False)[columns].sum()
+
+    age_numerator = age_denominator = None
+    if (
+        "AVERAGE_AGE_OF_HOLDER" in master.columns
+        and "AGRICULTURAL_HOLDINGS" in columns
+    ):
+        holdings = pd.to_numeric(
+            master["AGRICULTURAL_HOLDINGS"], errors="raise"
+        ).to_numpy(dtype=float)
+        age = pd.to_numeric(
+            master["AVERAGE_AGE_OF_HOLDER"], errors="coerce"
+        ).to_numpy(dtype=float)
+        valid = np.isfinite(age)
+        age_work = master[group_keys].copy()
+        age_work["_AGE_NUM"] = np.where(valid, age * holdings, 0.0)
+        age_work["_AGE_DEN"] = np.where(valid, holdings, 0.0)
+        age_grouped = age_work.groupby(group_keys, as_index=False)[
+            ["_AGE_NUM", "_AGE_DEN"]
+        ].sum()
+        out = out.merge(age_grouped, on=group_keys, how="left", validate="one_to_one")
+        age_numerator = out.pop("_AGE_NUM")
+        age_denominator = out.pop("_AGE_DEN")
+
+    out = _attach_structure_metrics(
+        out,
+        age_numerator=age_numerator,
+        age_denominator=age_denominator,
+    )
     return out.sort_values(
         [year_col, county_col],
         kind="stable",
     ).reset_index(drop=True)
+
+
+def aggregate_to_national(
+    master: pd.DataFrame,
+    *,
+    additive_columns: Iterable[str] | None = None,
+    year_col: str = "YEAR",
+) -> pd.DataFrame:
+    """Aggregate ED quantities to one Ireland row per year."""
+
+    columns = _existing_additive(master, additive_columns)
+    out = master.groupby(year_col, as_index=False)[columns].sum()
+
+    age_numerator = age_denominator = None
+    if (
+        "AVERAGE_AGE_OF_HOLDER" in master.columns
+        and "AGRICULTURAL_HOLDINGS" in columns
+    ):
+        holdings = pd.to_numeric(
+            master["AGRICULTURAL_HOLDINGS"], errors="raise"
+        ).to_numpy(dtype=float)
+        age = pd.to_numeric(
+            master["AVERAGE_AGE_OF_HOLDER"], errors="coerce"
+        ).to_numpy(dtype=float)
+        valid = np.isfinite(age)
+        age_work = master[[year_col]].copy()
+        age_work["_AGE_NUM"] = np.where(valid, age * holdings, 0.0)
+        age_work["_AGE_DEN"] = np.where(valid, holdings, 0.0)
+        age_grouped = age_work.groupby(year_col, as_index=False)[
+            ["_AGE_NUM", "_AGE_DEN"]
+        ].sum()
+        out = out.merge(age_grouped, on=year_col, how="left", validate="one_to_one")
+        age_numerator = out.pop("_AGE_NUM")
+        age_denominator = out.pop("_AGE_DEN")
+
+    out = _attach_structure_metrics(
+        out,
+        age_numerator=age_numerator,
+        age_denominator=age_denominator,
+    )
+    out.insert(1, "GEOGRAPHY", "Ireland")
+    return out.sort_values(year_col, kind="stable").reset_index(drop=True)
 
 
 def validate_aggregation_closure(

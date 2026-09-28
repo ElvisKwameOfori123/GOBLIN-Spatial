@@ -108,6 +108,8 @@ def _additive_columns(frame: pd.DataFrame) -> list[str]:
         *FINAL_21_COHORTS,
         *GOBLIN_SHEEP_10,
         *SO_COMPONENTS,
+        "SO_OTHER_CROPS_CONSERVATIVE_2020_EUR",
+        "SO_OTHER_CROPS_IMPUTED_HA",
         "SO_LIVESTOCK_2020_EUR",
         "SO_COVERED_TOTAL_2020_EUR",
         "SO_COVERED_TOTAL_CONSERVATIVE_2020_EUR",
@@ -119,10 +121,57 @@ def aggregate_state(
     master: pd.DataFrame,
     by: list[str],
 ) -> pd.DataFrame:
-    """Aggregate additive state variables, then derive signatures after aggregation."""
+    """Aggregate additive state, then derive signatures and structure metrics.
+
+    Average holding size is AREA_FARMED / AGRICULTURAL_HOLDINGS after
+    aggregation. Average holder age is holdings-weighted. Median holder age is
+    intentionally not propagated because ED medians cannot recover a valid
+    higher-level median.
+    """
 
     cols = _additive_columns(master)
-    grouped = master.groupby(by, as_index=False, sort=True)[cols].sum()
+    work = master.copy()
+    include_age = (
+        "AVERAGE_AGE_OF_HOLDER" in work.columns
+        and "AGRICULTURAL_HOLDINGS" in work.columns
+    )
+    temp_cols: list[str] = []
+    if include_age:
+        holdings = _num(work, "AGRICULTURAL_HOLDINGS")
+        age = pd.to_numeric(
+            work["AVERAGE_AGE_OF_HOLDER"], errors="coerce"
+        ).astype(float)
+        valid = age.notna()
+        work["_AGE_HOLDING_NUM"] = np.where(valid, age * holdings, 0.0)
+        work["_AGE_HOLDING_DEN"] = np.where(valid, holdings, 0.0)
+        temp_cols = ["_AGE_HOLDING_NUM", "_AGE_HOLDING_DEN"]
+
+    grouped = work.groupby(by, as_index=False, sort=True)[[*cols, *temp_cols]].sum()
+
+    if {"AREA_FARMED", "AGRICULTURAL_HOLDINGS"}.issubset(grouped.columns):
+        grouped["AVERAGE_SIZE_OF_HOLDINGS"] = _safe_ratio(
+            grouped["AREA_FARMED"], grouped["AGRICULTURAL_HOLDINGS"]
+        )
+
+    if include_age:
+        grouped["AVERAGE_AGE_OF_HOLDER"] = _safe_ratio(
+            grouped["_AGE_HOLDING_NUM"], grouped["_AGE_HOLDING_DEN"]
+        )
+        grouped = grouped.drop(columns=temp_cols)
+
+    if "AGRICULTURAL_HOLDINGS" in grouped.columns:
+        for total_column, per_holding_column in (
+            ("SO_COVERED_TOTAL_2020_EUR", "SO_COVERED_PER_HOLDING_2020_EUR"),
+            (
+                "SO_COVERED_TOTAL_CONSERVATIVE_2020_EUR",
+                "SO_COVERED_PER_HOLDING_CONSERVATIVE_2020_EUR",
+            ),
+        ):
+            if total_column in grouped.columns:
+                grouped[per_holding_column] = _safe_ratio(
+                    grouped[total_column], grouped["AGRICULTURAL_HOLDINGS"]
+                )
+
     return add_signature_metrics(grouped)
 
 

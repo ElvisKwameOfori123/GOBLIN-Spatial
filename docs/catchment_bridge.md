@@ -4,13 +4,16 @@ This is a downstream aggregation layer for the validated GOBLIN-Spatial historic
 
 ## Purpose
 
-The same 2015-2025 livestock system can be viewed at four scales:
+The same 2015-2025 system can be viewed at four reporting scales:
 
 ```text
-ED -> county -> official WFD catchment -> Ireland
+                 -> county
+ED (authority)  -> official WFD catchment
+                 -> Ireland
 ```
 
-The ED x year master remains authoritative. County and catchment tables are derived views.
+County and WFD catchment are parallel derived views of the authoritative ED x
+year master, not a nested spatial hierarchy.
 
 ## Catchment geography
 
@@ -20,30 +23,34 @@ Dataset landing page:
 
 https://data.gov.ie/dataset/water-framework-directive-water-catchments
 
-A public GSI FeatureServer mirror of the EPA WFD Catchments layer exposes the polygons programmatically. It is used only as a reproducible fallback when a locally frozen EPA package is absent. For a publication release, a current EPA download should be preferred and frozen explicitly. The mirror exposes:
-
-- layer ID: 2
-- catchment identifier field: `CATCHMENTI`
-- catchment name field: `NAME`
-- spatial reference: EPSG:2157
-- 46 catchment features
-- GeoJSON query support
-
-The bridge preserves those **46 official WFD catchments** as the primary hydrological output.
-
-A second compatibility output collapses the detailed Upper Shannon and Lower Shannon units to the 37-name catchment system used by Colm Duffy's `GOBLIN-Proj/catchment_data_api`. The 37-unit table is therefore derived from the official WFD result and is not the spatial authority.
-
-## Automatic retrieval and freezing
-
-The build first looks for:
+The repository contains a frozen copy of the 46-feature EPA WFD catchment
+geometry at:
 
 ```text
 data/inputs/spatial/WFD_Catchments_Frozen.gpkg
 ```
 
-If that file is absent, the script queries the public GSI mirror of the EPA WFD Catchments layer, verifies that 46 features were returned, and writes the result to the path above as a frozen GeoPackage. This fallback is convenient for reproducible builds, but it is not treated as evidence that the mirror is newer than the latest EPA download package.
+Its SHA-256 is pinned in both `data_manifest.yaml` and the adjacent
+`WFD_Catchments_Frozen.gpkg.sha256` sidecar. The frozen layer uses
+`CATCHMENTI` as the catchment identifier, `NAME` as the catchment name and
+EPSG:2157 geometry.
 
-This means a manual EPA download is optional. A locally supplied official catchment file can still be used by passing `--catchment-geometry`.
+The bridge preserves those **46 official WFD catchments** as the primary hydrological output.
+
+A second compatibility output collapses the detailed Upper Shannon and Lower Shannon units to the 37-name catchment system used by Colm Duffy's `GOBLIN-Proj/catchment_data_api`. The 37-unit table is therefore derived from the official WFD result and is not the spatial authority.
+
+## Frozen input contract
+
+Normal production builds are offline with respect to catchment geography.
+`scripts/build_catchment_baseline.py` requires the frozen GeoPackage and its
+checksum sidecar, verifies the SHA-256 before reading the layer, and fails if
+either file is absent or altered. It does not query a live spatial service.
+
+A different catchment file can still be supplied explicitly with
+`--catchment-geometry`, but it must have a matching SHA-256 sidecar supplied
+with `--catchment-checksum` (or located at
+`<catchment-geometry>.sha256`). This prevents silent changes in the
+ED-to-catchment weights.
 
 ## Method
 
@@ -75,6 +82,7 @@ data/processed/ed_wfd_catchment_crosswalk.csv
 data/processed/goblin_spatial_wfd_catchment_2015_2025.csv
 data/processed/goblin_spatial_colm_catchment_2015_2025.csv
 data/processed/goblin_spatial_county_2015_2025.csv
+data/processed/goblin_spatial_national_2015_2025.csv
 data/processed/catchment_closure_diagnostics.csv
 ```
 
@@ -86,7 +94,22 @@ data/processed/catchment_closure_diagnostics.csv
 
 `goblin_spatial_colm_catchment_2015_2025.csv` aggregates the official WFD result into the 37-name system used by `catchment_data_api`. It exists for comparison and integration with the existing GOBLIN catchment package.
 
-The catchment and county outputs contain the additive livestock cohorts, livestock totals, selected agricultural areas and additive Standard Output components already present in the ED master.
+The county, catchment and national outputs carry both livestock representations
+already present in the ED master: the CSO-controlled groups/totals and the full
+31 GOBLIN cohorts. They also carry additive agricultural land, holdings and
+fixed-2020 Standard Output components.
+
+Farm-structure averages are not summed. At county, WFD catchment, 37-catchment
+compatibility and national scales:
+
+```text
+AVERAGE_SIZE_OF_HOLDINGS = AREA_FARMED / AGRICULTURAL_HOLDINGS
+```
+
+and `AVERAGE_AGE_OF_HOLDER` is weighted by represented agricultural holdings.
+For catchments, those holdings follow the same fractional ED-to-catchment area
+weights used by the rest of the bridge. `MEDIAN_AGE_OF_HOLDER` remains ED-only
+because a valid higher-level median cannot be recovered from ED medians.
 
 ## Accounting rule
 

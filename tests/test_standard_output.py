@@ -5,7 +5,9 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from goblin_spatial.baseline.standard_output import add_standard_output
 from goblin_spatial.cattle.cohorts import FINAL_21_COHORTS
+from goblin_spatial.config import load_config
 from goblin_spatial.sheep.cohorts import GOBLIN_SHEEP_10
 from goblin_spatial.standard_output import (
     COHORT_PRODUCT_CODE,
@@ -164,3 +166,49 @@ def test_pathway_standard_output_reports_exposure_and_null_identity() -> None:
         reduced["SO_LIVESTOCK_CHANGE_2020_EUR"], -expected_exposure
     )
     assert np.isclose(reduced["SO_LIVESTOCK_CHANGE_PCT"], -20.0)
+
+
+
+def test_stage08_wrapper_preserves_activity_fields_and_accounting() -> None:
+    cfg = load_config("configs/ireland_2015_2025.yaml")
+    row = _zero_31_row("Mayo")
+    row.update(
+        {
+            "YEAR": 2020,
+            "CSOED": "TEST001",
+            "TOTAL_CEREALS": 5.0,
+            "OTHER_CROPS_HA": 7.0,
+            "AGRICULTURAL_HOLDINGS": 2,
+            "dairy_cows": 2,
+            "suckler_cows": 3,
+            "bulls": 1,
+            "Lowland ewes": 4,
+            "Upland ewes": 5,
+        }
+    )
+    baseline = pd.DataFrame([row])
+    valued = add_standard_output(baseline, cfg)
+
+    assert valued[baseline.columns].equals(baseline)
+    assert valued.loc[0, "FADN_REGION"] == "381"
+
+    livestock_components = (
+        valued.loc[0, "SO_DAIRY_COWS_2020_EUR"]
+        + valued.loc[0, "SO_SUCKLER_COWS_2020_EUR"]
+        + valued.loc[0, "SO_BULLS_2020_EUR"]
+        + valued.loc[0, "SO_FOLLOWERS_2020_EUR"]
+        + valued.loc[0, "SO_SHEEP_2020_EUR"]
+    )
+    assert np.isclose(
+        valued.loc[0, "SO_LIVESTOCK_2020_EUR"], livestock_components
+    )
+    assert np.isclose(
+        valued.loc[0, "SO_COVERED_TOTAL_2020_EUR"],
+        valued.loc[0, "SO_LIVESTOCK_2020_EUR"]
+        + valued.loc[0, "SO_CEREALS_2020_EUR"]
+        + valued.loc[0, "SO_OTHER_CROPS_2020_EUR"],
+    )
+    assert np.isclose(
+        valued.loc[0, "SO_COVERED_PER_HOLDING_2020_EUR"],
+        valued.loc[0, "SO_COVERED_TOTAL_2020_EUR"] / 2,
+    )

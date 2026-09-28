@@ -92,6 +92,7 @@ def test_config_separates_baseline_from_downstream_spatial_inputs():
         "cso_cattle_county",
         "cso_sheep_workbook",
         "sheep_breed_anchors",
+        "dafm_sheep_county_pattern",
         "goblin_cohorts",
         "cso_land",
         "se_controls",
@@ -99,8 +100,10 @@ def test_config_separates_baseline_from_downstream_spatial_inputs():
     }
     assert baseline_keys.issubset(config.files)
 
-    # Retained validation evidence is not a production sheep-control key.
-    assert "dafm_sheep_county_validation" in config.files
+    # DAFM county ewe geography is a production allocation prior, not
+    # independent validation evidence. The obsolete validation alias is gone.
+    assert "dafm_sheep_county_pattern" in config.files
+    assert "dafm_sheep_county_validation" not in config.files
     assert "county_region_map" not in config.files
 
     # The production land context is the frozen 2020 soil + LPIS bundle.

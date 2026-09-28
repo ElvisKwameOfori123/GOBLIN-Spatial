@@ -15,6 +15,7 @@ import pandas as pd
 from goblin_spatial.baseline.signatures import build_signatures
 from goblin_spatial.cattle.cohorts import FINAL_21_COHORTS
 from goblin_spatial.config import load_config
+from goblin_spatial.export.workbook import IDENTIFIERS, STANDARD_OUTPUT
 from goblin_spatial.pipeline import run_baseline
 from goblin_spatial.sheep.cohorts import GOBLIN_SHEEP_10
 
@@ -41,6 +42,18 @@ def test_full_historical_baseline_through_stage09():
     eds_by_year = panel.groupby("_YEAR_CHECK", sort=True)["CSOED"].nunique()
     assert rows_by_year.to_dict() == {year: 2_857 for year in EXPECTED_YEARS}
     assert eds_by_year.to_dict() == {year: 2_857 for year in EXPECTED_YEARS}
+
+    # Production now uses the finished cattle and sheep chains. Published
+    # 2020 ED livestock values must therefore remain unchanged.
+    published_2020 = pd.read_csv(cfg.files["cso_ed_2020"], dtype={"CSOED": str}).set_index("CSOED")
+    built_2020 = baseline.loc[year_values == 2020].copy()
+    built_2020["CSOED"] = built_2020["CSOED"].astype(str)
+    built_2020 = built_2020.set_index("CSOED").loc[published_2020.index]
+    for column in ("DAIRY_COW", "OTHER_COW", "OTHER_CATTLE", "TOTAL_CATTLE", "TOTAL_SHEEP"):
+        assert np.array_equal(
+            pd.to_numeric(built_2020[column], errors="raise").to_numpy(dtype=np.int64),
+            pd.to_numeric(published_2020[column], errors="raise").to_numpy(dtype=np.int64),
+        )
 
     # Every reconstructed year must contain the same agricultural ED universe.
     anchor_ed_universe = set(
@@ -89,6 +102,66 @@ def test_full_historical_baseline_through_stage09():
     }
     assert required_structure.issubset(baseline.columns)
 
+    # The two canonical public annual panels are emitted from this same
+    # production master after land and farm-structure enrichment.
+    for key in ("cso_13_cohort_panel", "goblin_31_cohort_panel"):
+        panel_path = Path(cfg.raw["outputs"][key])
+        if not panel_path.is_absolute():
+            panel_path = cfg.project_root / panel_path
+        assert panel_path.exists()
+        public = pd.read_csv(panel_path)
+        assert len(public) == 31_427
+        assert public["CSOED"].nunique() == 2_857
+        assert not public[["YEAR", "CSOED"]].duplicated().any()
+        for column in (
+            "AREA_FARMED",
+            "ALL_GRASSLAND",
+            "TOTAL_CEREALS",
+            "OTHER_CROPS_HA",
+            "AGRICULTURAL_HOLDINGS",
+            "AVERAGE_SIZE_OF_HOLDINGS",
+            "AVERAGE_AGE_OF_HOLDER",
+            "MEDIAN_AGE_OF_HOLDER",
+        ):
+            assert column in public.columns
+            assert public[column].notna().all()
+
+    cso13_path = Path(cfg.raw["outputs"]["cso_13_cohort_panel"])
+    goblin31_path = Path(cfg.raw["outputs"]["goblin_31_cohort_panel"])
+    if not cso13_path.is_absolute():
+        cso13_path = cfg.project_root / cso13_path
+    if not goblin31_path.is_absolute():
+        goblin31_path = cfg.project_root / goblin31_path
+    cso13_public = pd.read_csv(cso13_path)
+    goblin31_public = pd.read_csv(goblin31_path)
+    context_columns = [
+        "AREA_FARMED",
+        "ALL_GRASSLAND",
+        "TOTAL_CEREALS",
+        "OTHER_CROPS_HA",
+        "AGRICULTURAL_HOLDINGS",
+        "AVERAGE_SIZE_OF_HOLDINGS",
+        "AVERAGE_AGE_OF_HOLDER",
+        "MEDIAN_AGE_OF_HOLDER",
+    ]
+    assert cso13_public[["YEAR", "CSOED", *context_columns]].equals(
+        goblin31_public[["YEAR", "CSOED", *context_columns]]
+    )
+
+    published_context = pd.read_csv(
+        cfg.files["cso_ed_2020"], dtype={"CSOED": str}
+    ).set_index("CSOED")
+    cso13_2020 = cso13_public.loc[cso13_public["YEAR"] == 2020].copy()
+    cso13_2020["CSOED"] = cso13_2020["CSOED"].astype(str)
+    cso13_2020 = cso13_2020.set_index("CSOED").loc[published_context.index]
+    for column in context_columns:
+        assert np.allclose(
+            pd.to_numeric(cso13_2020[column], errors="raise").to_numpy(dtype=float),
+            pd.to_numeric(published_context[column], errors="raise").to_numpy(dtype=float),
+            atol=0.0,
+            rtol=0.0,
+        )
+
     # Stage 08 is the final value-enrichment stage. Its fixed-2020 valuation
     # must exist for every ED-year while leaving the activity accounting above
     # intact.
@@ -103,6 +176,92 @@ def test_full_historical_baseline_through_stage09():
         values = pd.to_numeric(baseline[column], errors="raise")
         assert values.notna().all()
         assert (values >= -1e-9).all()
+
+    # Stage 08 is valuation-only. Component and total identities must close for
+    # every ED-year, and all counties must resolve to one of the two historic
+    # Irish IFS Standard Output regions.
+    assert set(baseline["FADN_REGION"].astype(str).unique()) <= {"381", "382"}
+    assert baseline["FADN_REGION_LABEL"].notna().all()
+
+    livestock_components = (
+        baseline["SO_DAIRY_COWS_2020_EUR"]
+        + baseline["SO_SUCKLER_COWS_2020_EUR"]
+        + baseline["SO_BULLS_2020_EUR"]
+        + baseline["SO_FOLLOWERS_2020_EUR"]
+        + baseline["SO_SHEEP_2020_EUR"]
+    )
+    assert np.allclose(
+        livestock_components.to_numpy(dtype=float),
+        baseline["SO_LIVESTOCK_2020_EUR"].to_numpy(dtype=float),
+        atol=1e-7,
+        rtol=1e-12,
+    )
+
+    assert np.allclose(
+        (
+            baseline["SO_LIVESTOCK_2020_EUR"]
+            + baseline["SO_CEREALS_2020_EUR"]
+            + baseline["SO_OTHER_CROPS_2020_EUR"]
+        ).to_numpy(dtype=float),
+        baseline["SO_COVERED_TOTAL_2020_EUR"].to_numpy(dtype=float),
+        atol=1e-7,
+        rtol=1e-12,
+    )
+    assert np.allclose(
+        (
+            baseline["SO_LIVESTOCK_2020_EUR"]
+            + baseline["SO_CEREALS_2020_EUR"]
+            + baseline["SO_OTHER_CROPS_CONSERVATIVE_2020_EUR"]
+        ).to_numpy(dtype=float),
+        baseline["SO_COVERED_TOTAL_CONSERVATIVE_2020_EUR"].to_numpy(dtype=float),
+        atol=1e-7,
+        rtol=1e-12,
+    )
+
+    holdings = pd.to_numeric(
+        baseline["AGRICULTURAL_HOLDINGS"], errors="raise"
+    ).to_numpy(dtype=float)
+    positive_holdings = holdings > 0
+    per_holding = pd.to_numeric(
+        baseline["SO_COVERED_PER_HOLDING_2020_EUR"], errors="coerce"
+    ).to_numpy(dtype=float)
+    if positive_holdings.any():
+        assert np.allclose(
+            per_holding[positive_holdings],
+            baseline.loc[
+                positive_holdings, "SO_COVERED_TOTAL_2020_EUR"
+            ].to_numpy(dtype=float)
+            / holdings[positive_holdings],
+            atol=1e-7,
+            rtol=1e-12,
+        )
+    if (~positive_holdings).any():
+        assert np.isnan(per_holding[~positive_holdings]).all()
+
+    # The final clean workbook is a post-Stage-08 deliverable. Standard Output
+    # stays on its own sheet and is not folded into the CSO-13 or GOBLIN-31
+    # biological panel definitions.
+    workbook_path = Path(cfg.raw["outputs"]["clean_workbook"])
+    if not workbook_path.is_absolute():
+        workbook_path = cfg.project_root / workbook_path
+    assert workbook_path.exists()
+    workbook = pd.ExcelFile(workbook_path)
+    assert "Standard_Output" in workbook.sheet_names
+    standard_output_sheet = pd.read_excel(workbook_path, sheet_name="Standard_Output")
+    assert len(standard_output_sheet) == 31_427
+    assert not standard_output_sheet[["YEAR", "CSOED"]].duplicated().any()
+    assert list(standard_output_sheet.columns) == IDENTIFIERS + STANDARD_OUTPUT
+    for column in STANDARD_OUTPUT:
+        assert column in standard_output_sheet.columns
+
+    cso_workbook = pd.read_excel(
+        workbook_path, sheet_name="CSO_13_Cohort_All_Years", nrows=1
+    )
+    goblin_workbook = pd.read_excel(
+        workbook_path, sheet_name="GOBLIN_31_Cohort_All_Years", nrows=1
+    )
+    assert not any(column.startswith("SO_") for column in cso_workbook.columns)
+    assert not any(column.startswith("SO_") for column in goblin_workbook.columns)
 
     # Both supported scenario starting years must be complete historical states,
     # not partial slices. Scenario code may later choose either snapshot without

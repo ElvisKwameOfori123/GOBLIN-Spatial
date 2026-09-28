@@ -34,12 +34,18 @@ jobs:
           pytest -q \
             tests/test_baseline_contract.py \
             tests/test_cattle.py \
+            tests/test_cattle_annual_age_sex.py \
+            tests/test_cattle_annual_genetics.py \
+            tests/test_cattle_annual_panel.py \
             tests/test_cattle_two_anchor.py \
             tests/test_cli_data_boundary.py \
             tests/test_data_fetch.py \
             tests/test_export_schema.py \
             tests/test_historical_validation.py \
             tests/test_input_data.py \
+            tests/test_livestock_panels.py \
+            tests/test_sheep_annual_panel.py \
+            tests/test_sheep_10_cohorts.py \
             tests/test_standard_output.py
       - name: Run full 2015-2025 historical regression
         run: pytest -q -s tests/test_full_baseline_regression.py
@@ -116,6 +122,20 @@ jobs:
           PY
       - name: Build 2015-2025 WFD catchment baseline
         run: python scripts/build_catchment_baseline.py
+      - name: Verify frozen WFD catchment geometry checksum
+        run: |
+          test -f data/inputs/spatial/WFD_Catchments_Frozen.gpkg
+          test -f data/inputs/spatial/WFD_Catchments_Frozen.gpkg.sha256
+          sha256sum -c data/inputs/spatial/WFD_Catchments_Frozen.gpkg.sha256
+      - name: Upload frozen WFD catchment geometry
+        uses: actions/upload-artifact@v4
+        with:
+          name: wfd-catchments-frozen
+          path: |
+            data/inputs/spatial/WFD_Catchments_Frozen.gpkg
+            data/inputs/spatial/WFD_Catchments_Frozen.gpkg.sha256
+          if-no-files-found: error
+          retention-days: 30
       - name: Validate catchment baseline outputs
         run: |
           python - <<'PY'
@@ -123,16 +143,26 @@ jobs:
 
           wfd = pd.read_csv("data/processed/goblin_spatial_wfd_catchment_2015_2025.csv")
           colm = pd.read_csv("data/processed/goblin_spatial_colm_catchment_2015_2025.csv")
+          county = pd.read_csv("data/processed/goblin_spatial_county_2015_2025.csv")
+          national = pd.read_csv("data/processed/goblin_spatial_national_2015_2025.csv")
           crosswalk = pd.read_csv("data/processed/ed_wfd_catchment_crosswalk.csv")
           diagnostics = pd.read_csv("data/processed/catchment_closure_diagnostics.csv")
 
           assert wfd.groupby("YEAR")["WFD_CATCHMENT_ID"].nunique().eq(46).all()
           assert colm.groupby("YEAR")["COLM_CATCHMENT"].nunique().eq(37).all()
+          assert county.groupby("YEAR")["County"].nunique().eq(26).all()
+          assert len(national) == 11
+          for frame in (wfd, colm, county, national):
+              assert "AVERAGE_SIZE_OF_HOLDINGS" in frame
+              assert "AVERAGE_AGE_OF_HOLDER" in frame
+              assert "MEDIAN_AGE_OF_HOLDER" not in frame
           assert crosswalk.groupby("CSOED")["ED_CATCHMENT_WEIGHT"].sum().sub(1.0).abs().max() < 1e-10
           assert diagnostics["DIFF"].abs().max() < 1e-6
 
           print("WFD catchment-years:", len(wfd))
           print("Colm catchment-years:", len(colm))
+          print("County-years:", len(county))
+          print("National-years:", len(national))
           print("Crosswalk rows:", len(crosswalk))
           PY
       - name: Build historical manuscript result bundle

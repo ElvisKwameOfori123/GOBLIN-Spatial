@@ -8,10 +8,10 @@ Stages represented
 05B  ED sheep breed/type enrichment.
 05D  Biological disaggregation to the 10 GOBLIN sheep cohorts.
 
-The production sheep population remains controlled by the CSO 2020 ED anchor
-and the raw AAA09 regional hierarchy. DAFM breed anchors supply composition
-only. The separate DAFM county-total dataset is retained for independent
-validation and does not replace the production sheep population.
+The production sheep population remains controlled by the published CSO 2020
+ED anchor and the raw AAA09 regional hierarchy. DAFM county ewe geography is
+used only as a relative county-movement prior for unknown years, while DAFM
+breed anchors supply composition. Neither DAFM source sets the population level.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 
 from goblin_spatial.config import SpatialConfig
-from goblin_spatial.sheep import add_sheep_cohorts, build_sheep_panel
+from goblin_spatial.sheep import add_sheep_cohorts, build_annual_sheep_panel
 from goblin_spatial.sheep.cohorts import GOBLIN_SHEEP_10
 
 
@@ -36,7 +36,8 @@ def build_sheep_baseline(config: SpatialConfig) -> pd.DataFrame:
     are used only for biological cohort subdivision.
     """
 
-    panel = _canonical_order(build_sheep_panel(config))
+    panel, _ = build_annual_sheep_panel(config)
+    panel = _canonical_order(panel)
     sheep = add_sheep_cohorts(panel, config)
     sheep = _canonical_order(sheep)
 

@@ -11,7 +11,9 @@ import pandas as pd
 
 from goblin_spatial.config import SpatialConfig
 from goblin_spatial.land import add_land
+from goblin_spatial.land.panel import LAND_COLUMNS
 from goblin_spatial.se import add_se
+from goblin_spatial.se.panel import SE_COLUMNS
 
 
 def add_land_farm_structure(
@@ -26,7 +28,32 @@ def add_land_farm_structure(
     """
 
     before = livestock.copy()
-    result = add_land(livestock, config)
+
+    # The finished livestock reconstruction intentionally exposes livestock
+    # variables only. Hydrate the fixed 2020 CSO land/structure anchor here so
+    # the historical land and SE modules can reconstruct 2015-2025 on the same
+    # YEAR x CSOED backbone. These seed values are not treated as annual data.
+    seed_columns = [*LAND_COLUMNS, *SE_COLUMNS]
+    missing_seed = [column for column in seed_columns if column not in livestock.columns]
+    result = livestock.copy()
+    if missing_seed:
+        anchor = pd.read_csv(config.files["cso_ed_2020"], dtype={"CSOED": str})
+        required = {"CSOED", *missing_seed}
+        missing_anchor = sorted(required - set(anchor.columns))
+        if missing_anchor:
+            raise ValueError(
+                f"2020 CSO anchor missing land/structure fields: {missing_anchor}"
+            )
+        if anchor["CSOED"].duplicated().any():
+            raise AssertionError("2020 CSO anchor contains duplicate CSOED rows")
+        seed = anchor[["CSOED", *missing_seed]].copy()
+        seed["CSOED"] = seed["CSOED"].astype(str)
+        result["CSOED"] = result["CSOED"].astype(str)
+        result = result.merge(seed, on="CSOED", how="left", validate="many_to_one")
+        if result[missing_seed].isna().any().any():
+            raise AssertionError("failed to attach complete 2020 land/structure anchor")
+
+    result = add_land(result, config)
     result = add_se(result, config)
 
     key = ["YEAR", "CSOED"]

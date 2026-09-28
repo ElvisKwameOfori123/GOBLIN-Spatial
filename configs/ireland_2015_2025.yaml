@@ -31,7 +31,8 @@ files:
   dafm_aim_ed_cattle_profile_2020: data/inputs/baseline/02_DAFM_AIM_ED_Cattle_Profile_2020.csv
   cso_sheep_workbook: data/inputs/baseline/03_CSO_AAA09_Sheep_County_Region_2015_2025.xlsx
   sheep_breed_anchors: data/inputs/baseline/05A_DAFM_Sheep_Breed_Anchors_2016_2020_2022_2025.csv
-  dafm_sheep_county_validation: data/inputs/baseline/03_0_DAFM_Sheep_County_Totals_2015_2020_2022_2025.csv
+  # Production allocation prior only: relative county movement inside fixed AAA09 regions.
+  dafm_sheep_county_pattern: data/inputs/baseline/03_0_DAFM_Sheep_County_Totals_2015_2020_2022_2025.csv
   goblin_cohorts: data/inputs/baseline/05C_Cattle_Cohort_Relationships_2012_2020.csv
   cso_land: data/inputs/baseline/06_CSO_AQA06_Agricultural_Land_Use.xlsx
   se_controls: data/inputs/baseline/06_Farm_Structure_Demographic_Controls.csv
@@ -48,8 +49,11 @@ files:
 outputs:
   cattle_panel: data/interim/cattle_ed_2015_2025.csv
   sheep_panel: data/interim/sheep_ed_2015_2025.csv
-  livestock_master: data/interim/livestock_ed_2015_2025.csv
-  cohort_master: data/interim/goblin_31_cohort_master_2015_2025.csv
+  # Canonical merged livestock products.
+  cso_13_cohort_panel: data/interim/CSO_13_Cohort_Annual_Panel_2015_2025.csv
+  goblin_31_cohort_panel: data/interim/GOBLIN_31_Cohort_Annual_Panel_2015_2025.csv
+  # Reserved for the later national GOBLIN/Daniel calibration stage.
+  goblin_31_cohort_calibrated_panel: data/interim/GOBLIN_31_Cohort_Calibrated_Annual_Panel_2015_2025.csv
   enriched_master: data/processed/goblin_spatial_master_2015_2025.csv
   clean_workbook: data/processed/GOBLIN_Spatial_Final_Clean_Data_2015_2025.xlsx
   standard_output_master: data/processed/08_GOBLIN_Spatial_Standard_Output_2015_2025.csv

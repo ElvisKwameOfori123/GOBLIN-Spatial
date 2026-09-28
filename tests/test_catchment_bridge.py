@@ -3,7 +3,14 @@
 import pandas as pd
 import pytest
 
+from goblin_spatial.cattle.cohorts import FINAL_21_COHORTS
+from goblin_spatial.export.workbook import CSO_LIVESTOCK
+from goblin_spatial.sheep.cohorts import GOBLIN_SHEEP_10
+
 from goblin_spatial.aggregation import (
+    DEFAULT_ADDITIVE_COLUMNS,
+    aggregate_to_counties,
+    aggregate_to_national,
     aggregate_to_wfd_catchments,
     aggregate_wfd_to_colm,
     build_ed_catchment_crosswalk,
@@ -136,3 +143,99 @@ def test_non_intersecting_ed_uses_explicit_nearest_fallback():
     assert fallback["ED_CATCHMENT_WEIGHT"] == pytest.approx(1.0)
     assert fallback["ED_COVERAGE_SHARE"] == pytest.approx(0.0)
     assert fallback["NEAREST_DISTANCE_M"] == pytest.approx(10.0)
+
+
+
+def test_structure_metrics_are_recomputed_after_aggregation():
+    master = pd.DataFrame(
+        {
+            "YEAR": [2020, 2020],
+            "CSOED": ["001", "002"],
+            "County": ["A", "A"],
+            "TOTAL_CATTLE": [100.0, 200.0],
+            "AGRICULTURAL_HOLDINGS": [10.0, 30.0],
+            "AREA_FARMED": [100.0, 600.0],
+            "AVERAGE_SIZE_OF_HOLDINGS": [99.0, 99.0],
+            "AVERAGE_AGE_OF_HOLDER": [50.0, 70.0],
+            "MEDIAN_AGE_OF_HOLDER": [48.0, 68.0],
+            "SO_COVERED_TOTAL_2020_EUR": [1000.0, 6000.0],
+            "SO_COVERED_TOTAL_CONSERVATIVE_2020_EUR": [900.0, 5400.0],
+        }
+    )
+    crosswalk = pd.DataFrame(
+        {
+            "CSOED": ["001", "001", "002"],
+            "WFD_CATCHMENT_ID": ["018", "026A", "026A"],
+            "WFD_CATCHMENT": [
+                "Blackwater (Munster)",
+                "Upper Shannon 26A",
+                "Upper Shannon 26A",
+            ],
+            "ED_CATCHMENT_WEIGHT": [0.5, 0.5, 1.0],
+        }
+    )
+    additive = [
+        "TOTAL_CATTLE",
+        "AGRICULTURAL_HOLDINGS",
+        "AREA_FARMED",
+        "SO_COVERED_TOTAL_2020_EUR",
+        "SO_COVERED_TOTAL_CONSERVATIVE_2020_EUR",
+    ]
+
+    county = aggregate_to_counties(master, additive_columns=additive)
+    assert county.loc[0, "AVERAGE_SIZE_OF_HOLDINGS"] == pytest.approx(17.5)
+    assert county.loc[0, "AVERAGE_AGE_OF_HOLDER"] == pytest.approx(65.0)
+    assert county.loc[0, "SO_COVERED_PER_HOLDING_2020_EUR"] == pytest.approx(175.0)
+    assert county.loc[0, "SO_COVERED_PER_HOLDING_CONSERVATIVE_2020_EUR"] == pytest.approx(157.5)
+    assert "MEDIAN_AGE_OF_HOLDER" not in county.columns
+
+    national = aggregate_to_national(master, additive_columns=additive)
+    assert len(national) == 1
+    assert national.loc[0, "GEOGRAPHY"] == "Ireland"
+    assert national.loc[0, "AVERAGE_SIZE_OF_HOLDINGS"] == pytest.approx(17.5)
+    assert national.loc[0, "AVERAGE_AGE_OF_HOLDER"] == pytest.approx(65.0)
+    assert national.loc[0, "SO_COVERED_PER_HOLDING_2020_EUR"] == pytest.approx(175.0)
+    assert "MEDIAN_AGE_OF_HOLDER" not in national.columns
+
+    wfd = aggregate_to_wfd_catchments(
+        master,
+        crosswalk,
+        additive_columns=additive,
+    )
+    blackwater = wfd.loc[wfd["WFD_CATCHMENT_ID"] == "018"].iloc[0]
+    upper = wfd.loc[wfd["WFD_CATCHMENT_ID"] == "026A"].iloc[0]
+    assert blackwater["AVERAGE_SIZE_OF_HOLDINGS"] == pytest.approx(10.0)
+    assert blackwater["AVERAGE_AGE_OF_HOLDER"] == pytest.approx(50.0)
+    assert blackwater["SO_COVERED_PER_HOLDING_2020_EUR"] == pytest.approx(100.0)
+    assert upper["AVERAGE_SIZE_OF_HOLDINGS"] == pytest.approx(650.0 / 35.0)
+    assert upper["AVERAGE_AGE_OF_HOLDER"] == pytest.approx(
+        (5.0 * 50.0 + 30.0 * 70.0) / 35.0
+    )
+    assert "MEDIAN_AGE_OF_HOLDER" not in wfd.columns
+
+    colm = aggregate_wfd_to_colm(wfd, additive_columns=additive)
+    assert "AVERAGE_SIZE_OF_HOLDINGS" in colm.columns
+    assert "AVERAGE_AGE_OF_HOLDER" in colm.columns
+    assert "SO_COVERED_PER_HOLDING_2020_EUR" in colm.columns
+    assert "MEDIAN_AGE_OF_HOLDER" not in colm.columns
+
+
+
+def test_default_reporting_contract_carries_both_livestock_resolutions_and_so():
+    columns = set(DEFAULT_ADDITIVE_COLUMNS)
+    assert set(CSO_LIVESTOCK) <= columns
+    assert set(FINAL_21_COHORTS) <= columns
+    assert set(GOBLIN_SHEEP_10) <= columns
+    assert {
+        "SO_LIVESTOCK_2020_EUR",
+        "SO_CEREALS_2020_EUR",
+        "SO_OTHER_CROPS_2020_EUR",
+        "SO_COVERED_TOTAL_2020_EUR",
+        "AGRICULTURAL_HOLDINGS",
+        "AREA_FARMED",
+    } <= columns
+    assert "AVERAGE_AGE_OF_HOLDER" not in columns
+    assert "AVERAGE_SIZE_OF_HOLDINGS" not in columns
+    assert "MEDIAN_AGE_OF_HOLDER" not in columns
+    assert "SO_COVERED_PER_HOLDING_2020_EUR" not in columns
+    assert "SO_COVERED_PER_HOLDING_CONSERVATIVE_2020_EUR" not in columns

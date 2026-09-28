@@ -2,9 +2,10 @@
 
 Stages represented
 ------------------
-01  Reconciled 2020 ED cattle anchor.
-02  Annual 2015-2025 ED cattle panel.
-05C Biological disaggregation to the 21 GOBLIN cattle cohorts.
+01  Published 2020 ED cattle anchor, unchanged.
+02  CSO annual 2015-2025 ED cattle reconstruction.
+03  AAA10 age-sex disaggregation with DAFM/AIM spatial prior.
+04  Biological/genetic disaggregation to the 21 GOBLIN cattle cohorts.
 
 The scientific allocation mathematics remains in the validated cattle modules.
 This wrapper defines the v1 cattle boundary and adds final contract checks.
@@ -15,8 +16,9 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from goblin_spatial.cattle import add_cattle_cohorts, build_cattle_panel
-from goblin_spatial.cattle.cohorts import FINAL_21_COHORTS
+from goblin_spatial.cattle.annual_age_sex import build_annual_age_sex_panel
+from goblin_spatial.cattle.annual_panel import build_annual_ed_panel
+from goblin_spatial.cattle.cohorts import FINAL_21_COHORTS, add_cattle_cohorts
 from goblin_spatial.config import SpatialConfig
 
 
@@ -32,8 +34,9 @@ def build_cattle_baseline(config: SpatialConfig) -> pd.DataFrame:
     constructed sheep baseline.
     """
 
-    panel = build_cattle_panel(config)
-    cattle = add_cattle_cohorts(panel, config)
+    panel, _ = build_annual_ed_panel(config)
+    age_sex = build_annual_age_sex_panel(config, panel)
+    cattle = add_cattle_cohorts(age_sex, config)
     cattle = _canonical_order(cattle)
 
     required = {"YEAR", "CSOED", "TOTAL_CATTLE", *FINAL_21_COHORTS}
