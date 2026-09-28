@@ -11,6 +11,7 @@ import pandas as pd
 from goblin_spatial.aggregation import (
     EXPECTED_WFD_CATCHMENTS,
     aggregate_to_counties,
+    aggregate_to_national,
     aggregate_to_wfd_catchments,
     aggregate_wfd_to_colm,
     build_ed_catchment_crosswalk,
@@ -97,6 +98,10 @@ def main() -> None:
         default="data/processed/goblin_spatial_county_2015_2025.csv",
     )
     parser.add_argument(
+        "--national-output",
+        default="data/processed/goblin_spatial_national_2015_2025.csv",
+    )
+    parser.add_argument(
         "--diagnostics-output",
         default="data/processed/catchment_closure_diagnostics.csv",
     )
@@ -127,6 +132,7 @@ def main() -> None:
     wfd_year = aggregate_to_wfd_catchments(master, crosswalk)
     colm_year = aggregate_wfd_to_colm(wfd_year)
     county_year = aggregate_to_counties(master)
+    national_year = aggregate_to_national(master)
 
     diagnostics = pd.concat(
         [
@@ -139,6 +145,9 @@ def main() -> None:
             validate_aggregation_closure(
                 master, county_year, geography_col="county"
             ),
+            validate_aggregation_closure(
+                master, national_year, geography_col="national"
+            ),
         ],
         ignore_index=True,
     )
@@ -148,6 +157,7 @@ def main() -> None:
         args.wfd_catchment_output,
         args.colm_catchment_output,
         args.county_output,
+        args.national_output,
         args.diagnostics_output,
     ):
         Path(path).parent.mkdir(parents=True, exist_ok=True)
@@ -156,6 +166,7 @@ def main() -> None:
     wfd_year.to_csv(args.wfd_catchment_output, index=False)
     colm_year.to_csv(args.colm_catchment_output, index=False)
     county_year.to_csv(args.county_output, index=False)
+    national_year.to_csv(args.national_output, index=False)
     diagnostics.to_csv(args.diagnostics_output, index=False)
 
     print(f"Crosswalk rows: {len(crosswalk):,}")
@@ -170,6 +181,7 @@ def main() -> None:
     print(f"WFD catchment-year rows: {len(wfd_year):,}")
     print(f"Colm catchment-year rows: {len(colm_year):,}")
     print(f"County-year rows: {len(county_year):,}")
+    print(f"National-year rows: {len(national_year):,}")
     print("National additive totals close exactly within numerical tolerance.")
 
 
