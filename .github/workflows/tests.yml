@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: write
+
 jobs:
   model-test:
     runs-on: ubuntu-latest
@@ -135,6 +138,22 @@ jobs:
             data/inputs/spatial/WFD_Catchments_Frozen.gpkg.sha256
           if-no-files-found: error
           retention-days: 30
+      - name: Commit frozen WFD catchment geometry to PR branch
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin "$HEAD_REF"
+          git checkout -B "$HEAD_REF" "origin/$HEAD_REF"
+          git add -f             data/inputs/spatial/WFD_Catchments_Frozen.gpkg             data/inputs/spatial/WFD_Catchments_Frozen.gpkg.sha256
+          if git diff --cached --quiet; then
+            echo "Frozen WFD geometry already committed."
+          else
+            git commit -m "Freeze WFD catchment geometry"
+            git push origin HEAD:"$HEAD_REF"
+          fi
       - name: Validate catchment baseline outputs
         run: |
           python - <<'PY'
