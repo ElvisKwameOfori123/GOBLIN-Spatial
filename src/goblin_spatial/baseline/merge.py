@@ -52,10 +52,18 @@ def merge_livestock(cattle: pd.DataFrame, sheep: pd.DataFrame) -> pd.DataFrame:
     overlap = set(cattle.columns).intersection(sheep.columns) - set(MERGE_KEYS)
     replace_from_sheep = sorted(overlap - SHARED_IDENTIFIERS)
     cattle_base = cattle.drop(columns=[*replace_from_sheep, "LSU"], errors="ignore")
+    # Shared identifiers come from cattle where cattle carries them and from
+    # sheep otherwise, so no identifier is lost when one side is leaner.
+    # Where both carry one, they must agree.
+    for column in sorted(SHARED_IDENTIFIERS & set(cattle.columns) & set(sheep.columns)):
+        if not cattle[column].astype(str).equals(sheep[column].astype(str)):
+            raise AssertionError(f"cattle and sheep disagree on identifier {column}")
     sheep_keep = [
         column
         for column in sheep.columns
-        if column in MERGE_KEYS or column not in SHARED_IDENTIFIERS
+        if column in MERGE_KEYS
+        or column not in SHARED_IDENTIFIERS
+        or column not in cattle.columns
     ]
     sheep_keep = list(dict.fromkeys(sheep_keep))
 
