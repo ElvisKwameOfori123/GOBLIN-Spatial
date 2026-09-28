@@ -27,8 +27,9 @@ Unknown years (2015-2019, 2021-2025)
        in the ED's 2020 proportions (county proportions if the ED has none).
 
     3. 2020 reference mix for the unknown years. The published 2020 ED sums
-       fall short of AAA10 2020 for dairy and other cows (the animals sit in
-       other cattle). To stop later years placing a county's whole cow
+       fall short of AAA10 2020 for dairy and other cows; the discrepancy is
+       reflected in the published component balance as a larger other-cattle
+       residual. No cause is assigned to it. To stop later years placing a county's whole cow
        shortfall on the few EDs published with cows, each cow class's 2020
        county shortfall is seeded, for the reference mix only, into the
        other cattle of eligible EDs published with zero of that class:

@@ -17,6 +17,9 @@ cattle:
   # Step 4 production prior: AIM ED type signal -> county fallback -> GOBLIN margins.
   # Use cow_support only to reproduce the G0 genetics sensitivity.
   genetics_prior: aim_hierarchical
+  # National DxD/DxB/BxB expectations use AAA10 June cows in every year, 2020 included.
+  # Use panel to reproduce v1.1 (published 2020 Census cows as the 2020 denominator).
+  genetic_cow_denominator: aaa10
 
 paths:
   raw: data/raw
