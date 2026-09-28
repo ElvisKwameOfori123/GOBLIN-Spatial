@@ -10,6 +10,7 @@ from goblin_spatial.sheep.cohorts import GOBLIN_SHEEP_10
 from goblin_spatial.synthesis.historical import (
     SO_COMPONENTS,
     add_signature_metrics,
+    aggregate_state,
     build_matched_pairs,
     build_so_decomposition,
     information_geography,
@@ -118,3 +119,29 @@ def test_matched_pairs_uses_common_farmed_area_denominator():
     assert not result.empty
     assert "CATTLE_PER_FARMED_HA_A" in result.columns
     assert "SO_PER_FARMED_HA_A" in result.columns
+
+
+
+def test_aggregate_state_recomputes_structure_metrics():
+    frame = _frame()
+    frame["AVERAGE_SIZE_OF_HOLDINGS"] = 999.0
+    frame["MEDIAN_AGE_OF_HOLDER"] = 60.0
+    frame["AVERAGE_AGE_OF_HOLDER"] = 60.0
+
+    mask_a1 = frame["CSOED"].eq("1")
+    mask_a2 = frame["CSOED"].eq("2")
+    frame.loc[mask_a1, "AGRICULTURAL_HOLDINGS"] = 10.0
+    frame.loc[mask_a2, "AGRICULTURAL_HOLDINGS"] = 30.0
+    frame.loc[mask_a1, "AREA_FARMED"] = 100.0
+    frame.loc[mask_a2, "AREA_FARMED"] = 600.0
+    frame.loc[mask_a1, "AVERAGE_AGE_OF_HOLDER"] = 50.0
+    frame.loc[mask_a2, "AVERAGE_AGE_OF_HOLDER"] = 70.0
+
+    county = aggregate_state(frame, ["YEAR", "County"])
+    a2015 = county.loc[
+        (county["YEAR"] == 2015) & (county["County"] == "A")
+    ].iloc[0]
+
+    assert a2015["AVERAGE_SIZE_OF_HOLDINGS"] == np.float64(17.5)
+    assert np.isclose(a2015["AVERAGE_AGE_OF_HOLDER"], 65.0)
+    assert "MEDIAN_AGE_OF_HOLDER" not in county.columns
