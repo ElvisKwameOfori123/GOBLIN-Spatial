@@ -125,6 +125,42 @@ def test_full_historical_baseline_through_stage09():
             assert column in public.columns
             assert public[column].notna().all()
 
+    cso13_path = Path(cfg.raw["outputs"]["cso_13_cohort_panel"])
+    goblin31_path = Path(cfg.raw["outputs"]["goblin_31_cohort_panel"])
+    if not cso13_path.is_absolute():
+        cso13_path = cfg.project_root / cso13_path
+    if not goblin31_path.is_absolute():
+        goblin31_path = cfg.project_root / goblin31_path
+    cso13_public = pd.read_csv(cso13_path)
+    goblin31_public = pd.read_csv(goblin31_path)
+    context_columns = [
+        "AREA_FARMED",
+        "ALL_GRASSLAND",
+        "TOTAL_CEREALS",
+        "OTHER_CROPS_HA",
+        "AGRICULTURAL_HOLDINGS",
+        "AVERAGE_SIZE_OF_HOLDINGS",
+        "AVERAGE_AGE_OF_HOLDER",
+        "MEDIAN_AGE_OF_HOLDER",
+    ]
+    assert cso13_public[["YEAR", "CSOED", *context_columns]].equals(
+        goblin31_public[["YEAR", "CSOED", *context_columns]]
+    )
+
+    published_context = pd.read_csv(
+        cfg.files["cso_ed_2020"], dtype={"CSOED": str}
+    ).set_index("CSOED")
+    cso13_2020 = cso13_public.loc[cso13_public["YEAR"] == 2020].copy()
+    cso13_2020["CSOED"] = cso13_2020["CSOED"].astype(str)
+    cso13_2020 = cso13_2020.set_index("CSOED").loc[published_context.index]
+    for column in context_columns:
+        assert np.allclose(
+            pd.to_numeric(cso13_2020[column], errors="raise").to_numpy(dtype=float),
+            pd.to_numeric(published_context[column], errors="raise").to_numpy(dtype=float),
+            atol=0.0,
+            rtol=0.0,
+        )
+
     # Stage 08 is the final value-enrichment stage. Its fixed-2020 valuation
     # must exist for every ED-year while leaving the activity accounting above
     # intact.
