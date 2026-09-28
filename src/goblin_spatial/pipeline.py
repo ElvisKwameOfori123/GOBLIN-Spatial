@@ -50,7 +50,8 @@ def build(config: str | Path | SpatialConfig) -> pd.DataFrame:
 
     cattle = build_cattle_baseline(cfg)
     sheep = build_sheep_baseline(cfg)
-    livestock = merge_livestock(cattle, sheep)
+    ed_anchor = pd.read_csv(cfg.files["cso_ed_2020"], dtype={"CSOED": str})
+    livestock = merge_livestock(cattle, sheep, ed_anchor=ed_anchor)
     master = _canonical_order(add_land_farm_structure(livestock, cfg))
     validation = validate_master(master, cfg)
 
