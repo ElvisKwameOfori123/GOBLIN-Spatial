@@ -76,17 +76,14 @@ def build(config: str | Path | SpatialConfig) -> pd.DataFrame:
         frame.to_csv(path, index=False)
 
     master_path = _output_path(cfg, "enriched_master", "data/processed/goblin_spatial_master_2015_2025.csv")
-    workbook_path = _output_path(cfg, "clean_workbook", "data/processed/GOBLIN_Spatial_Final_Clean_Data_2015_2025.xlsx")
     master_path.parent.mkdir(parents=True, exist_ok=True)
     master.to_csv(master_path, index=False)
-    export_clean_workbook(master, workbook_path, base_year=cfg.base_year)
     validation_path = cfg.processed_dir / "validation_summary.csv"
     pd.DataFrame([validation]).to_csv(validation_path, index=False)
 
     print(f"CSO 13 cohort annual panel: {cso13_path}")
     print(f"GOBLIN 31 cohort annual panel: {goblin31_path}")
     print(f"Validated historical reconstruction: {master_path}")
-    print(f"Clean baseline workbook: {workbook_path}")
     print(f"Validation summary: {validation_path}")
     return master
 
@@ -101,11 +98,19 @@ def run_baseline(config: str | Path | SpatialConfig) -> pd.DataFrame:
     output.parent.mkdir(parents=True, exist_ok=True)
     valued.to_csv(output, index=False)
 
+    workbook_path = _output_path(
+        cfg,
+        "clean_workbook",
+        "data/processed/GOBLIN_Spatial_Final_Clean_Data_2015_2025.xlsx",
+    )
+    export_clean_workbook(valued, workbook_path, base_year=cfg.base_year)
+
     signatures = build_signatures(valued, cfg)
     signature_output = _output_path(cfg, "ed_signatures", "data/processed/09_GOBLIN_Spatial_ED_Cohort_Signatures_2020.csv")
     signature_output.parent.mkdir(parents=True, exist_ok=True)
     signatures.to_csv(signature_output, index=False)
 
     print(f"Baseline through Standard Output: {output}")
+    print(f"Final clean workbook through Standard Output: {workbook_path}")
     print(f"ED cohort signatures: {signature_output}")
     return valued
