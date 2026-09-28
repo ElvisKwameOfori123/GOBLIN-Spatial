@@ -112,6 +112,8 @@ def test_g1_receiver_movement_is_retained_on_new_chain() -> None:
         float(y2020.loc[suckler_only, dxb_young].to_numpy().sum()) / dxb_total
     )
 
-    # Regression anchors from the revised annual + age-sex chain.
-    assert np.isclose(dxd_zero_dairy_share, 0.261, atol=0.003)
-    assert np.isclose(dxb_suckler_only_share, 0.249, atol=0.003)
+    # Regression anchors from the revised annual + age-sex chain, with the 2020
+    # national genetic margins on the AAA10 cow denominator (v1.1 panel
+    # denominator gave 0.261 and 0.249).
+    assert np.isclose(dxd_zero_dairy_share, 0.2635, atol=0.003)
+    assert np.isclose(dxb_suckler_only_share, 0.2585, atol=0.003)

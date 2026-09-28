@@ -20,6 +20,7 @@ import numpy as np
 import pandas as pd
 
 from goblin_spatial.cattle.age_sex import _normalise_county, _normalise_ed_name
+from goblin_spatial.cattle.panel import _load_aaa10
 from goblin_spatial.config import SpatialConfig
 from goblin_spatial.reconciliation import hamilton_allocate, integerise_matrix, ipf_reconcile
 
@@ -137,10 +138,63 @@ def _goblin_value(goblin: pd.DataFrame, cohort: str, year: int) -> float:
     return value
 
 
+GENETIC_COW_DENOMINATORS = ("aaa10", "panel")
+
+
+def _national_cow_denominators(
+    cattle: pd.DataFrame, config: SpatialConfig, mode: str
+) -> dict[int, tuple[int, int]]:
+    """National (dairy, other) cow totals behind the genetic margins, by year.
+
+    The DxD/DxB/BxB margins are derived, never observed. Their national
+    biological expectations use one annual national cow control throughout:
+    AAA10 June dairy and other cows (``aaa10``, production). In every year
+    except 2020 this equals the panel's own cow totals, because the panel is
+    closed to AAA10. In 2020 the panel holds the published Census ED values,
+    whose sums differ from AAA10; those published values are not changed here,
+    only the denominator of the modelled genetic margins. ``panel`` uses the
+    panel's own cow totals in every year (v1.1 behaviour, kept as reference).
+    """
+
+    panel_totals = cattle.groupby("YEAR")[["DAIRY_COW", "OTHER_COW"]].sum()
+    if mode == "panel":
+        return {
+            int(y): (int(r["DAIRY_COW"]), int(r["OTHER_COW"]))
+            for y, r in panel_totals.iterrows()
+        }
+
+    aaa10 = _load_aaa10(config.files["cso_cattle_county"])
+    national = aaa10.groupby("Year")[["Dairy cows__HEAD", "Other cows__HEAD"]].sum()
+    denominators: dict[int, tuple[int, int]] = {}
+    for year in YEARS:
+        if year not in national.index:
+            raise AssertionError(f"{year}: no AAA10 cow totals for genetic margins")
+        dairy = int(national.loc[year, "Dairy cows__HEAD"])
+        other = int(national.loc[year, "Other cows__HEAD"])
+        if year != 2020:
+            panel_dairy = int(panel_totals.loc[year, "DAIRY_COW"])
+            panel_other = int(panel_totals.loc[year, "OTHER_COW"])
+            if (panel_dairy, panel_other) != (dairy, other):
+                raise AssertionError(
+                    f"{year}: panel cows ({panel_dairy}, {panel_other}) are not closed to "
+                    f"AAA10 ({dairy}, {other}); the AAA10 genetic denominator would "
+                    "change a year it must leave unchanged"
+                )
+        denominators[year] = (dairy, other)
+    return denominators
+
+
 def _build_biological_controls(
-    cattle: pd.DataFrame, goblin: pd.DataFrame
+    cattle: pd.DataFrame,
+    goblin: pd.DataFrame,
+    cow_denominators: dict[int, tuple[int, int]] | None = None,
 ) -> tuple[dict[tuple[int, str], np.ndarray], dict[tuple[int, str], np.ndarray]]:
-    """Return exact national genetic targets and cow-to-cohort coefficients."""
+    """Return exact national genetic targets and cow-to-cohort coefficients.
+
+    ``cow_denominators`` gives the national (dairy, other) cow totals that
+    scale the GOBLIN per-cow coefficients; targets are then Hamilton-allocated
+    to the fixed national age-sex container totals. Default: panel cow totals.
+    """
 
     targets: dict[tuple[int, str], np.ndarray] = {}
     coefficients: dict[tuple[int, str], np.ndarray] = {}
@@ -153,8 +207,11 @@ def _build_biological_controls(
             raise AssertionError(f"{source_year}: non-positive GOBLIN adult cow population")
 
         year_frame = cattle.loc[cattle["YEAR"] == year]
-        cso_dairy = int(year_frame["DAIRY_COW"].sum())
-        cso_suckler = int(year_frame["OTHER_COW"].sum())
+        if cow_denominators is None:
+            cso_dairy = int(year_frame["DAIRY_COW"].sum())
+            cso_suckler = int(year_frame["OTHER_COW"].sum())
+        else:
+            cso_dairy, cso_suckler = cow_denominators[year]
 
         for container, mapping in CONTAINERS.items():
             coeff = np.array(
@@ -762,7 +819,18 @@ def add_cattle_cohorts(cattle_panel: pd.DataFrame, config: SpatialConfig) -> pd.
     if not goblin_path.exists():
         raise FileNotFoundError(goblin_path)
     goblin = _load_goblin(goblin_path)
-    national_targets, coefficients = _build_biological_controls(cattle, goblin)
+    denominator_mode = str(
+        config.raw.get("cattle", {}).get("genetic_cow_denominator", "aaa10")
+    ).strip().lower()
+    if denominator_mode not in GENETIC_COW_DENOMINATORS:
+        raise ValueError(
+            "cattle genetic_cow_denominator must be one of "
+            + ", ".join(GENETIC_COW_DENOMINATORS)
+        )
+    cow_denominators = _national_cow_denominators(cattle, config, denominator_mode)
+    national_targets, coefficients = _build_biological_controls(
+        cattle, goblin, cow_denominators
+    )
 
     genetics_mode = str(
         config.raw.get("cattle", {}).get("genetics_prior", "cow_support")
