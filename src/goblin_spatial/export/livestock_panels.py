@@ -83,7 +83,8 @@ def build_livestock_panels(config: SpatialConfig) -> tuple[pd.DataFrame, pd.Data
 
     cattle = build_cattle_baseline(config)
     sheep = build_sheep_baseline(config)
-    merged = merge_livestock(cattle, sheep).rename(
+    ed_anchor = pd.read_csv(config.files["cso_ed_2020"], dtype={"CSOED": str})
+    merged = merge_livestock(cattle, sheep, ed_anchor=ed_anchor).rename(
         columns={
             "PROVENANCE": "CATTLE_PROVENANCE",
             "SHEEP_DATA_STATUS": "SHEEP_PROVENANCE",
