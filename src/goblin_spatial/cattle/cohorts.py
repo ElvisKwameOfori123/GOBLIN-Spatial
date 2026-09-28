@@ -7,7 +7,7 @@ existing CSO pre-adult age-sex containers into DxD, DxB and BxB cohorts.
 The production spatial prior is hierarchical rather than cow-gated. DAFM/AIM
 2020 beef/dairy composition supplies an ED cattle-type signal where it is
 cross-source coherent, the corresponding county signal supplies the fallback,
-and GOBLIN supplies the national age-sex-specific genetic margins. Adult dairy
+while GOBLIN/COHORTS supplies age-sex-specific per-cow relationships and AAA10 national cow totals scale those relationships to the national genetic margins. Adult dairy
 and suckler cows contribute soft biological evidence for the DxB versus BxB
 split but never create structural zeros. Only a zero CSO age-sex container is
 a genetic structural zero. Exact ED rows and national genetic margins are
@@ -676,8 +676,9 @@ def _allocate_genetics_aim(
 ) -> np.ndarray:
     """Allocate one age-sex container using the AIM hierarchical prior.
 
-    AIM controls only the ED spatial prior. GOBLIN/COHORTS controls the exact
-    national DxD/DxB/BxB margins, and the fixed CSO age-sex container controls
+    AIM controls only the ED spatial prior. The exact national DxD/DxB/BxB
+    margins are derived from GOBLIN/COHORTS per-cow coefficients scaled by
+    AAA10 national cow totals, and the fixed CSO age-sex container controls
     every ED row. Adult cows provide soft evidence for the DxB versus BxB
     conditional split, pooled with a national-market component; they are never
     support gates.
@@ -762,7 +763,8 @@ def add_cattle_cohorts(cattle_panel: pd.DataFrame, config: SpatialConfig) -> pd.
     """Express the fixed ED cattle population in the 21 GOBLIN cattle cohorts.
 
     The spatial distribution and age-sex structure are fixed by the CSO ED
-    cattle panel. GOBLIN supplies national DxD/DxB/BxB biological margins.
+    cattle panel. GOBLIN/COHORTS supplies the per-cow biological relationships,
+    while AAA10 annual national cow totals scale them to DxD/DxB/BxB margins.
     In the production AIM-hierarchical mode, DAFM/AIM supplies the local
     broad cattle-type pattern, county AIM supplies fallback context, and adult
     cows enter only as soft evidence for DxB versus BxB. No cow category is a
