@@ -43,6 +43,7 @@ jobs:
             tests/test_export_schema.py \
             tests/test_historical_validation.py \
             tests/test_input_data.py \
+            tests/test_livestock_panels.py \
             tests/test_sheep_annual_panel.py \
             tests/test_sheep_10_cohorts.py \
             tests/test_standard_output.py
