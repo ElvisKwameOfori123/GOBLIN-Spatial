@@ -10,15 +10,20 @@ The build sequence is:
 
 ```text
 cattle + sheep + land + socioeconomic ED baseline
+        -> baseline validation
         -> fixed-2020 Standard Output mapping
-        -> validation
-        -> processed baseline export
+        -> Stage-08 accounting/invariance checks
+        -> processed Stage-08 export + final clean workbook
 ```
 
 The top-level pipeline calls `add_baseline_standard_output()` only after the
-physical livestock, cohort and land modules are complete. The same fixed
-coefficient set is applied to every baseline year so changes reflect physical
-activity/structure rather than price drift.
+physical livestock, cohort, land and socioeconomic modules are complete and
+validated. The same fixed coefficient set is applied to every baseline year so
+changes reflect physical activity/structure rather than price drift. Stage 08
+is enrichment-only: it must not change any pre-existing livestock, land,
+socioeconomic or identifier value. The final clean workbook is written after
+these Stage-08 checks, with Standard Output on a dedicated `Standard_Output`
+sheet rather than folded into the CSO-13 or GOBLIN-31 biological definitions.
 
 Recommended interpretation:
 
@@ -29,14 +34,17 @@ not farm income and not a farm welfare measure.
 
 ## Runtime mapping control
 
-The model-readable crosswalk is versioned as:
+The configured runtime crosswalk is:
 
-`data/controls/standard_output/GOBLIN_SO_mapping.csv`
+`data/inputs/baseline/08_IFS2020_Standard_Output_Mapping.xlsx`, sheet
+`SO_Mapping`.
 
 It contains one row for each of the 31 GOBLIN livestock cohorts plus land and
-control variables. Runtime valuation reads this file directly, so product-code
-crosswalks, regional coefficients, imputation flags and the other-crop
-sensitivity are auditable without editing Python.
+control variables. A readable CSV representation is also retained under
+`data/controls/standard_output/GOBLIN_SO_mapping.csv` for audit. Runtime
+valuation uses the configured workbook, so product-code crosswalks, regional
+coefficients, imputation flags and the other-crop sensitivity remain auditable
+without editing Python.
 
 The original numerical SO source remains:
 
