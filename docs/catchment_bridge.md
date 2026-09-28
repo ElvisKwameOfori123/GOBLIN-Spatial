@@ -4,13 +4,16 @@ This is a downstream aggregation layer for the validated GOBLIN-Spatial historic
 
 ## Purpose
 
-The same 2015-2025 livestock system can be viewed at four scales:
+The same 2015-2025 system can be viewed at four reporting scales:
 
 ```text
-ED -> county -> official WFD catchment -> Ireland
+                 -> county
+ED (authority)  -> official WFD catchment
+                 -> Ireland
 ```
 
-The ED x year master remains authoritative. County and catchment tables are derived views.
+County and WFD catchment are parallel derived views of the authoritative ED x
+year master, not a nested spatial hierarchy.
 
 ## Catchment geography
 
@@ -75,6 +78,7 @@ data/processed/ed_wfd_catchment_crosswalk.csv
 data/processed/goblin_spatial_wfd_catchment_2015_2025.csv
 data/processed/goblin_spatial_colm_catchment_2015_2025.csv
 data/processed/goblin_spatial_county_2015_2025.csv
+data/processed/goblin_spatial_national_2015_2025.csv
 data/processed/catchment_closure_diagnostics.csv
 ```
 
@@ -86,7 +90,22 @@ data/processed/catchment_closure_diagnostics.csv
 
 `goblin_spatial_colm_catchment_2015_2025.csv` aggregates the official WFD result into the 37-name system used by `catchment_data_api`. It exists for comparison and integration with the existing GOBLIN catchment package.
 
-The catchment and county outputs contain the additive livestock cohorts, livestock totals, selected agricultural areas and additive Standard Output components already present in the ED master.
+The county, catchment and national outputs carry both livestock representations
+already present in the ED master: the CSO-controlled groups/totals and the full
+31 GOBLIN cohorts. They also carry additive agricultural land, holdings and
+fixed-2020 Standard Output components.
+
+Farm-structure averages are not summed. At county, WFD catchment, 37-catchment
+compatibility and national scales:
+
+```text
+AVERAGE_SIZE_OF_HOLDINGS = AREA_FARMED / AGRICULTURAL_HOLDINGS
+```
+
+and `AVERAGE_AGE_OF_HOLDER` is weighted by represented agricultural holdings.
+For catchments, those holdings follow the same fractional ED-to-catchment area
+weights used by the rest of the bridge. `MEDIAN_AGE_OF_HOLDER` remains ED-only
+because a valid higher-level median cannot be recovered from ED medians.
 
 ## Accounting rule
 
