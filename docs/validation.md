@@ -18,59 +18,47 @@ sum(10 GOBLIN sheep cohorts) = TOTAL_SHEEP
 AREA_FARMED = ALL_GRASSLAND + TOTAL_CEREALS + OTHER_CROPS_HA
 ```
 
-For cattle, the 2010 and 2020 ED census distributions jointly inform 2015-2019 within-county shares through temporal-proximity weighting, with AAA10 county totals imposed exactly. The 2020 ED state is locked as the census anchor, and its within-county shares are held for 2021-2025 while annual AAA10 county totals continue to change. The exact ED path between censuses is therefore a reconstruction assumption rather than directly observed annual ED evidence.
+For cattle, the 2010 and 2020 ED census distributions jointly inform 2015-2019 within-county geography through temporal-proximity weighting, with AAA10 county totals imposed exactly. The published 2020 ED state is retained unchanged. A separate 2020 reference composition guides component reconstruction in years without ED observations, while annual AAA10 county totals continue to change. The exact ED path between censuses is therefore a reconstruction assumption rather than directly observed annual ED evidence.
 
 ### Historical validation evidence
 
-The current model-paper validation deliberately avoids a composite or "fanciful" validation score. It separates accounting verification from empirical and applied evidence.
+The publication validation separates **verification**, **independent or held-out tests**, **cross-source consistency checks** and **diagnostics**. Exact closure to an imposed control verifies implementation; it is not treated as empirical validation of values that were forced to match.
 
-The historical validation runner is:
+The two reproducible runners are:
 
 ```bash
 python scripts/run_historical_validation.py
+python scripts/run_baseline_validation.py
 ```
 
-after building the canonical baseline with:
+The second runner writes the publication-oriented suite to `data/processed/validation/historical/baseline_suite/`.
 
-```bash
-goblin-spatial build --config configs/ireland_2015_2025.yaml
-```
+| Test | Evidence class | Question |
+| --- | --- | --- |
+| T1: 2020 ED livestock units | Held-out derived indicator | Does the derived cattle age structure reproduce a published ED livestock-unit quantity that was not used in fitting? Published cattle and sheep totals are inputs, so this is not independent validation of the whole ED livestock population. |
+| T2: 2010-to-2020 cross-census temporal transfer | Independent | Given the observed 2020 county level, how well does the 2010 within-county ED pattern predict the independently observed 2020 ED pattern, and does it outperform simple equal-share and grassland-share alternatives? |
+| T3: withheld DAFM ewe years | Independent for that interpolation step | Can county ewe-share interpolation recover omitted 2016 and 2022 observations better than freezing the 2020 pattern? |
+| T4: withheld 2022 sheep breed composition | Independent for that interpolation step | Can interpolation from the surrounding breed anchors recover omitted 2022 upland/lowland composition? |
+| T5: 2020 Census versus AIM ED cattle totals | Cross-source consistency | Do the June Census anchor and the AIM annual/two-snapshot register geography agree despite different statistical concepts? |
+| T6: reconstructed county sheep versus DAFM sheep census | Pattern fidelity / consistency | Is the CSO-controlled reconstruction coherent with DAFM county sheep geography? DAFM ewe information enters the production allocation, so this is not independent validation. |
+| T7: national reconstructed cohorts versus COHORTS | Biological-system consistency | Are the CSO-controlled cohort totals coherent with the separate COHORTS representation despite classification differences? |
+| T8: adjacent-year spatial rank continuity | Diagnostic | Does the reconstruction introduce unintended year-to-year spatial jumps, including around the deliberately unreconciled published 2020 anchor? |
 
-It writes diagnostics beneath `data/processed/validation/historical/`.
+The historical runner additionally retains the Achill North applied ED-to-catchment benchmark and implementation checks for accounting closure, support rules and temporal stability.
 
-Four additional checks are implemented.
+For count-like comparisons the publication suite reports Lin's concordance correlation coefficient (CCC), Spearman rank correlation, Pearson correlation on `log(1+x)`, MAE, RMSE, mean bias, normalised RMSE and Nash-Sutcliffe efficiency (NSE). Where a simple alternative is available, skill is
 
-1. **Independent DAFM county sheep comparison.** Reconstructed county sheep totals are compared with the retained DAFM National Sheep and Goat Census totals for 2015, 2020, 2022 and 2025. CSO remains the controlling model source. DAFM is used only as independent validation evidence. Diagnostics report county-level error and spatial-rank agreement.
+[
+Skill = 1 - \frac{RMSE_{model}}{RMSE_{baseline}}.
+]
 
-2. **2022 sheep-composition holdout.** The observed 2022 DAFM breed-composition anchor is omitted. County-category breed shares are reconstructed by interpolation from the 2020 and 2025 anchors and then compared with the withheld 2022 observations. This tests reconstruction performance rather than accounting closure.
+Zero/non-zero agreement is reported where support is scientifically relevant. MAPE is not used because livestock distributions contain many zeros and small values. ED-level confidence intervals use a county-cluster bootstrap so EDs sharing county controls are not treated as independent resampling units.
 
-3. **Achill North applied benchmark.** The 23-ED livestock and land tables extracted from the 2026 Achill North sanitary survey are compared with the 2020 GOBLIN-Spatial anchor. Because both ultimately use Census of Agriculture 2020, this is an external applied implementation benchmark rather than statistically independent validation. The survey's published ED-area overlap correction for cattle and sheep is also reproduced as a spatial-transfer check.
+For the cattle two-anchor reconstruction, protected implementation checks additionally require exact county closure by component and year outside the observed 2020 anchor, unchanged published 2020 ED values, non-negative ED values, component accounting closure, within-county shares summing to one, no support where both census anchors are structural zero, bounded intermediate shares and the specified temporal weighting between the two census anchors. These checks verify reconstruction mathematics; they do not independently validate the exact 2015-2019 ED path.
 
-4. **Temporal spatial-rank stability.** Adjacent-year ED rankings are checked for total cattle, total sheep and transparent livestock-system signature indicators. This is a diagnostic for accidental discontinuities in the reconstructed panel, not independent empirical validation.
+For Step 3 cattle age-sex disaggregation, A0 is the flat county-composition null and A1 is the DAFM-informed log-odds prior. Both preserve every ED `OTHER_CATTLE` row and the same rescaled AAA10 county age-sex columns exactly. Published ED LSU is held out from fitting, but because published cattle and sheep totals already constrain much of that quantity, LSU is interpreted primarily as a test of the derived age-sex representation. The existing plausibility screen and five fixed county folds are retained as diagnostics rather than substituted for the publication agreement metrics.
 
-The validation suite therefore distinguishes:
-
-```text
-accounting closure
-    -> verifies implementation and conservation identities
-
-independent / holdout comparisons
-    -> validate reconstruction performance where external evidence exists
-
-applied benchmark reproduction
-    -> demonstrates that the model can reproduce a real Irish ED-to-catchment workflow
-
-temporal stability diagnostics
-    -> detect unintended spatial discontinuities
-```
-
-No arbitrary pass/fail thresholds are imposed on independent empirical discrepancies. The raw diagnostics and conventional statistics are reported so the scientific interpretation remains visible.
-
-For the cattle two-anchor reconstruction, protected implementation checks additionally require exact county closure by component and year, exact 2020-2025 invariance relative to the fixed-2020 panel, non-negative ED values, component accounting closure, within-county shares summing to one, no support where both anchors are zero, bounded intermediate shares, and equal yearly share increments between the two census anchors. These checks verify the reconstruction mathematics; they do not constitute independent ED-level validation for 2015-2019.
-
-For the Step 3 cattle age-sex split, A0 is the flat county-composition null and A1 is the DAFM-informed log-odds prior. Both must preserve every ED \`OTHER_CATTLE\` row and the same rescaled AAA10 county age-sex columns exactly. The pre-specified LSU plausibility screen is cattle > 0, LSU > 0 and \(LSU \le LSU_{\max}+1\), where \(LSU_{\max}=D+0.8S+O+0.1\,sheep\). A1 is retained unless its eligible share is more than one percentage point below A0. Median absolute LSU residual is reported as a diagnostic, pooled and across the fixed five county folds, but is not substituted for the pre-specified gate. DAFM linkage coverage and the neutral fallback for unmatched EDs are also regression-tested.
-
-For Step 4 cattle genetics, G0 is the legacy adult-cow-support allocator and G1 is the production AIM-hierarchical prior. Both must reproduce the same frozen ED age-sex cells and the same national GOBLIN DxD/DxB/BxB margins exactly. The DAFM broad dairy/beef comparison is reported using DxD as the broad dairy-type young-stock component and DxB + BxB as the broad beef-type young-stock component. Because G1 uses this AIM cattle-type information in its prior, G1 agreement with AIM is a calibration/coherence diagnostic, not independent validation. G0 remains a structural sensitivity. Additional diagnostics report the number of EDs using a coherent local AIM signal versus county fallback, genetic shares placed in zero-origin-cow EDs, no-adult-cow receiver/rearing EDs, concentration and adjacent-year rank stability.
+For Step 4 cattle genetics, G0 is the legacy adult-cow-support allocator and G1 is the production AIM-hierarchical prior. The fixed ED age-sex containers are preserved exactly. GOBLIN/COHORTS per-cow relationships are scaled by AAA10 national dairy- and other-cow totals in every year, including 2020, to derive the national DxD/DxB/BxB expectations before exact allocation to the fixed containers. G1 agreement with AIM is a calibration/coherence diagnostic, not independent validation, because AIM supplies the spatial cattle-type prior. The 2020 change from the earlier panel-cow denominator is therefore documented as a source-consistency correction to a derived layer, not as evidence of improved predictive accuracy.
 
 A true grassland-weighted ED-to-catchment sensitivity requires spatial information on where grassland lies within each ED-catchment intersection. The current compact LPIS/land context is ED-level, so the repository does not pretend that an ED total alone provides that within-ED geography. Simple area weighting is reproducible now; agricultural-land or grassland-weighted allocation should be added only when a defensible intersectable spatial layer is frozen.
 
