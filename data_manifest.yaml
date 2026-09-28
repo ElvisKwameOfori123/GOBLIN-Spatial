@@ -152,3 +152,12 @@ datasets:
     path: "data/inputs/spatial/SC2_ED_Boundaries_Frozen.gpkg"
     sha256: "550b2ed967f5c5e7ecb9053586cf431df564d0a990f99f9f82eb8b8be44faca8"
     required: false
+
+  wfd_catchments_frozen:
+    stage: "REPORTING"
+    module: [aggregation, catchment, reporting]
+    description: "Frozen 46-feature EPA WFD catchment geometry used to derive reproducible ED-to-catchment fractional-area weights."
+    source: "git"
+    path: "data/inputs/spatial/WFD_Catchments_Frozen.gpkg"
+    sha256: "d9b00e1732f4f6a711c7edfb9d4d3348efe8150efd60280361f217d8a2602b65"
+    required: true
