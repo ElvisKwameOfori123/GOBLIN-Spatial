@@ -1,8 +1,8 @@
-"""Build the CSO-controlled annual ED sheep panel, 2015-2025.
+"""Build the final CSO sheep panel and the derived 10-cohort sheep layer.
 
-This script deliberately stops at the statistical sheep baseline:
-AAA09 region controls -> county allocation prior -> ED totals -> CSO sheep
-classes. GOBLIN/Daniel sheep cohorts are a later, separate stage.
+The CSO panel is built first and remains the statistical baseline. The
+10-cohort layer is then derived from it without changing any CSO sheep
+control. National GOBLIN/COHORTS calibration remains a later, separate stage.
 
 Usage: python scripts/build_sheep_annual_panel.py
 """
@@ -12,6 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from goblin_spatial.config import load_config
+from goblin_spatial.sheep import add_sheep_cohorts
 from goblin_spatial.sheep.annual_panel import build_annual_sheep_panel
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -33,6 +34,12 @@ def main() -> None:
 
     print(
         f"Wrote {len(panel):,} CSO-controlled sheep ED-year rows and audit log to {OUT}"
+    )
+
+    cohorts = add_sheep_cohorts(panel, cfg)
+    cohorts.to_csv(OUT / "sheep_annual_ed_10_cohorts_2015_2025.csv", index=False)
+    print(
+        f"Wrote {len(cohorts):,} ED-year rows with the 10 derived sheep cohorts"
     )
 
 
