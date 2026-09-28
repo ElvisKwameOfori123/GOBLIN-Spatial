@@ -4,6 +4,7 @@ import pandas as pd
 
 from goblin_spatial.cattle.cohorts import FINAL_21_COHORTS
 from goblin_spatial.export.workbook import (
+    CSO_13_COHORTS,
     CSO_LIVESTOCK,
     IDENTIFIERS,
     SE_LAND,
@@ -33,7 +34,8 @@ def test_clean_schema_ignores_stale_lsu() -> None:
 
     sheets = build_clean_sheets(frame, base_year=2020)
 
-    assert sheets["CSO_All_Years"].shape[1] == 35
-    assert sheets["GOBLIN_All_Years"].shape[1] == 50
-    assert "LSU" not in sheets["CSO_All_Years"].columns
-    assert "LSU" not in sheets["GOBLIN_All_Years"].columns
+    assert len(CSO_13_COHORTS) == 13
+    assert sheets["CSO_13_Cohort_All_Years"].shape[1] == 35
+    assert sheets["GOBLIN_31_Cohort_All_Years"].shape[1] == 50
+    assert "LSU" not in sheets["CSO_13_Cohort_All_Years"].columns
+    assert "LSU" not in sheets["GOBLIN_31_Cohort_All_Years"].columns
