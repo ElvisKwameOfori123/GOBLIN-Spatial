@@ -1,9 +1,11 @@
-"""Build the two merged annual ED livestock panels, 2015-2025.
+"""Build the two canonical merged annual ED livestock panels, 2015-2025.
 
-  annual_livestock_cso_13_groups_2015_2025   9 CSO cattle + 4 CSO sheep groups
-  annual_livestock_31_cohorts_2015_2025      21 cattle + 10 sheep cohorts (+ the 13 groups)
+  CSO_13_Cohort_Annual_Panel_2015_2025      9 CSO cattle + 4 CSO sheep groups
+  GOBLIN_31_Cohort_Annual_Panel_2015_2025   21 cattle + 10 sheep cohorts (+ CSO_ controls)
 
-Writes CSV, one workbook and one SQLite file to data/processed/livestock/.
+CSVs go to the config paths outputs.cso_13_cohort_panel and
+outputs.goblin_31_cohort_panel; a workbook and SQLite copy go to
+data/processed/livestock/.
 Usage: python scripts/build_livestock_panels.py
 """
 
@@ -13,8 +15,6 @@ from pathlib import Path
 
 from goblin_spatial.config import load_config
 from goblin_spatial.export.livestock_panels import (
-    NAME_13,
-    NAME_31,
     build_livestock_panels,
     export_sqlite,
     export_workbook,
@@ -28,16 +28,18 @@ OUT = ROOT / "data/processed/livestock"
 
 def main() -> None:
     cfg = load_config(CONFIG)
+    outputs = cfg.raw["outputs"]
     panel13, panel31 = build_livestock_panels(cfg)
     checks = run_checks(panel13, panel31, cfg)
     print(checks.to_string(index=False))
-    OUT.mkdir(parents=True, exist_ok=True)
-    panel13.to_csv(OUT / f"{NAME_13}.csv", index=False)
-    panel31.to_csv(OUT / f"{NAME_31}.csv", index=False)
-    export_workbook(panel13, panel31, checks, OUT / "annual_livestock_panels_2015_2025.xlsx")
-    export_sqlite(panel13, panel31, checks, OUT / "annual_livestock_panels_2015_2025.sqlite")
+    for key, frame in (("cso_13_cohort_panel", panel13), ("goblin_31_cohort_panel", panel31)):
+        path = ROOT / outputs[key]
+        path.parent.mkdir(parents=True, exist_ok=True)
+        frame.to_csv(path, index=False)
+        print("wrote", path)
+    export_workbook(panel13, panel31, checks, OUT / "CSO_13_and_GOBLIN_31_Cohort_Annual_Panels_2015_2025.xlsx")
+    export_sqlite(panel13, panel31, checks, OUT / "CSO_13_and_GOBLIN_31_Cohort_Annual_Panels_2015_2025.sqlite")
     print(panel13.groupby("YEAR")[["TOTAL_CATTLE", "TOTAL_SHEEP"]].sum().to_string())
-    print(f"Wrote {NAME_13}, {NAME_31} (CSV), workbook and SQLite to {OUT}")
 
 
 if __name__ == "__main__":

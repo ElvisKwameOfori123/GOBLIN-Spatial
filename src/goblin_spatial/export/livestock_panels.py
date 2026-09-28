@@ -1,12 +1,12 @@
 """Merged annual ED livestock panels, 2015-2025 (YEAR x CSOED, 2,857 EDs).
 
-  annual_livestock_cso_13_groups_2015_2025
+  CSO_13_Cohort_Annual_Panel_2015_2025   (config outputs.cso_13_cohort_panel)
       9 CSO cattle groups: DAIRY_COW, OTHER_COW and the 7 AAA10 age-sex groups
       of other cattle (BULLS, male/female under 1, 1-2, 2+);
       4 AAA09 sheep classes: EWES_2_PLUS, EWES_UNDER_2, RAMS, OTHER_SHEEP.
       No genetics, breed-system or GOBLIN assumptions.
 
-  annual_livestock_31_cohorts_2015_2025
+  GOBLIN_31_Cohort_Annual_Panel_2015_2025   (config outputs.goblin_31_cohort_panel)
       21 cattle cohorts (DxD/DxB/BxB) + 10 sheep cohorts (upland/lowland
       breed-system), derived from the 13 groups. The 13 groups and the CSO
       totals are kept as control columns, prefixed CSO_ (so CSO_BULLS and the
@@ -18,7 +18,8 @@ Both come from the finished chains, unchanged:
 2020 ED totals are the published Census of Agriculture values; other years
 sum exactly to AAA10 county cattle and AAA09 regional sheep.
 
-The national GOBLIN/COHORTS calibration is a later, separate product.
+The national GOBLIN/COHORTS calibration is a later, separate product
+(GOBLIN_31_Cohort_Calibrated_Annual_Panel_2015_2025, reserved in config).
 """
 
 from __future__ import annotations
@@ -33,6 +34,7 @@ from goblin_spatial.cattle.annual_age_sex import build_annual_age_sex_panel
 from goblin_spatial.cattle.annual_panel import KNOWN_YEAR, build_annual_ed_panel
 from goblin_spatial.cattle.cohorts import FINAL_21_COHORTS, add_cattle_cohorts
 from goblin_spatial.config import SpatialConfig
+from goblin_spatial.export.workbook import CSO_13_COHORTS
 from goblin_spatial.sheep import add_sheep_cohorts, build_annual_sheep_panel
 from goblin_spatial.sheep.cohorts import GOBLIN_SHEEP_10
 
@@ -50,12 +52,14 @@ CATTLE_AGE_SEX_7 = [
 CSO_CATTLE_9 = ["DAIRY_COW", "OTHER_COW", *CATTLE_AGE_SEX_7]
 CSO_SHEEP_4 = ["EWES_2_PLUS", "EWES_UNDER_2", "RAMS", "OTHER_SHEEP"]
 CSO_13 = [*CSO_CATTLE_9, *CSO_SHEEP_4]
+if CSO_13 != CSO_13_COHORTS:
+    raise AssertionError("CSO 13 cohort contract differs from export.workbook.CSO_13_COHORTS")
 CSO_TOTALS = ["TOTAL_CATTLE", "OTHER_CATTLE", "TOTAL_SHEEP"]
 COHORTS_31 = [*FINAL_21_COHORTS, *GOBLIN_SHEEP_10]
 PROVENANCE = ["CATTLE_PROVENANCE", "SHEEP_PROVENANCE"]
 CONTROL_PREFIX = {c: f"CSO_{c}" for c in [*CSO_TOTALS, *CSO_13]}
-NAME_13 = "annual_livestock_cso_13_groups_2015_2025"
-NAME_31 = "annual_livestock_31_cohorts_2015_2025"
+NAME_13 = "CSO_13_Cohort_Annual_Panel_2015_2025"
+NAME_31 = "GOBLIN_31_Cohort_Annual_Panel_2015_2025"
 
 
 def build_livestock_panels(config: SpatialConfig) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -139,15 +143,15 @@ def run_checks(panel13: pd.DataFrame, panel31: pd.DataFrame, config: SpatialConf
 
 README = [
     ("Purpose", "Electoral Division (ED) livestock for every YEAR x CSOED, 2015-2025 (2,857 EDs, 31,427 rows), in two merged panels."),
-    (NAME_13, "Sheet CSO_13_groups. 9 CSO cattle groups (DAIRY_COW, OTHER_COW, BULLS, male/female under 1, 1-2, 2+) + 4 AAA09 sheep classes (EWES_2_PLUS, EWES_UNDER_2, RAMS, OTHER_SHEEP), with TOTAL_CATTLE, OTHER_CATTLE, TOTAL_SHEEP. No genetics, breed-system or GOBLIN assumptions."),
-    (NAME_31, "Sheet Cohorts_31. 21 cattle cohorts (DxD/DxB/BxB genetics) + 10 sheep cohorts (upland/lowland breed-system), derived from the 13 groups, which are kept as control columns prefixed CSO_."),
+    (NAME_13, "Sheet CSO_13_Cohort_All_Years. 9 CSO cattle groups (DAIRY_COW, OTHER_COW, BULLS, male/female under 1, 1-2, 2+) + 4 AAA09 sheep classes (EWES_2_PLUS, EWES_UNDER_2, RAMS, OTHER_SHEEP), with TOTAL_CATTLE, OTHER_CATTLE, TOTAL_SHEEP. No genetics, breed-system or GOBLIN assumptions."),
+    (NAME_31, "Sheet GOBLIN_31_Cohort_All_Years. 21 cattle cohorts (DxD/DxB/BxB genetics) + 10 sheep cohorts (upland/lowland breed-system), derived from the 13 groups, which are kept as control columns prefixed CSO_."),
     ("2020", "ED totals are the published CSO Census of Agriculture 2020 values, unchanged (cattle age-sex and sheep classes within them are estimated)."),
     ("Other years", "ED values are estimated. They sum exactly to AAA10 county cattle and AAA09 regional sheep (June). Published 2020 ED sums fall below those controls (sheep 259,807 head, 4.7%), so expect a dip at 2020 in ED sums."),
     ("Cattle chain", "CSO annual ED panel (2010 to 2020 share path, 2020 pattern held after) -> age-sex (AAA10 county, DAFM/AIM pattern) -> DxD/DxB/BxB genetics -> 21 cohorts."),
     ("Sheep chain", "AAA09 region -> county (CSO 2020 reference x DAFM breeding-ewe index) -> ED (2010 to 2020 share path) -> 4 AAA09 classes -> DAFM breed/system (2015 uses 2016 composition) -> 10 cohorts."),
     ("Upland / lowland", "Upland = mountain + mountain-cross breed type (DAFM): a breed/system proxy, not observed land location."),
     ("Provenance", "CATTLE_PROVENANCE and SHEEP_PROVENANCE say whether a row is the published 2020 census or a reconstructed year."),
-    ("Not included", "National GOBLIN/COHORTS calibration, land use, crops, farm structure, farmer age, Standard Output: later, separate steps on this same YEAR x CSOED backbone."),
+    ("Not included", "National GOBLIN/COHORTS calibration (GOBLIN_31_Cohort_Calibrated_Annual_Panel_2015_2025, reserved), land use, crops, farm structure, farmer age, Standard Output: later, separate steps on this same YEAR x CSOED backbone."),
     ("Checks", "Accounting checks run when the file was built. All must be TRUE."),
     ("Units", "Head of livestock (integers)."),
 ]
@@ -163,10 +167,10 @@ def export_workbook(panel13: pd.DataFrame, panel31: pd.DataFrame, checks: pd.Dat
         "README": pd.DataFrame(README, columns=["ITEM", "DESCRIPTION"]),
         "Checks": checks,
         "National_by_year": panel31.groupby("YEAR", as_index=False)[list(CONTROL_PREFIX.values()) + COHORTS_31].sum(),
-        "County_CSO_13": panel13.groupby(county_cols, as_index=False)[CSO_TOTALS + CSO_13].sum(),
-        "County_31": panel31.groupby(county_cols, as_index=False)[[CONTROL_PREFIX[c] for c in CSO_TOTALS] + COHORTS_31].sum(),
-        "CSO_13_groups": panel13,
-        "Cohorts_31": panel31,
+        "County_CSO_13_Cohort": panel13.groupby(county_cols, as_index=False)[CSO_TOTALS + CSO_13].sum(),
+        "County_GOBLIN_31_Cohort": panel31.groupby(county_cols, as_index=False)[[CONTROL_PREFIX[c] for c in CSO_TOTALS] + COHORTS_31].sum(),
+        "CSO_13_Cohort_All_Years": panel13,
+        "GOBLIN_31_Cohort_All_Years": panel31,
     }
     with pd.ExcelWriter(path, engine="openpyxl") as writer:
         for name, frame in sheets.items():

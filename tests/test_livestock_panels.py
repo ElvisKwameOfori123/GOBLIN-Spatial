@@ -11,6 +11,8 @@ from goblin_spatial.config import load_config
 from goblin_spatial.export.livestock_panels import (
     CONTROL_PREFIX,
     CSO_13,
+    NAME_13,
+    NAME_31,
     COHORTS_31,
     build_livestock_panels,
     export_sqlite,
@@ -33,6 +35,14 @@ def test_every_accounting_check_passes() -> None:
     checks = run_checks(panel13, panel31, cfg)
     assert len(checks) >= 15
     assert checks["PASS"].all(), checks.loc[~checks["PASS"]]
+
+
+def test_names_and_contract_match_the_export_module() -> None:
+    from goblin_spatial.export.workbook import CSO_13_COHORTS
+
+    assert NAME_13 == "CSO_13_Cohort_Annual_Panel_2015_2025"
+    assert NAME_31 == "GOBLIN_31_Cohort_Annual_Panel_2015_2025"
+    assert CSO_13 == CSO_13_COHORTS
 
 
 def test_column_sets() -> None:
@@ -69,7 +79,7 @@ def test_sqlite_round_trip(tmp_path) -> None:
     cfg, panel13, panel31 = _built()
     path = export_sqlite(panel13, panel31, run_checks(panel13, panel31, cfg), tmp_path / "x.sqlite")
     with sqlite3.connect(path) as con:
-        back = pd.read_sql("select * from annual_livestock_cso_13_groups_2015_2025", con)
-        n31 = con.execute("select count(*) from annual_livestock_31_cohorts_2015_2025").fetchone()[0]
+        back = pd.read_sql(f'select * from "{NAME_13}"', con)
+        n31 = con.execute(f'select count(*) from "{NAME_31}"').fetchone()[0]
     assert len(back) == len(panel13) and n31 == len(panel31)
     assert (back[CSO_13].to_numpy() == panel13[CSO_13].to_numpy()).all()
