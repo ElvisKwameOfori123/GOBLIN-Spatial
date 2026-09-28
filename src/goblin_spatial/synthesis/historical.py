@@ -108,6 +108,8 @@ def _additive_columns(frame: pd.DataFrame) -> list[str]:
         *FINAL_21_COHORTS,
         *GOBLIN_SHEEP_10,
         *SO_COMPONENTS,
+        "SO_OTHER_CROPS_CONSERVATIVE_2020_EUR",
+        "SO_OTHER_CROPS_IMPUTED_HA",
         "SO_LIVESTOCK_2020_EUR",
         "SO_COVERED_TOTAL_2020_EUR",
         "SO_COVERED_TOTAL_CONSERVATIVE_2020_EUR",
@@ -156,6 +158,19 @@ def aggregate_state(
             grouped["_AGE_HOLDING_NUM"], grouped["_AGE_HOLDING_DEN"]
         )
         grouped = grouped.drop(columns=temp_cols)
+
+    if "AGRICULTURAL_HOLDINGS" in grouped.columns:
+        for total_column, per_holding_column in (
+            ("SO_COVERED_TOTAL_2020_EUR", "SO_COVERED_PER_HOLDING_2020_EUR"),
+            (
+                "SO_COVERED_TOTAL_CONSERVATIVE_2020_EUR",
+                "SO_COVERED_PER_HOLDING_CONSERVATIVE_2020_EUR",
+            ),
+        ):
+            if total_column in grouped.columns:
+                grouped[per_holding_column] = _safe_ratio(
+                    grouped[total_column], grouped["AGRICULTURAL_HOLDINGS"]
+                )
 
     return add_signature_metrics(grouped)
 
