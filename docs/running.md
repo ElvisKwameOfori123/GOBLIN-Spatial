@@ -1,5 +1,7 @@
 # Running GOBLIN-Spatial
 
+> **Current release: the 2015-2025 historical baseline.** Scenario modules (SC1-SC3) remain in the repository but are dormant and not part of the historical baseline release. `goblin-spatial study` defaults to `--through baseline`, and the guided runner offers the baseline only; scenario stages run only when requested explicitly (`--through sc1|sc2|sc3`, or `GOBLIN_SPATIAL_SCENARIOS=1` for the guided menu). The sections below document those stages for later use.
+
 GOBLIN-Spatial supports four explicit stopping points:
 
 ```text
