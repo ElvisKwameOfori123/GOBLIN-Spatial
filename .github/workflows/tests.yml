@@ -6,9 +6,6 @@ on:
   pull_request:
     branches: [main]
 
-permissions:
-  contents: write
-
 jobs:
   model-test:
     runs-on: ubuntu-latest
@@ -125,10 +122,11 @@ jobs:
           PY
       - name: Build 2015-2025 WFD catchment baseline
         run: python scripts/build_catchment_baseline.py
-      - name: Freeze WFD catchment geometry artifact
+      - name: Verify frozen WFD catchment geometry checksum
         run: |
           test -f data/inputs/spatial/WFD_Catchments_Frozen.gpkg
-          sha256sum data/inputs/spatial/WFD_Catchments_Frozen.gpkg > data/inputs/spatial/WFD_Catchments_Frozen.gpkg.sha256
+          test -f data/inputs/spatial/WFD_Catchments_Frozen.gpkg.sha256
+          sha256sum -c data/inputs/spatial/WFD_Catchments_Frozen.gpkg.sha256
       - name: Upload frozen WFD catchment geometry
         uses: actions/upload-artifact@v4
         with:
