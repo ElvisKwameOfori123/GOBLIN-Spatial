@@ -30,12 +30,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from goblin_spatial.cattle.annual_age_sex import build_annual_age_sex_panel
-from goblin_spatial.cattle.annual_panel import KNOWN_YEAR, build_annual_ed_panel
-from goblin_spatial.cattle.cohorts import FINAL_21_COHORTS, add_cattle_cohorts
+from goblin_spatial.cattle.annual_panel import KNOWN_YEAR
+from goblin_spatial.cattle.cohorts import FINAL_21_COHORTS
 from goblin_spatial.config import SpatialConfig
 from goblin_spatial.export.workbook import CSO_13_COHORTS
-from goblin_spatial.sheep import add_sheep_cohorts, build_annual_sheep_panel
 from goblin_spatial.sheep.cohorts import GOBLIN_SHEEP_10
 
 YEARS = tuple(range(2015, 2026))
@@ -73,39 +71,30 @@ NAME_31 = "GOBLIN_31_Cohort_Annual_Panel_2015_2025"
 
 
 def build_livestock_panels(config: SpatialConfig) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Return (13-group CSO panel, 31-cohort panel)."""
+    """Return livestock-only views from the canonical production builders.
 
-    base, _ = build_annual_ed_panel(config)
-    cattle = add_cattle_cohorts(build_annual_age_sex_panel(config, base), config)
-    sheep_panel, _ = build_annual_sheep_panel(config)
-    sheep = add_sheep_cohorts(sheep_panel, config)
+    This function is retained for tests and lightweight livestock exports, but
+    it no longer owns a separate cattle/sheep reconstruction route.
+    """
 
-    cattle = cattle.rename(columns={"PROVENANCE": "CATTLE_PROVENANCE"})
-    sheep = sheep.rename(columns={"SHEEP_DATA_STATUS": "SHEEP_PROVENANCE"})
-    cattle["CSOED"] = cattle["CSOED"].astype(str)
-    sheep["CSOED"] = sheep["CSOED"].astype(str)
+    from goblin_spatial.baseline.cattle import build_cattle_baseline
+    from goblin_spatial.baseline.merge import merge_livestock
+    from goblin_spatial.baseline.sheep import build_sheep_baseline
 
-    merged = sheep[
-        ["YEAR", "CSOED", "EDNAME", "County", "Region", "NUTS2", "TOTAL_SHEEP", *CSO_SHEEP_4, *GOBLIN_SHEEP_10, "SHEEP_PROVENANCE"]
-    ].merge(
-        cattle[["YEAR", "CSOED", "County", "TOTAL_CATTLE", "OTHER_CATTLE", "DAIRY_COW", "OTHER_COW",
-                *CATTLE_AGE_SEX_7, *FINAL_21_COHORTS, "CATTLE_PROVENANCE"]],
-        on=["YEAR", "CSOED"],
-        how="outer",
-        suffixes=("", "_CATTLE"),
-        validate="one_to_one",
-        indicator=True,
+    cattle = build_cattle_baseline(config)
+    sheep = build_sheep_baseline(config)
+    merged = merge_livestock(cattle, sheep).rename(
+        columns={
+            "PROVENANCE": "CATTLE_PROVENANCE",
+            "SHEEP_DATA_STATUS": "SHEEP_PROVENANCE",
+        }
     )
-    if not merged["_merge"].eq("both").all():
-        raise AssertionError("cattle and sheep ED-year frames differ")
-    if not merged["County"].eq(merged["County_CATTLE"]).all():
-        raise AssertionError("cattle and sheep disagree on ED county")
-    for column in [*CSO_TOTALS, *CSO_13, *COHORTS_31]:
-        merged[column] = merged[column].astype(np.int64)
-    merged = merged.sort_values(["YEAR", "CSOED"], kind="stable").reset_index(drop=True)
+    panel13, panel31 = project_enriched_livestock_panels(merged)
+    for column in [*CSO_TOTALS, *CSO_13]:
+        panel13[column] = panel13[column].astype(np.int64)
+    for column in [*CONTROL_PREFIX.values(), *COHORTS_31]:
+        panel31[column] = panel31[column].astype(np.int64)
 
-    panel13 = merged[ID_COLS + CSO_TOTALS + CSO_13 + PROVENANCE].copy()
-    panel31 = merged[ID_COLS + CSO_TOTALS + CSO_13 + COHORTS_31 + PROVENANCE].rename(columns=CONTROL_PREFIX)
     checks = run_checks(panel13, panel31, config)
     if not checks["PASS"].all():
         failed = checks.loc[~checks["PASS"], "CHECK"].tolist()
