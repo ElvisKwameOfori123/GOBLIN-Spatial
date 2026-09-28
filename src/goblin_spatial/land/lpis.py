@@ -410,19 +410,11 @@ def build_ed_lpis_profile(
         raise ValueError("LPIS and ED geometry must both have a defined CRS")
 
     baseline_one = baseline.drop_duplicates(subset=[baseline_key_col]).copy()
-    baseline_keyed = baseline_one.copy()
-    baseline_keyed["CSOED_CANONICAL"] = baseline_keyed[baseline_key_col].map(
-        canonical_csoed
-    )
-    if baseline_keyed["CSOED_CANONICAL"].eq("").any():
-        raise ValueError(f"{baseline_key_col} contains blank ED identifiers")
-    if baseline_keyed["CSOED_CANONICAL"].duplicated().any():
-        raise ValueError("baseline contains duplicate canonical ED identifiers")
-    ed_selected = select_baseline_ed_geometries(
+    baseline_keyed, ed_selected = select_baseline_ed_geometries(
         baseline_one,
         ed_gdf,
-        baseline_key=baseline_key_col,
-        ed_key=ed_key_col,
+        baseline_key_col=baseline_key_col,
+        ed_key_col=ed_key_col,
     )
     ed_selected = ed_selected.to_crs(target_crs).copy()
     invalid_ed = ~ed_selected.geometry.is_valid
@@ -483,10 +475,8 @@ def build_ed_lpis_profile(
         )
         if candidate.empty:
             continue
-        # GeoPandas sjoin returns the right-hand index labels, not positional offsets.
-        # Use .loc so non-RangeIndex ED geometries are handled correctly.
-        right_geometry = ed_spatial.geometry.loc[
-            candidate["index_right"].to_numpy()
+        right_geometry = ed_spatial.geometry.iloc[
+            candidate["index_right"].to_numpy(dtype=int)
         ].to_numpy()
         intersection = shapely.intersection(candidate.geometry.to_numpy(), right_geometry)
         intersection_ha = shapely.area(intersection) / 10_000.0
