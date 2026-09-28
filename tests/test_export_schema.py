@@ -36,6 +36,8 @@ def test_clean_schema_ignores_stale_lsu() -> None:
 
     assert len(CSO_13_COHORTS) == 13
     assert sheets["CSO_13_Cohort_All_Years"].shape[1] == 35
-    assert sheets["GOBLIN_31_Cohort_All_Years"].shape[1] == 50
+    assert sheets["GOBLIN_31_Cohort_All_Years"].shape[1] == 64
     assert "LSU" not in sheets["CSO_13_Cohort_All_Years"].columns
     assert "LSU" not in sheets["GOBLIN_31_Cohort_All_Years"].columns
+    assert "CSO_TOTAL_CATTLE" in sheets["GOBLIN_31_Cohort_All_Years"].columns
+    assert "CSO_BULLS" in sheets["GOBLIN_31_Cohort_All_Years"].columns
