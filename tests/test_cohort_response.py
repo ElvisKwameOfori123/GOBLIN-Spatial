@@ -7,9 +7,9 @@ import pandas as pd
 import pytest
 
 from goblin_spatial.cattle.cohorts import FINAL_21_COHORTS
-from goblin_spatial.scenario import allocate_cattle_cohort_response
 from goblin_spatial.scenario.cohort_response import (
     _reduction_signal,
+    allocate_cattle_cohort_response,
     build_ed_cohort_dependency_profile,
 )
 
