@@ -129,16 +129,26 @@ jobs:
 
           wfd = pd.read_csv("data/processed/goblin_spatial_wfd_catchment_2015_2025.csv")
           colm = pd.read_csv("data/processed/goblin_spatial_colm_catchment_2015_2025.csv")
+          county = pd.read_csv("data/processed/goblin_spatial_county_2015_2025.csv")
+          national = pd.read_csv("data/processed/goblin_spatial_national_2015_2025.csv")
           crosswalk = pd.read_csv("data/processed/ed_wfd_catchment_crosswalk.csv")
           diagnostics = pd.read_csv("data/processed/catchment_closure_diagnostics.csv")
 
           assert wfd.groupby("YEAR")["WFD_CATCHMENT_ID"].nunique().eq(46).all()
           assert colm.groupby("YEAR")["COLM_CATCHMENT"].nunique().eq(37).all()
+          assert county.groupby("YEAR")["County"].nunique().eq(26).all()
+          assert len(national) == 11
+          for frame in (wfd, colm, county, national):
+              assert "AVERAGE_SIZE_OF_HOLDINGS" in frame
+              assert "AVERAGE_AGE_OF_HOLDER" in frame
+              assert "MEDIAN_AGE_OF_HOLDER" not in frame
           assert crosswalk.groupby("CSOED")["ED_CATCHMENT_WEIGHT"].sum().sub(1.0).abs().max() < 1e-10
           assert diagnostics["DIFF"].abs().max() < 1e-6
 
           print("WFD catchment-years:", len(wfd))
           print("Colm catchment-years:", len(colm))
+          print("County-years:", len(county))
+          print("National-years:", len(national))
           print("Crosswalk rows:", len(crosswalk))
           PY
       - name: Build historical manuscript result bundle
