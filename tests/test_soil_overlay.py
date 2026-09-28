@@ -18,7 +18,7 @@ def test_soil_overlay_uses_baseline_ed_universe_only():
     shapely_geometry = pytest.importorskip("shapely.geometry")
     box = shapely_geometry.box
 
-    from goblin_spatial.soil.overlay import overlay_soil_associations
+    from goblin_spatial.soil import overlay_soil_associations
 
     baseline = pd.DataFrame(
         {
@@ -45,7 +45,7 @@ def test_soil_overlay_uses_baseline_ed_universe_only():
 
     soil = gpd.GeoDataFrame(
         {
-            "ASSOCIATION": ["1000a", "0700b"],
+            "Associatio": ["1000a", "0700b"],
             "geometry": [
                 box(0, 0, 1500, 1000),
                 box(1500, 0, 3000, 1000),
@@ -54,7 +54,13 @@ def test_soil_overlay_uses_baseline_ed_universe_only():
         crs="EPSG:2157",
     )
 
-    profile, diagnostics = overlay_soil_associations(baseline, ed, soil)
+    profile, diagnostics = overlay_soil_associations(
+        baseline,
+        ed,
+        soil,
+        target_crs="EPSG:2157",
+        min_intersection_ha=0.0,
+    )
 
     assert set(profile["CSOED_CANONICAL"]) == {"1001", "1002"}
     assert "1003" not in set(profile["CSOED_CANONICAL"])
@@ -64,13 +70,13 @@ def test_soil_overlay_uses_baseline_ed_universe_only():
     assert diagnostics.eds_with_soil == 2
 
     shares = profile.groupby("CSOED_CANONICAL")[
-        "ASSOCIATION_SHARE"
+        "ASSOCIATION_SHARE_WITHIN_MAPPED_SOIL"
     ].sum()
     assert shares.loc["1001"] == pytest.approx(1.0)
     assert shares.loc["1002"] == pytest.approx(1.0)
 
     ed2 = profile.loc[profile["CSOED_CANONICAL"].eq("1002")]
-    areas = dict(zip(ed2["ASSOCIATION"], ed2["AREA_HA"]))
+    areas = dict(zip(ed2["SIS_ASSOCIATION"], ed2["INTERSECTION_HA"]))
     assert areas["1000a"] == pytest.approx(50.0)
     assert areas["0700b"] == pytest.approx(50.0)
 
@@ -91,5 +97,5 @@ def test_soil_overlay_fails_if_baseline_ed_is_missing_from_geometry():
         crs="EPSG:2157",
     )
 
-    with pytest.raises(ValueError, match="geometry is missing 1 model EDs"):
+    with pytest.raises(ValueError, match="missing 1 baseline CSOED"):
         select_baseline_ed_geometries(baseline, ed)
