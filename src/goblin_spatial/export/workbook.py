@@ -10,8 +10,17 @@ from goblin_spatial.cattle.cohorts import FINAL_21_COHORTS
 from goblin_spatial.sheep.cohorts import GOBLIN_SHEEP_10
 
 IDENTIFIERS = [
-    "YEAR", "ELECTORAL_DIVISIONS", "ED", "County", "EDID", "CSOED",
-    "CSOED_RAW", "EDNAME", "COUNTYNAME",
+    "YEAR",
+    "ELECTORAL_DIVISIONS",
+    "ED",
+    "County",
+    "EDID",
+    "CSOED",
+    "CSOED_RAW",
+    "EDNAME",
+    "COUNTYNAME",
+    "Region",
+    "NUTS2",
 ]
 CSO_13_COHORTS = [
     # Cattle: two adult cow groups plus the seven CSO age-sex groups.
