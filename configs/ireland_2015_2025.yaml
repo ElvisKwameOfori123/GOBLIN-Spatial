@@ -51,8 +51,11 @@ files:
 outputs:
   cattle_panel: data/interim/cattle_ed_2015_2025.csv
   sheep_panel: data/interim/sheep_ed_2015_2025.csv
-  livestock_master: data/interim/livestock_ed_2015_2025.csv
-  cohort_master: data/interim/goblin_31_cohort_master_2015_2025.csv
+  # Canonical merged livestock products.
+  cso_13_cohort_panel: data/interim/CSO_13_Cohort_Annual_Panel_2015_2025.csv
+  goblin_31_cohort_panel: data/interim/GOBLIN_31_Cohort_Annual_Panel_2015_2025.csv
+  # Reserved for the later national GOBLIN/Daniel calibration stage.
+  goblin_31_cohort_calibrated_panel: data/interim/GOBLIN_31_Cohort_Calibrated_Annual_Panel_2015_2025.csv
   enriched_master: data/processed/goblin_spatial_master_2015_2025.csv
   clean_workbook: data/processed/GOBLIN_Spatial_Final_Clean_Data_2015_2025.xlsx
   standard_output_master: data/processed/08_GOBLIN_Spatial_Standard_Output_2015_2025.csv
