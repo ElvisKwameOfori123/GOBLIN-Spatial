@@ -483,8 +483,10 @@ def build_ed_lpis_profile(
         )
         if candidate.empty:
             continue
-        right_geometry = ed_spatial.geometry.iloc[
-            candidate["index_right"].to_numpy(dtype=int)
+        # GeoPandas sjoin returns the right-hand index labels, not positional offsets.
+        # Use .loc so non-RangeIndex ED geometries are handled correctly.
+        right_geometry = ed_spatial.geometry.loc[
+            candidate["index_right"].to_numpy()
         ].to_numpy()
         intersection = shapely.intersection(candidate.geometry.to_numpy(), right_geometry)
         intersection_ha = shapely.area(intersection) / 10_000.0
