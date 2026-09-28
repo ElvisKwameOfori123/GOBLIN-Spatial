@@ -37,7 +37,19 @@ from goblin_spatial.export.workbook import CSO_13_COHORTS
 from goblin_spatial.sheep.cohorts import GOBLIN_SHEEP_10
 
 YEARS = tuple(range(2015, 2026))
-ID_COLS = ["YEAR", "CSOED", "EDNAME", "County", "Region", "NUTS2"]
+ID_COLS = [
+    "YEAR",
+    "ELECTORAL_DIVISIONS",
+    "ED",
+    "County",
+    "EDID",
+    "CSOED",
+    "CSOED_RAW",
+    "EDNAME",
+    "COUNTYNAME",
+    "Region",
+    "NUTS2",
+]
 CATTLE_AGE_SEX_7 = [
     "BULLS",
     "CATTLE_MALE_UNDER_1",
@@ -113,7 +125,12 @@ def project_enriched_livestock_panels(
     changing livestock values.
     """
 
-    ids = [column for column in ID_COLS if column in master.columns]
+    missing_ids = [column for column in ID_COLS if column not in master.columns]
+    if missing_ids:
+        raise ValueError(
+            f"enriched master missing canonical ED identifiers: {missing_ids}"
+        )
+    ids = list(ID_COLS)
     context = [column for column in CONTEXT_COLUMNS if column in master.columns]
     provenance = [column for column in PROVENANCE if column in master.columns]
     required = {*CSO_TOTALS, *CSO_13, *COHORTS_31}
