@@ -35,9 +35,25 @@ def test_clean_schema_ignores_stale_lsu() -> None:
     sheets = build_clean_sheets(frame, base_year=2020)
 
     assert len(CSO_13_COHORTS) == 13
-    assert sheets["CSO_13_Cohort_All_Years"].shape[1] == 35
-    assert sheets["GOBLIN_31_Cohort_All_Years"].shape[1] == 64
+    assert sheets["CSO_13_Cohort_All_Years"].shape[1] == 37
+    assert sheets["GOBLIN_31_Cohort_All_Years"].shape[1] == 66
     assert "LSU" not in sheets["CSO_13_Cohort_All_Years"].columns
     assert "LSU" not in sheets["GOBLIN_31_Cohort_All_Years"].columns
     assert "CSO_TOTAL_CATTLE" in sheets["GOBLIN_31_Cohort_All_Years"].columns
     assert "CSO_BULLS" in sheets["GOBLIN_31_Cohort_All_Years"].columns
+
+
+def test_clean_schema_keeps_complete_ed_identity_block() -> None:
+    assert IDENTIFIERS == [
+        "YEAR",
+        "ELECTORAL_DIVISIONS",
+        "ED",
+        "County",
+        "EDID",
+        "CSOED",
+        "CSOED_RAW",
+        "EDNAME",
+        "COUNTYNAME",
+        "Region",
+        "NUTS2",
+    ]
