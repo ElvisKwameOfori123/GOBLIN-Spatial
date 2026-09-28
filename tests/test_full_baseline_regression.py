@@ -42,6 +42,18 @@ def test_full_historical_baseline_through_stage09():
     assert rows_by_year.to_dict() == {year: 2_857 for year in EXPECTED_YEARS}
     assert eds_by_year.to_dict() == {year: 2_857 for year in EXPECTED_YEARS}
 
+    # Production now uses the finished cattle and sheep chains. Published
+    # 2020 ED livestock values must therefore remain unchanged.
+    published_2020 = pd.read_csv(cfg.files["cso_ed_2020"], dtype={"CSOED": str}).set_index("CSOED")
+    built_2020 = baseline.loc[year_values == 2020].copy()
+    built_2020["CSOED"] = built_2020["CSOED"].astype(str)
+    built_2020 = built_2020.set_index("CSOED").loc[published_2020.index]
+    for column in ("DAIRY_COW", "OTHER_COW", "OTHER_CATTLE", "TOTAL_CATTLE", "TOTAL_SHEEP"):
+        assert np.array_equal(
+            pd.to_numeric(built_2020[column], errors="raise").to_numpy(dtype=np.int64),
+            pd.to_numeric(published_2020[column], errors="raise").to_numpy(dtype=np.int64),
+        )
+
     # Every reconstructed year must contain the same agricultural ED universe.
     anchor_ed_universe = set(
         baseline.loc[year_values == 2020, "CSOED"].astype(str).tolist()
@@ -88,6 +100,30 @@ def test_full_historical_baseline_through_stage09():
         "MEDIAN_AGE_OF_HOLDER",
     }
     assert required_structure.issubset(baseline.columns)
+
+    # The two canonical public annual panels are emitted from this same
+    # production master after land and farm-structure enrichment.
+    for key in ("cso_13_cohort_panel", "goblin_31_cohort_panel"):
+        panel_path = Path(cfg.raw["outputs"][key])
+        if not panel_path.is_absolute():
+            panel_path = cfg.project_root / panel_path
+        assert panel_path.exists()
+        public = pd.read_csv(panel_path)
+        assert len(public) == 31_427
+        assert public["CSOED"].nunique() == 2_857
+        assert not public[["YEAR", "CSOED"]].duplicated().any()
+        for column in (
+            "AREA_FARMED",
+            "ALL_GRASSLAND",
+            "TOTAL_CEREALS",
+            "OTHER_CROPS_HA",
+            "AGRICULTURAL_HOLDINGS",
+            "AVERAGE_SIZE_OF_HOLDINGS",
+            "AVERAGE_AGE_OF_HOLDER",
+            "MEDIAN_AGE_OF_HOLDER",
+        ):
+            assert column in public.columns
+            assert public[column].notna().all()
 
     # Stage 08 is the final value-enrichment stage. Its fixed-2020 valuation
     # must exist for every ED-year while leaving the activity accounting above
