@@ -1,4 +1,8 @@
-"""Build the CSO-controlled annual ED sheep panel and 10 GOBLIN sheep cohorts, 2015-2025.
+"""Build the CSO-controlled annual ED sheep panel, 2015-2025.
+
+This script deliberately stops at the statistical sheep baseline:
+AAA09 region controls -> county allocation prior -> ED totals -> CSO sheep
+classes. GOBLIN/Daniel sheep cohorts are a later, separate stage.
 
 Usage: python scripts/build_sheep_annual_panel.py
 """
@@ -8,7 +12,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from goblin_spatial.config import load_config
-from goblin_spatial.sheep import add_sheep_cohorts
 from goblin_spatial.sheep.annual_panel import build_annual_sheep_panel
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -28,9 +31,9 @@ def main() -> None:
                  "N_ELIGIBLE", "MAX_SEED", "MAX_SEED_SHARE_OF_GAP"]].to_string(index=False))
     print(panel.groupby("YEAR")["TOTAL_SHEEP"].sum().to_string())
 
-    cohorts = add_sheep_cohorts(panel, cfg)
-    cohorts.to_csv(OUT / "sheep_annual_ed_10_cohorts_2015_2025.csv", index=False)
-    print(f"Wrote {len(panel):,} ED-year rows to {OUT}")
+    print(
+        f"Wrote {len(panel):,} CSO-controlled sheep ED-year rows and audit log to {OUT}"
+    )
 
 
 if __name__ == "__main__":
