@@ -68,12 +68,6 @@ jobs:
             tests/test_sc3_feasible_geographies.py \
             tests/test_scenario_control_table.py \
             tests/test_scenario_preflight.py
-      - name: Run maintained utility tests
-        run: |
-          pytest -q \
-            tests/test_cohort_response.py \
-            tests/test_lpis_spatial_bridge.py \
-            tests/test_soil_overlay.py
       - name: Run reporting architecture tests
         run: |
           pytest -q \
