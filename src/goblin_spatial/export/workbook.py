@@ -13,12 +13,31 @@ IDENTIFIERS = [
     "YEAR", "ELECTORAL_DIVISIONS", "ED", "County", "EDID", "CSOED",
     "CSOED_RAW", "EDNAME", "COUNTYNAME",
 ]
+CSO_13_COHORTS = [
+    # Cattle: two adult cow groups plus the seven CSO age-sex groups.
+    "DAIRY_COW",
+    "OTHER_COW",
+    "BULLS",
+    "CATTLE_MALE_UNDER_1",
+    "CATTLE_FEMALE_UNDER_1",
+    "CATTLE_MALE_1_2",
+    "CATTLE_FEMALE_1_2",
+    "CATTLE_MALE_2_PLUS",
+    "CATTLE_FEMALE_2_PLUS",
+    # Sheep: the four atomic AAA09 classes.
+    "EWES_2_PLUS",
+    "EWES_UNDER_2",
+    "RAMS",
+    "OTHER_SHEEP",
+]
 CSO_LIVESTOCK = [
-    "DAIRY_COW", "OTHER_COW", "OTHER_CATTLE", "TOTAL_CATTLE", "BULLS",
-    "CATTLE_MALE_UNDER_1", "CATTLE_FEMALE_UNDER_1", "CATTLE_MALE_1_2",
-    "CATTLE_FEMALE_1_2", "CATTLE_MALE_2_PLUS", "CATTLE_FEMALE_2_PLUS",
-    "TOTAL_SHEEP", "EWES", "EWES_2_PLUS", "EWES_UNDER_2", "RAMS",
-    "OTHER_SHEEP", "BREEDING_SHEEP",
+    *CSO_13_COHORTS,
+    # Retained control/derived fields for audit and convenient use.
+    "OTHER_CATTLE",
+    "TOTAL_CATTLE",
+    "TOTAL_SHEEP",
+    "EWES",
+    "BREEDING_SHEEP",
 ]
 SE_LAND = [
     "AVERAGE_SIZE_OF_HOLDINGS", "AGRICULTURAL_HOLDINGS", "AVERAGE_AGE_OF_HOLDER",
@@ -64,9 +83,19 @@ def build_clean_sheets(master: pd.DataFrame, base_year: int = 2020) -> dict[str,
     cso_columns = list(dict.fromkeys(ids + _existing(master, CSO_LIVESTOCK) + _existing(master, SE_LAND)))
     goblin_columns = list(dict.fromkeys(ids + _existing(master, ["TOTAL_CATTLE", "TOTAL_SHEEP"]) + GOBLIN_31 + _existing(master, SE_LAND)))
 
+    missing_cso = [column for column in CSO_13_COHORTS if column not in master.columns]
+    if missing_cso:
+        raise ValueError(
+            f"cannot export workbook; missing CSO 13 cohort fields: {missing_cso}"
+        )
+    if len(CSO_13_COHORTS) != 13:
+        raise AssertionError("CSO cohort contract must contain exactly 13 groups")
+
     missing = [column for column in GOBLIN_31 if column not in master.columns]
     if missing:
         raise ValueError(f"cannot export workbook; missing GOBLIN cohorts: {missing}")
+    if len(GOBLIN_31) != 31:
+        raise AssertionError("GOBLIN cohort contract must contain exactly 31 groups")
 
     cso_all = master[cso_columns].sort_values(["YEAR", "CSOED"], kind="stable").reset_index(drop=True)
     goblin_all = master[goblin_columns].sort_values(["YEAR", "CSOED"], kind="stable").reset_index(drop=True)
@@ -74,10 +103,10 @@ def build_clean_sheets(master: pd.DataFrame, base_year: int = 2020) -> dict[str,
     goblin_2020 = goblin_all.loc[goblin_all["YEAR"] == base_year].copy().reset_index(drop=True)
 
     sheets = {
-        "CSO_All_Years": cso_all,
-        "GOBLIN_All_Years": goblin_all,
-        "CSO_2020": cso_2020,
-        "GOBLIN_2020": goblin_2020,
+        "CSO_13_Cohort_All_Years": cso_all,
+        "GOBLIN_31_Cohort_All_Years": goblin_all,
+        "CSO_13_Cohort_2020": cso_2020,
+        "GOBLIN_31_Cohort_2020": goblin_2020,
     }
     so_columns = list(dict.fromkeys(ids + _existing(master, STANDARD_OUTPUT)))
     if any(column.startswith("SO_") for column in so_columns):
@@ -86,9 +115,13 @@ def build_clean_sheets(master: pd.DataFrame, base_year: int = 2020) -> dict[str,
     for name, frame in sheets.items():
         _check_clean(frame, name)
     if not cso_all.loc[cso_all["YEAR"] == base_year].reset_index(drop=True).equals(cso_2020):
-        raise AssertionError("CSO_2020 is not the exact subset of CSO_All_Years")
+        raise AssertionError(
+            "CSO_13_Cohort_2020 is not the exact subset of CSO_13_Cohort_All_Years"
+        )
     if not goblin_all.loc[goblin_all["YEAR"] == base_year].reset_index(drop=True).equals(goblin_2020):
-        raise AssertionError("GOBLIN_2020 is not the exact subset of GOBLIN_All_Years")
+        raise AssertionError(
+            "GOBLIN_31_Cohort_2020 is not the exact subset of GOBLIN_31_Cohort_All_Years"
+        )
     return sheets
 
 
