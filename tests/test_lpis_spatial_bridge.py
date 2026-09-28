@@ -3,7 +3,7 @@ import pandas as pd
 import geopandas as gpd
 from shapely import from_wkt
 
-from goblin_spatial.land.lpis import build_ed_lpis_profile
+from goblin_spatial.land import build_ed_lpis_profile
 
 
 def test_lpis_area_is_split_across_two_model_eds():
