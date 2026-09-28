@@ -142,12 +142,37 @@ def _dafm_ewe_shares(county_path, breed_path, crosswalk: pd.DataFrame) -> pd.Dat
     """
 
     county = pd.read_csv(county_path)
+    required_county = {"YEAR", "County", "EWES"}
+    missing_county = sorted(required_county - set(county.columns))
+    if missing_county:
+        raise ValueError(f"DAFM sheep county pattern missing columns: {missing_county}")
+    county["YEAR"] = pd.to_numeric(county["YEAR"], errors="raise").astype(int)
     county["County"] = county["County"].map(_normalise_county)
+    county["EWES"] = pd.to_numeric(county["EWES"], errors="raise").astype(float)
+    if not np.isfinite(county["EWES"]).all() or (county["EWES"] <= 0).any():
+        raise ValueError("DAFM sheep county pattern has non-positive or non-finite EWES")
+    if county[["YEAR", "County"]].duplicated().any():
+        raise AssertionError("duplicate DAFM sheep county-year rows")
     ewes = county[["YEAR", "County", "EWES"]].copy()
 
     breed = pd.read_csv(breed_path, encoding="utf-8-sig")
+    required_breed = {"YEAR", "CATEGORY", "County", "TOTAL_DAFM"}
+    missing_breed = sorted(required_breed - set(breed.columns))
+    if missing_breed:
+        raise ValueError(f"DAFM sheep breed anchors missing columns: {missing_breed}")
+    breed["YEAR"] = pd.to_numeric(breed["YEAR"], errors="raise").astype(int)
     breed["County"] = breed["County"].map(_normalise_county)
-    breed = breed.loc[breed["CATEGORY"].astype(str).str.upper() == "EWES", ["YEAR", "County", "TOTAL_DAFM"]]
+    breed["TOTAL_DAFM"] = pd.to_numeric(
+        breed["TOTAL_DAFM"], errors="raise"
+    ).astype(float)
+    breed = breed.loc[
+        breed["CATEGORY"].astype(str).str.upper() == "EWES",
+        ["YEAR", "County", "TOTAL_DAFM"],
+    ]
+    if not np.isfinite(breed["TOTAL_DAFM"]).all() or (breed["TOTAL_DAFM"] <= 0).any():
+        raise ValueError("DAFM sheep ewe breed anchors are non-positive or non-finite")
+    if breed[["YEAR", "County"]].duplicated().any():
+        raise AssertionError("duplicate DAFM ewe breed-anchor county-year rows")
     breed = breed.rename(columns={"TOTAL_DAFM": "EWES"})
 
     both = ewes.merge(breed, on=["YEAR", "County"], suffixes=("", "_BREED"))
@@ -202,9 +227,15 @@ def _reference_2020(ed: pd.DataFrame, region: pd.DataFrame, apply_seed: bool = T
     # types are then on the scale of the EDs that faded from the 2020 census.
     has_all = published.gt(0)
     faded = eligible & positive_2010
-    sheep_density_national = float(published[has_all].sum() / ed.loc[has_all, "ALL_GRASSLAND"].sum())
-    faded_density_national = float(s10[faded].sum() / ed.loc[faded, "ALL_GRASSLAND"].sum())
+    published_grassland = float(ed.loc[has_all, "ALL_GRASSLAND"].sum())
+    faded_grassland = float(ed.loc[faded, "ALL_GRASSLAND"].sum())
+    if published_grassland <= 0 or faded_grassland <= 0:
+        raise AssertionError("cannot estimate sheep small-flock factor without grassland support")
+    sheep_density_national = float(published[has_all].sum() / published_grassland)
+    faded_density_national = float(s10[faded].sum() / faded_grassland)
     small_flock_factor = faded_density_national / sheep_density_national
+    if not np.isfinite(small_flock_factor) or small_flock_factor <= 0:
+        raise AssertionError("invalid sheep small-flock factor")
 
     audit = []
     for region_name, idx in ed.groupby("Region").groups.items():
@@ -440,8 +471,15 @@ def build_annual_sheep_panel(config: SpatialConfig, seed_reference: bool = True)
 
 
 def _validate(panel: pd.DataFrame, ed: pd.DataFrame, region: pd.DataFrame, expected_eds: int) -> None:
-    if len(panel) != expected_eds * len(YEARS) or panel[["YEAR", "CSOED"]].duplicated().any():
-        raise AssertionError("sheep panel must hold every ED once per year")
+    if len(panel) != expected_eds * len(YEARS):
+        raise AssertionError("sheep panel row count is incomplete")
+    if panel[["YEAR", "CSOED"]].duplicated().any():
+        raise AssertionError("duplicate YEAR-CSOED sheep rows")
+    if panel["CSOED"].nunique() != expected_eds:
+        raise AssertionError("sheep ED coverage changed")
+    if set(panel["YEAR"].unique()) != set(YEARS):
+        raise AssertionError("sheep years are not exactly 2015-2025")
+
     columns = ["TOTAL_SHEEP", *OUTPUT_CLASS_COLS]
     if not all(np.issubdtype(panel[c].dtype, np.integer) for c in columns):
         raise AssertionError("sheep counts must be integer-valued")
@@ -456,13 +494,36 @@ def _validate(panel: pd.DataFrame, ed: pd.DataFrame, region: pd.DataFrame, expec
         raise AssertionError("2020 published ED sheep were changed")
 
     for year in YEARS:
-        if year == KNOWN_YEAR:
-            continue
-        sums = panel.loc[panel["YEAR"] == year].groupby("Region")["TOTAL_SHEEP"].sum()
-        target = region.loc[region["Year"] == year].set_index("Region")["Total sheep__HEAD"]
-        if not (sums == target.loc[sums.index]).all():
-            raise AssertionError(f"{year}: regional sheep totals do not match AAA09")
+        yearly = panel.loc[panel["YEAR"] == year]
+        totals = yearly.groupby("Region")["TOTAL_SHEEP"].sum()
+        if year != KNOWN_YEAR:
+            target = region.loc[
+                region["Year"] == year
+            ].set_index("Region")["Total sheep__HEAD"]
+            if not (totals == target.loc[totals.index]).all():
+                raise AssertionError(
+                    f"{year}: regional sheep totals do not match AAA09"
+                )
 
-    zero_both = ed.loc[ed["TOTAL_SHEEP"].eq(0) & ed["TOTAL_SHEEP_2010"].eq(0), "CSOED"]
+        class_sums = yearly.groupby("Region")[list(ED_CLASS_COLS)].sum()
+        for region_name in class_sums.index:
+            targets, _ = _region_class_targets(
+                region,
+                year,
+                region_name,
+                int(totals.loc[region_name]),
+            )
+            if not np.array_equal(
+                class_sums.loc[region_name].to_numpy(dtype=np.int64),
+                targets,
+            ):
+                raise AssertionError(
+                    f"{year} {region_name}: regional sheep classes do not close"
+                )
+
+    zero_both = ed.loc[
+        ed["TOTAL_SHEEP"].eq(0) & ed["TOTAL_SHEEP_2010"].eq(0),
+        "CSOED",
+    ]
     if int(panel.loc[panel["CSOED"].isin(zero_both), "TOTAL_SHEEP"].sum()) != 0:
         raise AssertionError("an ED with zero sheep in both censuses received sheep")
