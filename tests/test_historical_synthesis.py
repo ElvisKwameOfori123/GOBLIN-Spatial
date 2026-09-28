@@ -144,4 +144,8 @@ def test_aggregate_state_recomputes_structure_metrics():
 
     assert a2015["AVERAGE_SIZE_OF_HOLDINGS"] == np.float64(17.5)
     assert np.isclose(a2015["AVERAGE_AGE_OF_HOLDER"], 65.0)
+    assert np.isclose(
+        a2015["SO_COVERED_PER_HOLDING_2020_EUR"],
+        a2015["SO_COVERED_TOTAL_2020_EUR"] / a2015["AGRICULTURAL_HOLDINGS"],
+    )
     assert "MEDIAN_AGE_OF_HOLDER" not in county.columns
