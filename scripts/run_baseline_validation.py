@@ -2,7 +2,7 @@
 
 Tests (see goblin_spatial.validation.baseline_metrics for definitions):
   T1  held-out 2020 ED livestock units (HELD-OUT DERIVED INDICATOR)
-  T2  census backcast: 2020 ED pattern predicted from 2010 shares (INDEPENDENT)
+  T2  cross-census temporal transfer: 2020 ED pattern predicted from 2010 shares (INDEPENDENT)
   T3  withheld DAFM ewe county years 2016, 2022 (INDEPENDENT for that step)
   T4  withheld 2022 DAFM breed composition (INDEPENDENT for that step)
   T5  census 2020 ED cattle vs DAFM/AIM register (CONSISTENCY of the anchor)
@@ -11,7 +11,7 @@ Tests (see goblin_spatial.validation.baseline_metrics for definitions):
   T8  adjacent-year continuity (DIAGNOSTIC)
 
 Usage: python scripts/run_baseline_validation.py
-Writes data/processed/validation/ (metrics table, detail files, figures, summary).
+Writes data/processed/validation/historical/baseline_suite/.
 """
 
 from __future__ import annotations
@@ -144,7 +144,7 @@ def main() -> None:
     t5 = match_aim_totals(published, aim)
     t5.to_csv(OUT / "T5_census_vs_aim_2020.csv", index=False)
     rows.append(row("T5 census 2020 vs DAFM/AIM register", "CONSISTENCY", "total cattle", f"name-matched EDs ({len(t5)} of 2857)",
-                    t5["CENSUS_TOTAL_CATTLE"], t5["AIM_AVG_CATTLE"], note="June census vs annual-average register; tests the anchor data, not the model"))
+                    t5["CENSUS_TOTAL_CATTLE"], t5["AIM_AVG_CATTLE"], note="Census anchor vs June/December-average AIM register profile; tests cross-source consistency, not the model"))
 
     # T6 county sheep vs DAFM December census
     dafm = pd.read_csv(cfg.files["dafm_sheep_county_pattern"]); dafm["County"] = dafm["County"].map(_normalise_county)
@@ -187,7 +187,7 @@ def main() -> None:
     b = t2.loc[t2["VARIABLE"] == "TOTAL_CATTLE"]
     scatter(ax[1], b["OBSERVED_2020"], b["PRED_2010_SHARES"], "T2 total cattle, 2020\n(census vs 2010-pattern transfer)")
     b = t2.loc[t2["VARIABLE"] == "DAIRY_COW"]
-    scatter(ax[2], b["OBSERVED_2020"], b["PRED_2010_SHARES"], "T2 dairy cows, 2020\n(census vs 2010-pattern backcast)")
+    scatter(ax[2], b["OBSERVED_2020"], b["PRED_2010_SHARES"], "T2 dairy cows, 2020\n(census vs 2010-pattern transfer)")
     fig.tight_layout(); fig.savefig(OUT / "fig_validation_scatter.png", dpi=200); plt.close(fig)
 
     fig, ax = plt.subplots(figsize=(6, 3.4))
