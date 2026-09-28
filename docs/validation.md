@@ -48,9 +48,9 @@ The historical runner additionally retains the Achill North applied ED-to-catchm
 
 For count-like comparisons the publication suite reports Lin's concordance correlation coefficient (CCC), Spearman rank correlation, Pearson correlation on `log(1+x)`, MAE, RMSE, mean bias, normalised RMSE and Nash-Sutcliffe efficiency (NSE). Where a simple alternative is available, skill is
 
-[
+\[
 Skill = 1 - \frac{RMSE_{model}}{RMSE_{baseline}}.
-]
+\]
 
 Zero/non-zero agreement is reported where support is scientifically relevant. MAPE is not used because livestock distributions contain many zeros and small values. ED-level confidence intervals use a county-cluster bootstrap so EDs sharing county controls are not treated as independent resampling units.
 
