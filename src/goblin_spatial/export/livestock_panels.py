@@ -162,7 +162,49 @@ def run_checks(panel13: pd.DataFrame, panel31: pd.DataFrame, config: SpatialConf
         all((known[c] == published[c]).all() for c in ("DAIRY_COW", "OTHER_COW", "OTHER_CATTLE", "TOTAL_CATTLE", "TOTAL_SHEEP")))
 
     q = panel31.rename(columns={v: k for k, v in CONTROL_PREFIX.items()})
-    add("31", "CSO_ control columns identical to the 13-group panel", q[ID_COLS + CSO_TOTALS + CSO_13].equals(p[ID_COLS + CSO_TOTALS + CSO_13]))
+    shared_ids = [column for column in ID_COLS if column in p.columns and column in q.columns]
+    add(
+        "31",
+        "CSO_ control columns identical to the 13-group panel",
+        q[shared_ids + CSO_TOTALS + CSO_13].equals(
+            p[shared_ids + CSO_TOTALS + CSO_13]
+        ),
+    )
+
+    context_present = [column for column in CONTEXT_COLUMNS if column in p.columns]
+    if context_present:
+        add(
+            "13+31",
+            "historical context identical between CSO 13 and GOBLIN 31 panels",
+            context_present
+            == [column for column in CONTEXT_COLUMNS if column in q.columns]
+            and q[["YEAR", "CSOED", *context_present]].equals(
+                p[["YEAR", "CSOED", *context_present]]
+            ),
+        )
+
+        published_context = pd.read_csv(
+            config.files["cso_ed_2020"], dtype={"CSOED": str}
+        ).set_index("CSOED")
+        known_context = (
+            p.loc[p["YEAR"] == KNOWN_YEAR, ["CSOED", *context_present]]
+            .assign(CSOED=lambda x: x["CSOED"].astype(str))
+            .set_index("CSOED")
+            .loc[published_context.index]
+        )
+        add(
+            "13+31",
+            "2020 land and socioeconomic context equal the published CSO ED anchor",
+            all(
+                np.allclose(
+                    pd.to_numeric(known_context[column], errors="raise").to_numpy(dtype=float),
+                    pd.to_numeric(published_context[column], errors="raise").to_numpy(dtype=float),
+                    atol=0.0,
+                    rtol=0.0,
+                )
+                for column in context_present
+            ),
+        )
     add("31", "21 cattle cohorts sum to TOTAL_CATTLE", (q[FINAL_21_COHORTS].sum(axis=1) == q["TOTAL_CATTLE"]).all())
     add("31", "10 sheep cohorts sum to TOTAL_SHEEP", (q[GOBLIN_SHEEP_10].sum(axis=1) == q["TOTAL_SHEEP"]).all())
     add("31", "dairy_cows = DAIRY_COW, suckler_cows = OTHER_COW, bulls = BULLS",
