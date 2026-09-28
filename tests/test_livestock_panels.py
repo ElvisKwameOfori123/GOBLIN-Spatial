@@ -11,6 +11,7 @@ from goblin_spatial.config import load_config
 from goblin_spatial.export.livestock_panels import (
     CONTROL_PREFIX,
     CSO_13,
+    ID_COLS,
     NAME_13,
     NAME_31,
     COHORTS_31,
@@ -56,6 +57,60 @@ def test_column_sets() -> None:
     for panel in (panel13, panel31):
         lowered = [c.lower() for c in panel.columns]
         assert len(lowered) == len(set(lowered))
+
+
+
+
+def test_complete_ed_spine_and_identifiers_are_preserved() -> None:
+    cfg, panel13, panel31 = _built()
+    anchor = pd.read_csv(cfg.files["cso_ed_2020"], dtype={"CSOED": str})
+    expected = set(anchor["CSOED"])
+
+    assert len(ID_COLS) == 11
+    assert set(ID_COLS) <= set(panel13.columns)
+    assert set(ID_COLS) <= set(panel31.columns)
+
+    for year in range(2015, 2026):
+        p13 = panel13.loc[panel13["YEAR"] == year]
+        p31 = panel31.loc[panel31["YEAR"] == year]
+        assert set(p13["CSOED"].astype(str)) == expected
+        assert set(p31["CSOED"].astype(str)) == expected
+        assert len(p13) == len(anchor) == 2857
+        assert len(p31) == len(anchor) == 2857
+
+    for column in (
+        "ELECTORAL_DIVISIONS",
+        "ED",
+        "County",
+        "EDID",
+        "CSOED_RAW",
+        "EDNAME",
+        "COUNTYNAME",
+    ):
+        assert panel13[column].notna().all()
+        assert panel31[column].notna().all()
+
+
+def test_zero_species_eds_remain_in_the_study_panel() -> None:
+    cfg, panel13, panel31 = _built()
+    anchor = pd.read_csv(cfg.files["cso_ed_2020"], dtype={"CSOED": str})
+    p13 = panel13.loc[panel13["YEAR"] == 2020].set_index("CSOED")
+    p31 = panel31.loc[panel31["YEAR"] == 2020].set_index("CSOED")
+
+    zero_cattle = anchor.loc[anchor["TOTAL_CATTLE"].eq(0), "CSOED"].astype(str)
+    zero_sheep = anchor.loc[anchor["TOTAL_SHEEP"].eq(0), "CSOED"].astype(str)
+    assert len(zero_cattle) > 0
+    assert len(zero_sheep) > 0
+
+    assert set(zero_cattle) <= set(p13.index)
+    assert set(zero_sheep) <= set(p13.index)
+    assert (p13.loc[zero_cattle, "TOTAL_CATTLE"] == 0).all()
+    assert (p13.loc[zero_sheep, "TOTAL_SHEEP"] == 0).all()
+
+    assert set(zero_cattle) <= set(p31.index)
+    assert set(zero_sheep) <= set(p31.index)
+    assert (p31.loc[zero_cattle, "CSO_TOTAL_CATTLE"] == 0).all()
+    assert (p31.loc[zero_sheep, "CSO_TOTAL_SHEEP"] == 0).all()
 
 
 def test_panels_match_the_finished_chains() -> None:
