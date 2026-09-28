@@ -45,6 +45,15 @@ SE_LAND = [
     "OTHER_CROPS_HA",
 ]
 GOBLIN_31 = [*FINAL_21_COHORTS, *GOBLIN_SHEEP_10]
+CSO_31_CONTROL_FIELDS = [
+    "TOTAL_CATTLE",
+    "OTHER_CATTLE",
+    "TOTAL_SHEEP",
+    *CSO_13_COHORTS,
+]
+CSO_31_CONTROL_PREFIX = {
+    column: f"CSO_{column}" for column in CSO_31_CONTROL_FIELDS
+}
 STANDARD_OUTPUT = [
     "FADN_REGION", "FADN_REGION_LABEL", "SO_DAIRY_COWS_2020_EUR",
     "SO_SUCKLER_COWS_2020_EUR", "SO_BULLS_2020_EUR", "SO_FOLLOWERS_2020_EUR",
@@ -80,8 +89,17 @@ def build_clean_sheets(master: pd.DataFrame, base_year: int = 2020) -> dict[str,
     """Return clean historical biological, structural and Standard Output tables."""
 
     ids = _existing(master, IDENTIFIERS)
-    cso_columns = list(dict.fromkeys(ids + _existing(master, CSO_LIVESTOCK) + _existing(master, SE_LAND)))
-    goblin_columns = list(dict.fromkeys(ids + _existing(master, ["TOTAL_CATTLE", "TOTAL_SHEEP"]) + GOBLIN_31 + _existing(master, SE_LAND)))
+    cso_columns = list(
+        dict.fromkeys(ids + _existing(master, CSO_LIVESTOCK) + _existing(master, SE_LAND))
+    )
+    goblin_columns = list(
+        dict.fromkeys(
+            ids
+            + _existing(master, CSO_31_CONTROL_FIELDS)
+            + GOBLIN_31
+            + _existing(master, SE_LAND)
+        )
+    )
 
     missing_cso = [column for column in CSO_13_COHORTS if column not in master.columns]
     if missing_cso:
@@ -98,7 +116,12 @@ def build_clean_sheets(master: pd.DataFrame, base_year: int = 2020) -> dict[str,
         raise AssertionError("GOBLIN cohort contract must contain exactly 31 groups")
 
     cso_all = master[cso_columns].sort_values(["YEAR", "CSOED"], kind="stable").reset_index(drop=True)
-    goblin_all = master[goblin_columns].sort_values(["YEAR", "CSOED"], kind="stable").reset_index(drop=True)
+    goblin_all = (
+        master[goblin_columns]
+        .rename(columns=CSO_31_CONTROL_PREFIX)
+        .sort_values(["YEAR", "CSOED"], kind="stable")
+        .reset_index(drop=True)
+    )
     cso_2020 = cso_all.loc[cso_all["YEAR"] == base_year].copy().reset_index(drop=True)
     goblin_2020 = goblin_all.loc[goblin_all["YEAR"] == base_year].copy().reset_index(drop=True)
 
