@@ -140,6 +140,8 @@ NON_ADDITIVE_STRUCTURE_COLUMNS = (
     "AVERAGE_SIZE_OF_HOLDINGS",
     "AVERAGE_AGE_OF_HOLDER",
     "MEDIAN_AGE_OF_HOLDER",
+    "SO_COVERED_PER_HOLDING_2020_EUR",
+    "SO_COVERED_PER_HOLDING_CONSERVATIVE_2020_EUR",
 )
 
 
@@ -294,6 +296,28 @@ def _attach_structure_metrics(
             out=np.full(len(out), np.nan, dtype=float),
             where=denominator > 0,
         )
+
+    if "AGRICULTURAL_HOLDINGS" in out.columns:
+        holdings = pd.to_numeric(
+            out["AGRICULTURAL_HOLDINGS"], errors="raise"
+        ).to_numpy(dtype=float)
+        for total_column, per_holding_column in (
+            ("SO_COVERED_TOTAL_2020_EUR", "SO_COVERED_PER_HOLDING_2020_EUR"),
+            (
+                "SO_COVERED_TOTAL_CONSERVATIVE_2020_EUR",
+                "SO_COVERED_PER_HOLDING_CONSERVATIVE_2020_EUR",
+            ),
+        ):
+            if total_column in out.columns:
+                total = pd.to_numeric(
+                    out[total_column], errors="raise"
+                ).to_numpy(dtype=float)
+                out[per_holding_column] = np.divide(
+                    total,
+                    holdings,
+                    out=np.full(len(out), np.nan, dtype=float),
+                    where=holdings > 0,
+                )
     return out
 
 
