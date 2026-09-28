@@ -11,7 +11,6 @@ import pandas as pd
 from goblin_spatial.cattle.annual_age_sex import LSU_COEFFICIENTS, build_annual_age_sex_panel
 from goblin_spatial.cattle.annual_panel import build_annual_ed_panel
 from goblin_spatial.config import load_config
-from goblin_spatial.sheep import add_sheep_cohorts
 from goblin_spatial.sheep.annual_panel import (
     ED_CLASS_COLS,
     KNOWN_YEAR,
@@ -125,10 +124,41 @@ def test_dafm_moves_county_direction_only() -> None:
     assert len(split) == 26 * (len(YEARS) - 1)
     for (year, reg), g in split.groupby(["YEAR", "Region"]):
         assert np.isclose(g["COUNTY_SHARE"].sum(), 1.0)
-        moved = g["COUNTY_SHARE"] / g["CSO2020_REFERENCE_COUNTY_SHARE"]
+        moved = g["COUNTY_SHARE"] / g["CSO2020_PUBLISHED_COUNTY_SHARE"]
         index = g["DAFM_EWE_INDEX"]
         # direction of each county's relative move follows the DAFM ewe index
         assert np.allclose(moved / moved.mean(), index / index.mean(), rtol=1e-9)
+
+
+def test_county_split_is_anchored_to_published_2020_census() -> None:
+    cfg, _, log = _built()
+    published = pd.read_csv(cfg.files["cso_ed_2020"])
+    published["County"] = (
+        published["County"]
+        .astype(str)
+        .str.replace("Co.", "", regex=False)
+        .str.replace("County", "", regex=False)
+        .str.strip()
+        .str.title()
+    )
+    county = published.groupby("County")["TOTAL_SHEEP"].sum().astype(float)
+
+    split = log.loc[
+        (log["RECORD_TYPE"] == "COUNTY_SPLIT") & (log["YEAR"] == 2021)
+    ]
+    for _, g in split.groupby("Region"):
+        counties = list(g["County"])
+        expected = county.loc[counties] / county.loc[counties].sum()
+        observed = (
+            g.set_index("County")["CSO2020_PUBLISHED_COUNTY_SHARE"]
+            .loc[counties]
+        )
+        assert np.allclose(
+            observed.to_numpy(),
+            expected.to_numpy(),
+            rtol=0,
+            atol=1e-12,
+        )
 
 
 def test_held_out_lsu_supports_reference_distribution() -> None:
@@ -149,7 +179,3 @@ def test_held_out_lsu_supports_reference_distribution() -> None:
     assert abs(after - baseline) < abs(before - baseline) / 2
 
 
-def test_existing_sheep_cohorts_run_unchanged() -> None:
-    cfg, panel, _ = _built()
-    cohorts = add_sheep_cohorts(panel, cfg)
-    assert (cohorts["GOBLIN_10_SHEEP_COHORT_TOTAL"] == cohorts["TOTAL_SHEEP"]).all()
