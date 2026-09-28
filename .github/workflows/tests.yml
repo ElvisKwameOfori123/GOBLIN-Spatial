@@ -122,6 +122,18 @@ jobs:
           PY
       - name: Build 2015-2025 WFD catchment baseline
         run: python scripts/build_catchment_baseline.py
+      - name: Freeze WFD catchment boundary checksum
+        run: |
+          sha256sum data/inputs/spatial/WFD_Catchments_Frozen.gpkg > data/inputs/spatial/WFD_Catchments_Frozen.gpkg.sha256
+      - name: Upload frozen WFD catchment boundary
+        uses: actions/upload-artifact@v4
+        with:
+          name: wfd-catchments-frozen
+          path: |
+            data/inputs/spatial/WFD_Catchments_Frozen.gpkg
+            data/inputs/spatial/WFD_Catchments_Frozen.gpkg.sha256
+          if-no-files-found: error
+          retention-days: 30
       - name: Freeze WFD catchment geometry artifact
         run: |
           test -f data/inputs/spatial/WFD_Catchments_Frozen.gpkg
