@@ -15,11 +15,12 @@ from pathlib import Path
 
 from goblin_spatial.config import load_config
 from goblin_spatial.export.livestock_panels import (
-    build_livestock_panels,
     export_sqlite,
     export_workbook,
+    project_enriched_livestock_panels,
     run_checks,
 )
+from goblin_spatial.pipeline import build as build_historical_core
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "configs/ireland_2015_2025.yaml"
@@ -28,15 +29,10 @@ OUT = ROOT / "data/processed/livestock"
 
 def main() -> None:
     cfg = load_config(CONFIG)
-    outputs = cfg.raw["outputs"]
-    panel13, panel31 = build_livestock_panels(cfg)
+    master = build_historical_core(cfg)
+    panel13, panel31 = project_enriched_livestock_panels(master)
     checks = run_checks(panel13, panel31, cfg)
     print(checks.to_string(index=False))
-    for key, frame in (("cso_13_cohort_panel", panel13), ("goblin_31_cohort_panel", panel31)):
-        path = ROOT / outputs[key]
-        path.parent.mkdir(parents=True, exist_ok=True)
-        frame.to_csv(path, index=False)
-        print("wrote", path)
     export_workbook(panel13, panel31, checks, OUT / "CSO_13_and_GOBLIN_31_Cohort_Annual_Panels_2015_2025.xlsx")
     export_sqlite(panel13, panel31, checks, OUT / "CSO_13_and_GOBLIN_31_Cohort_Annual_Panels_2015_2025.sqlite")
     print(panel13.groupby("YEAR")[["TOTAL_CATTLE", "TOTAL_SHEEP"]].sum().to_string())
