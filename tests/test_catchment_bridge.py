@@ -3,7 +3,12 @@
 import pandas as pd
 import pytest
 
+from goblin_spatial.cattle.cohorts import FINAL_21_COHORTS
+from goblin_spatial.export.workbook import CSO_LIVESTOCK
+from goblin_spatial.sheep.cohorts import GOBLIN_SHEEP_10
+
 from goblin_spatial.aggregation import (
+    DEFAULT_ADDITIVE_COLUMNS,
     aggregate_to_counties,
     aggregate_to_national,
     aggregate_to_wfd_catchments,
@@ -204,3 +209,22 @@ def test_structure_metrics_are_recomputed_after_aggregation():
     assert "AVERAGE_SIZE_OF_HOLDINGS" in colm.columns
     assert "AVERAGE_AGE_OF_HOLDER" in colm.columns
     assert "MEDIAN_AGE_OF_HOLDER" not in colm.columns
+
+
+
+def test_default_reporting_contract_carries_both_livestock_resolutions_and_so():
+    columns = set(DEFAULT_ADDITIVE_COLUMNS)
+    assert set(CSO_LIVESTOCK) <= columns
+    assert set(FINAL_21_COHORTS) <= columns
+    assert set(GOBLIN_SHEEP_10) <= columns
+    assert {
+        "SO_LIVESTOCK_2020_EUR",
+        "SO_CEREALS_2020_EUR",
+        "SO_OTHER_CROPS_2020_EUR",
+        "SO_COVERED_TOTAL_2020_EUR",
+        "AGRICULTURAL_HOLDINGS",
+        "AREA_FARMED",
+    } <= columns
+    assert "AVERAGE_AGE_OF_HOLDER" not in columns
+    assert "AVERAGE_SIZE_OF_HOLDINGS" not in columns
+    assert "MEDIAN_AGE_OF_HOLDER" not in columns
