@@ -26,12 +26,21 @@ def canonical_order(frame: pd.DataFrame) -> pd.DataFrame:
     return frame.sort_values(["YEAR", "CSOED"], kind="stable").reset_index(drop=True)
 
 
-def merge_livestock(cattle: pd.DataFrame, sheep: pd.DataFrame) -> pd.DataFrame:
-    """Join cattle and sheep without recalculating either livestock system.
+def merge_livestock(
+    cattle: pd.DataFrame,
+    sheep: pd.DataFrame,
+    ed_anchor: pd.DataFrame | None = None,
+) -> pd.DataFrame:
+    """Join cattle and sheep on the complete study ED spine.
 
-    Cattle supplies the shared ED/static context. Sheep is authoritative for
-    sheep fields. The historical static LSU field is removed because it is not
-    an annually reconstructed livestock indicator.
+    Every study ED must exist in every year even when it has zero cattle, zero
+    sheep, or both. Species absence is represented by zero counts, never by a
+    missing ED row. When the 2020 CSO ED anchor is supplied it is authoritative
+    for the ED universe and static naming fields; the livestock panels must
+    cover that universe exactly in every year.
+
+    The historical static LSU field is removed because it is not an annually
+    reconstructed livestock indicator.
     """
 
     cattle = canonical_order(cattle)
@@ -48,6 +57,29 @@ def merge_livestock(cattle: pd.DataFrame, sheep: pd.DataFrame) -> pd.DataFrame:
         raise AssertionError("cattle and sheep panels have different row counts")
     if not cattle[MERGE_KEYS].equals(sheep[MERGE_KEYS]):
         raise AssertionError("cattle and sheep YEAR-CSOED coverage differs")
+
+    anchor = None
+    if ed_anchor is not None:
+        anchor = ed_anchor.copy()
+        if "CSOED" not in anchor.columns:
+            raise ValueError("ED anchor missing CSOED")
+        anchor["CSOED"] = anchor["CSOED"].astype(str)
+        if anchor["CSOED"].duplicated().any():
+            raise AssertionError("ED anchor contains duplicate CSOED rows")
+        expected_eds = set(anchor["CSOED"])
+        years = sorted(pd.to_numeric(cattle["YEAR"], errors="raise").astype(int).unique())
+        for label, frame in (("cattle", cattle), ("sheep", sheep)):
+            for year in years:
+                got = set(
+                    frame.loc[frame["YEAR"] == year, "CSOED"].astype(str)
+                )
+                if got != expected_eds:
+                    missing = sorted(expected_eds - got)
+                    extra = sorted(got - expected_eds)
+                    raise AssertionError(
+                        f"{label} {year} ED coverage differs from the CSO study spine; "
+                        f"missing={missing[:10]}, extra={extra[:10]}"
+                    )
 
     overlap = set(cattle.columns).intersection(sheep.columns) - set(MERGE_KEYS)
     replace_from_sheep = sorted(overlap - SHARED_IDENTIFIERS)
@@ -78,6 +110,38 @@ def merge_livestock(cattle: pd.DataFrame, sheep: pd.DataFrame) -> pd.DataFrame:
 
     if len(merged) != len(cattle) or len(merged) != len(sheep):
         raise AssertionError("cattle/sheep merge did not preserve the complete panel")
+
+    if anchor is not None:
+        anchor_ids = [
+            column
+            for column in SHARED_IDENTIFIERS
+            if column in anchor.columns
+        ]
+        lookup = anchor.set_index("CSOED")
+        merged["CSOED"] = merged["CSOED"].astype(str)
+        for column in anchor_ids:
+            canonical = merged["CSOED"].map(lookup[column])
+            if canonical.isna().any():
+                raise AssertionError(
+                    f"canonical ED identifier {column} is missing after anchor mapping"
+                )
+            if column in merged.columns:
+                existing = merged[column]
+                comparable = existing.notna() & canonical.notna()
+                left = existing.loc[comparable].astype(str).str.strip()
+                right = canonical.loc[comparable].astype(str).str.strip()
+                if not left.equals(right):
+                    raise AssertionError(
+                        f"livestock merge disagrees with CSO ED anchor on {column}"
+                    )
+            merged[column] = canonical.to_numpy()
+
+        # Static identifiers must not vary by year for the same ED.
+        for column in anchor_ids:
+            if merged.groupby("CSOED")[column].nunique(dropna=False).max() != 1:
+                raise AssertionError(
+                    f"ED identifier {column} varies across years"
+                )
     if "LSU" in merged.columns:
         raise AssertionError("stale baseline LSU survived livestock merge")
 
