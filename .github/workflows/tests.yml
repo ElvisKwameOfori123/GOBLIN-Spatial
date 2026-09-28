@@ -33,9 +33,11 @@ jobs:
         run: |
           pytest -q \
             tests/test_baseline_contract.py \
+            tests/test_baseline_metrics.py \
             tests/test_cattle.py \
             tests/test_cattle_annual_age_sex.py \
             tests/test_cattle_annual_genetics.py \
+            tests/test_cattle_genetic_denominator.py \
             tests/test_cattle_annual_panel.py \
             tests/test_cattle_two_anchor.py \
             tests/test_cli_data_boundary.py \
@@ -66,6 +68,12 @@ jobs:
             tests/test_sc3_feasible_geographies.py \
             tests/test_scenario_control_table.py \
             tests/test_scenario_preflight.py
+      - name: Run maintained utility tests
+        run: |
+          pytest -q \
+            tests/test_cohort_response.py \
+            tests/test_lpis_spatial_bridge.py \
+            tests/test_soil_overlay.py
       - name: Run reporting architecture tests
         run: |
           pytest -q \
@@ -78,6 +86,8 @@ jobs:
         run: goblin-spatial build --config configs/ireland_2015_2025.yaml
       - name: Run historical validation diagnostics
         run: python scripts/run_historical_validation.py
+      - name: Run publication baseline validation suite
+        run: python scripts/run_baseline_validation.py
       - name: Run Code 2 two-anchor cattle diagnostics
         run: python scripts/run_cattle_code2_two_anchor_diagnostics.py
       - name: Run cattle genetics diagnostics
@@ -97,6 +107,11 @@ jobs:
           test -f data/processed/validation/historical/cattle_genetics_ed_2020.csv
           test -f data/processed/validation/historical/cattle_genetics_national_margins.csv
           test -f data/processed/validation/historical/cattle_genetics_dafm_type_check_2020.csv
+          test -f data/processed/validation/historical/baseline_suite/baseline_validation_metrics.csv
+          test -f data/processed/validation/historical/baseline_suite/T1_lsu_2020_by_ed.csv
+          test -f data/processed/validation/historical/baseline_suite/T2_backcast_2020_from_2010.csv
+          test -f data/processed/validation/historical/baseline_suite/T4_breed_holdout_2022.csv
+          test -f data/processed/validation/historical/baseline_suite/T8_continuity.csv
           python - <<'PY'
           import pandas as pd
 
