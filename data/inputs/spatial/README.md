@@ -50,20 +50,33 @@ QGIS can open the same output GeoPackage for visual inspection and publication p
 
 ## WFD catchment geometry
 
-`WFD_Catchments_Frozen.gpkg` is an optional downstream aggregation input used by the catchment bridge. It does **not** enter baseline, SC1, SC2 or SC3 calculations.
+`WFD_Catchments_Frozen.gpkg` is the frozen downstream aggregation geometry used
+by the catchment bridge. It does **not** change the ED baseline, livestock
+reconstruction, Standard Output, SC1, SC2 or SC3 calculations.
 
-Authoritative source: Environmental Protection Agency Water Framework Directive Water Catchments, CC BY 4.0.
+Authoritative source: Environmental Protection Agency Water Framework Directive
+Water Catchments, CC BY 4.0. The frozen copy was obtained through the public
+GSI mirror of the EPA WFD Catchments layer and is now repository-contained.
 
-https://data.gov.ie/dataset/water-framework-directive-water-catchments
+Frozen file contract:
 
-The reproducible fallback source is the public GSI FeatureServer mirror of the EPA WFD Catchments layer (layer 2). The layer exposes 46 polygon features, `CATCHMENTI` as the catchment identifier, `NAME` as the catchment name, and EPSG:2157 geometry.
+- path: `data/inputs/spatial/WFD_Catchments_Frozen.gpkg`
+- checksum sidecar: `data/inputs/spatial/WFD_Catchments_Frozen.gpkg.sha256`
+- source features: 46 official WFD catchments
+- catchment identifier: `CATCHMENTI`
+- catchment name: `NAME`
+- CRS: EPSG:2157
+- SHA-256: `d9b00e1732f4f6a711c7edfb9d4d3348efe8150efd60280361f217d8a2602b65`
 
-Expected frozen path:
+The production catchment build is intentionally offline. It verifies the
+checksum before reading the geometry and fails if the file is missing or has
+changed. It no longer downloads a live catchment layer during a normal model
+run.
 
-`data/inputs/spatial/WFD_Catchments_Frozen.gpkg`
+The primary output preserves all 46 official WFD catchments. A secondary
+37-unit compatibility table is derived for integration with
+`GOBLIN-Proj/catchment_data_api`.
 
-If the frozen file is absent, `scripts/build_catchment_baseline.py` fetches the 46-feature layer, verifies the feature count and freezes it to this path before constructing the ED-to-catchment crosswalk.
-
-The primary output preserves all 46 official WFD catchments. A secondary 37-unit compatibility table is derived for integration with `GOBLIN-Proj/catchment_data_api`.
-
-Catchment weights are normalised within ED so additive livestock, land and Standard Output quantities preserve national totals exactly. See `docs/catchment_bridge.md`.
+Catchment weights are normalised within ED so additive livestock, land and
+Standard Output quantities preserve national totals exactly. See
+`docs/catchment_bridge.md`.
