@@ -25,7 +25,7 @@ def test_config_uses_only_canonical_baseline_package() -> None:
         "dafm_aim_ed_cattle_profile_2020": "data/inputs/baseline/02_DAFM_AIM_ED_Cattle_Profile_2020.csv",
         "cso_sheep_workbook": "data/inputs/baseline/03_CSO_AAA09_Sheep_County_Region_2015_2025.xlsx",
         "sheep_breed_anchors": "data/inputs/baseline/05A_DAFM_Sheep_Breed_Anchors_2016_2020_2022_2025.csv",
-        "dafm_sheep_county_validation": "data/inputs/baseline/03_0_DAFM_Sheep_County_Totals_2015_2020_2022_2025.csv",
+        "dafm_sheep_county_pattern": "data/inputs/baseline/03_0_DAFM_Sheep_County_Totals_2015_2020_2022_2025.csv",
         "goblin_cohorts": "data/inputs/baseline/05C_Cattle_Cohort_Relationships_2012_2020.csv",
         "cso_land": "data/inputs/baseline/06_CSO_AQA06_Agricultural_Land_Use.xlsx",
         "se_controls": "data/inputs/baseline/06_Farm_Structure_Demographic_Controls.csv",
