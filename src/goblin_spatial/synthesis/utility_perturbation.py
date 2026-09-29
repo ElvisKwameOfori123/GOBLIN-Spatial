@@ -42,9 +42,10 @@ The PRO_RATA arm (all 21 cohorts, uniform) is a supplementary reference only.
 Livestock units use one fixed schedule; Standard Output the fixed IFS 2020
 coefficients by region. Head counts stay fractional (exact transformation).
 
-2020 caveat: 931 EDs report zero dairy cows only in the published 2020 Census,
-so 2020 has far more parent-less dairy-follower EDs than any other year. This
-raises the 2020 RECEIVER component; 2025 is reported alongside for that reason.
+Support caveat: COUNTY_RECEIVER is a parent-support classification, not an
+animal-movement or origin class. Under the corrected reconstruction, published
+2020 adult-cow zeros remain zero after 2020, so parent-less follower EDs can
+remain material in the 2025 perturbation as well.
 """
 
 from __future__ import annotations

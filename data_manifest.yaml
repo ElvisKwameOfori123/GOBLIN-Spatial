@@ -49,13 +49,13 @@ datasets:
     required: true
 
   dafm_sheep_county_totals_2015_2020_2022_2025:
-    stage: "VALIDATION"
-    module: [validation, sheep]
-    description: "DAFM county sheep totals used for independent validation."
+    stage: "03B"
+    module: [baseline, sheep, validation]
+    description: "DAFM county sheep/ewe totals used as the relative county-weighting prior within fixed AAA09 regions and also reported in pattern-fidelity diagnostics."
     source: "git"
     path: "data/inputs/baseline/03_0_DAFM_Sheep_County_Totals_2015_2020_2022_2025.csv"
     sha256: "6d3ce31092328f18587530561ab440d91fa65e94c629ac5ca25e15bb4b042de2"
-    required: false
+    required: true
 
   dafm_sheep_breed_anchors:
     stage: "05A"

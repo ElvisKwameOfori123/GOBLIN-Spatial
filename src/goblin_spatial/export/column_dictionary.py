@@ -152,7 +152,7 @@ _EXACT: dict[str, tuple[str, str]] = {
     "COUNTY_COHORT_TOTAL": ("head", "Follower cohort head in the ED's county."),
     "ORPHAN_COHORT_PER_COUNTY_ADULT_RATIO": ("ratio", "For COUNTY_RECEIVER cells: follower head / county parent cows."),
     "ORPHAN_SHARE_OF_COUNTY_COHORT": ("share", "For COUNTY_RECEIVER cells: follower head / county follower head."),
-    "COHORT_SPATIAL_ROLE": ("label", "LOCAL_ED (parents in the ED), COUNTY_RECEIVER (no parents in the ED, parents in the county), NATIONAL_ORPHAN (none in the county) or NONE (no followers)."),
+    "COHORT_SPATIAL_ROLE": ("label", "LOCAL_ED (parents in the ED), COUNTY_RECEIVER (no parents in the ED, parents in the county), NATIONAL_ORPHAN (none in the county) or NONE (no followers). This is a support classification, not an animal-movement or origin claim."),
     "ORIGIN_GROUP": ("label", "DxD, DxB, BxB or bulls."),
     "PARENT": ("label", "Parent population of ORIGIN_GROUP."),
     "FOLLOWER_HEAD": ("head", "Follower head of ORIGIN_GROUP in the unit (catchments: area-weighted)."),
@@ -164,7 +164,7 @@ _EXACT: dict[str, tuple[str, str]] = {
     "NATIONAL_ORPHAN_PCT": ("%", "100 x NATIONAL_ORPHAN_HEAD / FOLLOWER_HEAD."),
     # livestock-signature perturbation tables
     "ARM": ("label", "DAIRY_PARENT (dairy cows, DxD and DxB followers), SUCKLER_PARENT (suckler cows, BxB followers), or PRO_RATA (all 21 cohorts; supplementary reference). Each is a 30% national cut shared pro rata across EDs."),
-    "METHOD": ("label", "SIGNATURE: followers regenerated from the ED's own parent relationship, the county's where the ED has no parents, national as fallback; followers stay in place. HEADCOUNT: national followers-per-cow coefficients applied to each ED's cow change (followers move with the cows). UNIFORM: PRO_RATA only."),
+    "METHOD": ("label", "SIGNATURE: follower change follows the ED's own parent relationship, the county's where the ED has no parents, national as fallback; follower geography remains fixed. HEADCOUNT: national followers-per-cow coefficients applied to each ED's cow change, so follower change is attributed to adult-cow geography. UNIFORM: PRO_RATA only."),
     "BASE_CATTLE": ("head", "Baseline cattle."),
     "BASE_LU": ("LU", "Baseline cattle livestock units (fixed schedule of the CSO age-sex groups)."),
     "BASE_CATTLE_SO_2020_EUR": ("EUR", "Baseline cattle Standard Output, fixed IFS 2020 coefficients."),

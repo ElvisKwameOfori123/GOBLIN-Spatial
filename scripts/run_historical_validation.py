@@ -61,7 +61,7 @@ def main() -> None:
     overview_rows: list[dict[str, object]] = []
 
     # 1. DAFM county-pattern fidelity diagnostic.
-    # The same DAFM ewe geography informs the production county-movement prior,
+    # The same DAFM ewe geography informs the production county-share prior,
     # so this is not independent validation of the sheep reconstruction.
     dafm_diag, dafm_summary = validate_dafm_sheep_counties(
         master,
@@ -77,7 +77,7 @@ def main() -> None:
                     "SCOPE": str(int(row["YEAR"])),
                     "METRIC": "MAE_HEAD",
                     "VALUE": row["MAE"],
-                    "INTERPRETATION": "Pattern-fidelity diagnostic against the DAFM county source used for relative county movement; CSO/AAA09 remains the population control.",
+                    "INTERPRETATION": "Pattern-fidelity diagnostic against the DAFM county source used for relative county weighting; CSO/AAA09 remains the population control.",
                 },
                 *(
                     [

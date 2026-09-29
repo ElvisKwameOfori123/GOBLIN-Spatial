@@ -237,7 +237,7 @@ The historical baseline is designed to be auditable and reproducible.
 
 Published 2020 ED livestock values are checked against their source data. Annual reconstructed populations are checked against their controlling CSO totals. Each biological subdivision must reproduce its parent population, and county, catchment and national aggregations must reproduce the ED totals.
 
-Independent validation evidence is retained separately from the information used to construct the population.
+Validation and diagnostic evidence is labelled according to its role, distinguishing input-pattern fidelity, holdout tests, applied benchmarks and internal accounting checks.
 
 Production inputs are registered in `data_manifest.yaml`, and frozen spatial files, including the WFD catchment geometry, are protected by checksums.
 
