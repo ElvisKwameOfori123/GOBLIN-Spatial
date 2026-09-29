@@ -10,7 +10,7 @@ Stages represented
 
 The production sheep population remains controlled by the published CSO 2020
 ED anchor and the raw AAA09 regional hierarchy. DAFM county ewe geography is
-used only as a relative county-movement prior for unknown years, while DAFM
+used only as a relative county-share prior for unknown years, while DAFM
 breed anchors supply composition. Neither DAFM source sets the population level.
 """
 
