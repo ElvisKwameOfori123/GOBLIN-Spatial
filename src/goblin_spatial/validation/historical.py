@@ -138,7 +138,7 @@ def validate_dafm_sheep_counties(
     """Compare reconstructed county sheep totals with the DAFM county pattern.
 
     The model's sheep population remains controlled by CSO/AAA09, but the DAFM
-    breeding-ewe geography also informs relative county movement in the
+    breeding-ewe geography also informs relative county weighting in the
     reconstruction. This is therefore a pattern-fidelity diagnostic, not
     independent validation.
     """
