@@ -352,21 +352,21 @@ def build_validation_summary(validation_dir: str | Path) -> pd.DataFrame:
         rows.extend(
             [
                 {
-                    "EVIDENCE": "Independent DAFM county sheep",
+                    "EVIDENCE": "DAFM county sheep fidelity",
                     "SCOPE": str(int(r["YEAR"])),
                     "METRIC": "MAE",
                     "VALUE": float(r["MAE"]),
                     "UNIT": "head",
                 },
                 {
-                    "EVIDENCE": "Independent DAFM county sheep",
+                    "EVIDENCE": "DAFM county sheep fidelity",
                     "SCOPE": str(int(r["YEAR"])),
                     "METRIC": "MAE / mean observed county",
                     "VALUE": 100.0 * float(r["MAE"]) / mean_observed_county,
                     "UNIT": "%",
                 },
                 {
-                    "EVIDENCE": "Independent DAFM county sheep",
+                    "EVIDENCE": "DAFM county sheep fidelity",
                     "SCOPE": str(int(r["YEAR"])),
                     "METRIC": "Spearman rho",
                     "VALUE": float(r["SPEARMAN_RHO"]),
