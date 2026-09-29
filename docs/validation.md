@@ -68,11 +68,21 @@ No arbitrary pass/fail thresholds are imposed on independent empirical discrepan
 
 For the cattle two-anchor reconstruction, protected implementation checks additionally require exact county closure by component and year, exact 2020-2025 invariance relative to the fixed-2020 panel, non-negative ED values, component accounting closure, within-county shares summing to one, no support where both anchors are zero, bounded intermediate shares, and equal yearly share increments between the two census anchors. These checks verify the reconstruction mathematics; they do not constitute independent ED-level validation for 2015-2019.
 
-For the Step 3 cattle age-sex split, A0 is the flat county-composition null and A1 is the DAFM-informed log-odds prior. Both must preserve every ED \`OTHER_CATTLE\` row and the same rescaled AAA10 county age-sex columns exactly. The pre-specified LSU plausibility screen is cattle > 0, LSU > 0 and \(LSU \le LSU_{\max}+1\), where \(LSU_{\max}=D+0.8S+O+0.1\,sheep\). A1 is retained unless its eligible share is more than one percentage point below A0. Median absolute LSU residual is reported as a diagnostic, pooled and across the fixed five county folds, but is not substituted for the pre-specified gate. DAFM linkage coverage and the neutral fallback for unmatched EDs are also regression-tested.
+For the Step 3 cattle age-sex split, A0 is the flat county-composition null and A1 is the DAFM-informed log-odds prior. Both must preserve every ED \`OTHER_CATTLE\` row and the same rescaled AAA10 county age-sex columns exactly. The pre-specified LSU plausibility screen is cattle > 0, LSU > 0 and \(LSU \le LSU_{\max}+1\), where \(LSU_{\max}=D+0.8S+O+0.1\,sheep\). A1 is retained unless its eligible share is more than one percentage point below A0. Median absolute LSU residual is reported as a diagnostic, pooled and across the fixed five county folds, but is not substituted for the pre-specified gate. This 2020 LSU comparison was used as a plausibility screen during model selection and is therefore not a held-out validation test. DAFM linkage coverage and the neutral fallback for unmatched EDs are also regression-tested.
 
 For Step 4 cattle genetics, G0 is the legacy adult-cow-support allocator and G1 is the production AIM-hierarchical prior. Both must reproduce the same frozen ED age-sex cells and the same national GOBLIN DxD/DxB/BxB margins exactly. The DAFM broad dairy/beef comparison is reported using DxD as the broad dairy-type young-stock component and DxB + BxB as the broad beef-type young-stock component. Because G1 uses this AIM cattle-type information in its prior, G1 agreement with AIM is a calibration/coherence diagnostic, not independent validation. G0 remains a structural sensitivity. Additional diagnostics report the number of EDs using a coherent local AIM signal versus county fallback, genetic shares placed in zero-origin-cow EDs, no-adult-cow receiver/rearing EDs, concentration and adjacent-year rank stability.
 
 A true grassland-weighted ED-to-catchment sensitivity requires spatial information on where grassland lies within each ED-catchment intersection. The current compact LPIS/land context is ED-level, so the repository does not pretend that an ED total alone provides that within-ED geography. Simple area weighting is reproducible now; agricultural-land or grassland-weighted allocation should be added only when a defensible intersectable spatial layer is frozen.
+
+
+### Separate coherence audit
+
+The release pipeline also runs a separate audit module that recomputes 45
+accounting, closure and aggregation identities from the released outputs and
+raw inputs. The audit shares input readers and cohort definitions with the
+reconstruction, so it is described as a **separate coherence audit**, not as
+statistically independent validation. Its purpose is to detect implementation
+or reporting inconsistencies after the baseline has been built.
 
 ## Downstream scenario-module validation
 
