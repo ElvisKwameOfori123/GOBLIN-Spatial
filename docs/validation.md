@@ -40,7 +40,7 @@ It writes diagnostics beneath `data/processed/validation/historical/`.
 
 Four additional checks are implemented.
 
-1. **Independent DAFM county sheep comparison.** Reconstructed county sheep totals are compared with the retained DAFM National Sheep and Goat Census totals for 2015, 2020, 2022 and 2025. CSO remains the controlling model source. DAFM is used only as independent validation evidence. Diagnostics report county-level error and spatial-rank agreement.
+1. **DAFM county sheep fidelity comparison.** Reconstructed county sheep totals are compared with the retained DAFM National Sheep and Goat Census totals for 2015, 2020, 2022 and 2025. CSO remains the controlling model source, while DAFM informs temporal allocation among counties within each seven-region control. This comparison therefore measures fidelity to the DAFM temporal signal rather than independent validation. Diagnostics report county-level error and spatial-rank agreement.
 
 2. **2022 sheep-composition holdout.** The observed 2022 DAFM breed-composition anchor is omitted. County-category breed shares are reconstructed by interpolation from the 2020 and 2025 anchors and then compared with the withheld 2022 observations. This tests reconstruction performance rather than accounting closure.
 
@@ -54,8 +54,8 @@ The validation suite therefore distinguishes:
 accounting closure
     -> verifies implementation and conservation identities
 
-independent / holdout comparisons
-    -> validate reconstruction performance where external evidence exists
+holdout / external comparisons
+    -> assess reconstruction performance where evidence was not used directly in the quantity being evaluated
 
 applied benchmark reproduction
     -> demonstrates that the model can reproduce a real Irish ED-to-catchment workflow
