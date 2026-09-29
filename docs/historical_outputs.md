@@ -40,7 +40,7 @@ CSV and Parquet are the canonical files; the two databases are query copies of t
 | `validation_detail_*` | | The diagnostics behind the validation summary. |
 | `livestock_signature`, `livestock_signature_long` | | Full cohort signatures for 2020 and 2025 at ED, WFD catchment, county, Colm catchment and national scale (see below). |
 | `parent_follower_relationship_*` | | ED parent-follower relationships and their shares by geography. |
-| `utility_perturbation_*` | | The controlled 10% dairy / suckler / pro-rata test. |
+| `utility_*` | | The illustrative 30% dairy / suckler perturbation: signature against headcount, ED and WFD. |
 | `_columns` | | Unit and meaning of every column in every public table. |
 | `_readme` | | The points in this guide, inside the database. |
 
@@ -62,19 +62,39 @@ Relationship classes: `LOCAL_ED` means the follower's parent cows are in the sam
 
 **Read 2020 relationship classes with care.** About 26% of dairy-origin followers are `COUNTY_RECEIVER` in 2020, against 4-6% in every other year. The published 2020 Census reports zero dairy cows in 931 EDs that hold dairy cows in 2019 and 2021, so their followers lose their local parents only in 2020. 2025 (or an adjacent reconstructed year) gives the more consistent receiver structure.
 
-## The 10% utility test
+## Livestock-signature perturbation (illustrative)
 
-`utility_perturbation_ed`, `utility_perturbation_aggregate` and `utility_perturbation_national` hold a controlled test on the frozen 2020 and 2025 baselines. It is not a scenario or a forecast, and nothing is rebuilt.
+A static endpoint perturbation of the frozen 2020 and 2025 baselines. It is not a scenario, forecast or behavioural model, and nothing is rebuilt.
 
-| Arm | Reduced by 10% | Unchanged |
-|---|---|---|
-| `DAIRY_PARENT` | dairy cows, all DxD and DxB followers | suckler cows, BxB, bulls, sheep |
-| `SUCKLER_PARENT` | suckler cows, all BxB followers | dairy cows, DxD, DxB, bulls, sheep |
-| `PRO_RATA` | all 21 cattle cohorts | sheep |
+**Arms.** `DAIRY_PARENT`: a 30% national cut in dairy cows. `SUCKLER_PARENT`: a 30% national cut in suckler cows. Each cut is shared pro rata across EDs by their share of those cows, which is the same as cutting every ED's cows by 30%. For 2020 the dairy base is the published ED total, 1,379,884 cows (a cut of 413,965); for 2025 it is 1,588,100 (476,430).
 
-Each follower cohort changes by the proportion its parents change, through its ED relationship class: the ED's own parents (`LOCAL_ED`), the county's (`COUNTY_RECEIVER`) or the nation's (`NATIONAL_ORPHAN`). Followers stay where the baseline places them. With a uniform 10% cut every targeted cohort falls by exactly 10%, so the national effect of a parent arm is 10% times that system's share of cattle. The information is spatial: where the change lands. Livestock units use one fixed schedule and Standard Output the fixed IFS 2020 coefficients, so changes come only from composition. Head counts stay fractional so the arms are the exact stated transformation.
+**Two methods, same national change.**
 
-`utility_perturbation_aggregate` gives the same changes by WFD catchment (area-weighted), county, Colm catchment and Ireland.
+| `METHOD` | Where follower change lands |
+|---|---|
+| `SIGNATURE` | Each linked follower cohort (DxD and DxB for dairy; BxB for suckler; 6 age-sex cohorts each) follows its frozen parent relationship: the ED's own cows; the county's cows where the ED has followers but no cows; national cows only as a fallback that does not occur. Followers stay in their ED. |
+| `HEADCOUNT` | National followers-per-cow coefficients applied to each ED's cow change: follower change goes where the cows are. |
+
+Both remove the same national number of each follower cohort. Their difference is where the change lands, and its size is the information the ED and county signatures carry. `PRO_RATA` (all 21 cohorts, `METHOD = UNIFORM`) is kept as a supplementary reference.
+
+**Tables.**
+
+| Table | Use |
+|---|---|
+| `utility_comparison_ed` | Per ED and arm: signature, headcount and difference for followers, cattle, LU and cattle SO. Map this. |
+| `utility_comparison_wfd` | The same, aggregated to the 46 WFD catchments with the frozen ED weights. |
+| `utility_displacement` | How much the headcount method places differently, at ED, WFD and county scale. |
+| `utility_perturbation_ed`, `_aggregate`, `_national` | Every method's change, with `SIGNATURE` follower change split by support class. |
+
+**Displacement.** `ED_TOTAL_DISPLACEMENT` = ½ Σ |signature − headcount| over EDs. It splits exactly into:
+- `ED_RECEIVER_COMPONENT`: change in EDs holding followers but no parent cows, which the headcount method cannot place;
+- `ED_RATIO_COMPONENT`: the rest, from EDs whose followers per cow differ from the national figure.
+
+`ED_PURE_RATIO_DISPLACEMENT` is the displacement among parent-cow EDs if parent-less EDs did not exist, the cleanest measure of the ED signature itself. `WFD_TOTAL_DISPLACEMENT` repeats the half-sum after aggregation to catchments.
+
+**Two cautions.**
+- The 2020 dairy receiver component is inflated by the 931 EDs that report zero dairy cows only in the published 2020 Census. Compare with 2025.
+- Standard Output coefficients differ by region, so the headcount method also changes the national SO total (`NATIONAL_METHOD_DIFFERENCE`). SO differences are therefore reported but not decomposed.
 
 ## Reading the numbers correctly
 
@@ -99,10 +119,13 @@ SQLite, from the command line or any client:
 SELECT YEAR, SUM(TOTAL_CATTLE) AS cattle, SUM(TOTAL_SHEEP) AS sheep, SUM(AREA_FARMED) AS ha
 FROM cso13_ed_year GROUP BY YEAR ORDER BY YEAR;
 
--- WFD catchments: where would a 10% dairy-parent cut remove most grazing LU? (2025)
-SELECT GEOGRAPHY_ID, CHANGE_LU, CHANGE_LU_PCT FROM utility_perturbation_aggregate
-WHERE GEOGRAPHY_TYPE = 'WFD_CATCHMENT' AND ARM = 'DAIRY_PARENT' AND YEAR = 2025
-ORDER BY CHANGE_LU LIMIT 10;
+-- WFD catchments: how differently does a headcount model place a 30% dairy cut? (2025)
+SELECT WFD_CATCHMENT, SIGNATURE_CHANGE_LU, HEADCOUNT_CHANGE_LU, DIFFERENCE_LU FROM utility_comparison_wfd
+WHERE ARM = 'DAIRY_PARENT' AND YEAR = 2025 ORDER BY abs(DIFFERENCE_LU) DESC LIMIT 10;
+
+-- the displacement summary
+SELECT YEAR, ARM, QUANTITY, ED_TOTAL_DISPLACEMENT, ED_RECEIVER_COMPONENT, ED_RATIO_COMPONENT, WFD_TOTAL_DISPLACEMENT
+FROM utility_displacement WHERE QUANTITY = 'FOLLOWERS';
 
 -- ED signatures for mapping (2025)
 SELECT GEOGRAPHY_ID AS CSOED, DAIRY_SHARE_ADULT_PCT, DXB_SHARE_FOLLOWERS_PCT, FOLLOWER_TO_ADULT_RATIO

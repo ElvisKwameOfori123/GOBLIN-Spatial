@@ -35,6 +35,7 @@ reporting/report_data/historical/
 ├── validation_detail_*.parquet
 ├── livestock_signature.parquet (+ _long)
 ├── parent_follower_relationship_ed.parquet (+ _shares, _by_year)
+├── utility_comparison_ed.parquet (+ _wfd), utility_displacement.parquet
 ├── utility_perturbation_ed.parquet (+ _aggregate, _national)
 ├── _columns.parquet
 ├── _readme.parquet

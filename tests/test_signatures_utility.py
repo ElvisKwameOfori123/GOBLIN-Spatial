@@ -13,8 +13,10 @@ from goblin_spatial.synthesis.utility_perturbation import (
     DXB,
     DXD,
     BXB,
+    headcount_benchmark,
     livestock_unit_schedule,
     perturb_year,
+    run_utility_perturbation,
 )
 
 
@@ -53,23 +55,75 @@ def _frame() -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def test_parent_arms_change_only_their_cohorts_by_ten_percent() -> None:
+def test_parent_arms_change_only_their_cohorts_by_thirty_percent() -> None:
     frame = _frame()
     base = frame[FINAL_21_COHORTS].astype(float)
-    dairy = perturb_year(frame, "DAIRY_PARENT", -0.10)
-    suckler = perturb_year(frame, "SUCKLER_PARENT", -0.10)
-    pro_rata = perturb_year(frame, "PRO_RATA", -0.10)
+    dairy, dairy_support = perturb_year(frame, "DAIRY_PARENT", -0.30)
+    suckler, _ = perturb_year(frame, "SUCKLER_PARENT", -0.30)
+    pro_rata, _ = perturb_year(frame, "PRO_RATA", -0.30)
 
     dairy_set = ["dairy_cows", *DXD, *DXB]
     suckler_set = ["suckler_cows", *BXB]
-    assert np.allclose(dairy[dairy_set], 0.9 * base[dairy_set])  # receiver ED 1 included
+    assert np.allclose(dairy[dairy_set], 0.7 * base[dairy_set])  # parent-less ED 1 included
     assert np.allclose(dairy.drop(columns=dairy_set), base.drop(columns=dairy_set))
-    assert np.allclose(suckler[suckler_set], 0.9 * base[suckler_set])  # ED 2 has no suckler cows
+    assert dairy_support.loc[1, DXD[0]] == "COUNTY_RECEIVER"
+    assert dairy_support.loc[0, DXD[0]] == "LOCAL_ED"
+    assert np.allclose(suckler[suckler_set], 0.7 * base[suckler_set])  # ED 2 has no suckler cows
     assert np.allclose(suckler.drop(columns=suckler_set), base.drop(columns=suckler_set))
-    assert np.allclose(pro_rata, 0.9 * base)
-    # dairy + suckler + bulls reproduce the pro-rata change exactly
-    total = (dairy - base).sum(axis=1) + (suckler - base).sum(axis=1) - 0.1 * base["bulls"]
-    assert np.allclose(total, (pro_rata - base).sum(axis=1))
+    assert np.allclose(pro_rata, 0.7 * base)
+
+
+def test_headcount_benchmark_moves_followers_with_the_cows() -> None:
+    frame = _frame()
+    base = frame[FINAL_21_COHORTS].astype(float)
+    headcount = headcount_benchmark(frame, "DAIRY_PARENT", -0.30)
+    signature, _ = perturb_year(frame, "DAIRY_PARENT", -0.30)
+    for cohort in (*DXD, *DXB):
+        # same national change in both methods ...
+        assert np.isclose((headcount - base)[cohort].sum(), (signature - base)[cohort].sum())
+        # ... but none in the ED without dairy cows (ED 1), and in proportion to cows elsewhere
+        assert (headcount - base).loc[1, cohort] == 0.0
+        change = (headcount - base)[cohort]
+        assert np.isclose(change[0] / change[2], 100 / 60)
+    assert np.allclose(headcount[list(BXB)], base[list(BXB)]) and np.allclose(headcount["suckler_cows"], base["suckler_cows"])
+
+
+def _small_run():
+    frame = _frame()
+    frame["YEAR"] = 2020
+    frame["FADN_REGION"] = ["381", "381", "382"]
+    mapping = pd.DataFrame(
+        {
+            "MODEL_VARIABLE": FINAL_21_COHORTS,
+            "SOC_EUR_381": [100.0] * len(FINAL_21_COHORTS),
+            "SOC_EUR_382": [200.0] * len(FINAL_21_COHORTS),
+        }
+    )
+    crosswalk = pd.DataFrame(
+        {
+            "CSOED": ["0", "1", "2"],
+            "WFD_CATCHMENT_ID": ["W1", "W1", "W2"],
+            "WFD_CATCHMENT": ["One", "One", "Two"],
+            "ED_CATCHMENT_WEIGHT": [1.0, 1.0, 1.0],
+        }
+    )
+    return run_utility_perturbation(frame, mapping, crosswalk, years=(2020,), change=-0.30)
+
+
+def test_displacement_decomposes_into_receiver_and_ratio_parts() -> None:
+    out = _small_run()["utility_displacement"].set_index(["ARM", "QUANTITY"])
+    row = out.loc[("DAIRY_PARENT", "FOLLOWERS")]
+    # ED 1 has no dairy cows and 12 dairy-linked cohorts of 10 head each
+    assert np.isclose(row["ED_RECEIVER_COMPONENT"], 0.30 * 10 * 12)
+    assert np.isclose(row["ED_TOTAL_DISPLACEMENT"], row["ED_RECEIVER_COMPONENT"] + row["ED_RATIO_COMPONENT"])
+    assert row["ED_RATIO_COMPONENT"] >= 0 and row["CONSERVED_NATIONALLY"]
+    assert row["NATIONAL_METHOD_DIFFERENCE"] == 0 or abs(row["NATIONAL_METHOD_DIFFERENCE"]) < 1e-9
+    # EDs 0 and 1 share catchment W1, so part of the ED displacement cancels there
+    assert row["WFD_TOTAL_DISPLACEMENT"] < row["ED_TOTAL_DISPLACEMENT"]
+    # SO coefficients differ by region: the benchmark changes the national SO total
+    so = out.loc[("DAIRY_PARENT", "CATTLE_SO_2020_EUR")]
+    assert not so["CONSERVED_NATIONALLY"] and abs(so["NATIONAL_METHOD_DIFFERENCE"]) > 0
+    assert np.isnan(so["ED_RECEIVER_COMPONENT"])
 
 
 def test_lu_schedule_covers_every_cattle_cohort() -> None:
