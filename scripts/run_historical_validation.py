@@ -77,7 +77,7 @@ def main() -> None:
                     "SCOPE": str(int(row["YEAR"])),
                     "METRIC": "MAE_HEAD",
                     "VALUE": row["MAE"],
-                    "INTERPRETATION": "Pattern-fidelity diagnostic against the DAFM county source used for relative county movement; CSO/AAA09 remains the population control.",
+                    "INTERPRETATION": "Pattern-fidelity diagnostic against the DAFM county source used for relative county weighting; CSO/AAA09 remains the population control.",
                 },
                 *(
                     [
