@@ -1,60 +1,32 @@
 """CSO-controlled annual ED sheep panel, 2015-2025.
 
-Same rule as the cattle panel: where the ED truth is known it is kept; where
-it is not known, ED values are reconstructed and every binding CSO control
-closes exactly. For sheep the binding annual control is the AAA09 detailed
-region (seven regions), not the county.
+Where the ED truth is known it is kept; where it is not known, ED values are
+reconstructed and every binding CSO control closes exactly. For sheep the
+binding annual control is the AAA09 detailed region (seven regions), not the
+county.
 
 Known truth
     2020  CSO Census of Agriculture ED TOTAL_SHEEP, returned unchanged,
           including every published zero. The published ED sum is below AAA09
-          2020 (259,807 head nationally); that gap is written to the log and
-          never repaired inside the 2020 panel.
+          2020 by 259,807 head nationally; that difference is recorded as a
+          source discrepancy and is not assigned to individual EDs.
 
-Unknown years (2015-2019, 2021-2025)
-    1. 2020 region-consistent sheep reference distribution. Guides the
-       unknown years only. Each region's AAA09 2020 minus published ED sum is
-       spread over EDs published with zero sheep that were positive in 2010,
-       or blank in 2010 with cattle in 2020. EDs zero in both censuses are
-       excluded. Weights: the 2010 sheep count where positive; where 2010 is
-       blank, ED grassland x the region's density in EDs with published sheep
-       x a national small-flock factor (2010 sheep per ha in the 2010-positive
-       candidates over the density of EDs with published sheep), so both
-       weight types sit on the same scale. This is not an estimate of observed
-       2020 sheep. The published 2020 LSU is not used here; it stays a
-       held-out check.
+Unknown years
+    2015-2019  Within-county ED shares move from the 2010 Census pattern to
+               the published 2020 pattern using temporal-proximity weights.
+    2021-2025  The published 2020 within-county ED pattern is held.
 
-    2. County split within region. The county's share of its region in the
-       2020 reference distribution (published county sheep plus the reference
-       sheep of its EDs) is moved by a DAFM breeding-ewe index
-           m(c, t) = s_DAFM_ewes(c | r, t) / s_DAFM_ewes(c | r, 2020)
-       with DAFM anchors 2015, 2016, 2020, 2022, 2025 (linear in the share
-       between anchors), then renormalised inside the region and
-       Hamilton-rounded to the AAA09 regional total. DAFM sets direction
-       only; CSO sets the level. County and ED use the same 2020 reference,
-       so a county's total carries the reference sheep its EDs carry. (With
-       published county shares instead, published-sheep EDs in Limerick fall
-       to 0.46x from 2020 to 2021 while the Mid-West grows 1.02x; the
-       reference county shares are also closer to DAFM 2020 county levels,
-       which production never uses.)
+Annual AAA09 region totals remain authoritative outside 2020. DAFM breeding-
+ewe evidence modifies county shares within each region, but cannot create
+support in an ED that has zero published sheep in 2020 after the 2020 anchor.
+Thus published 2020 zeros remain zero from 2021-2025.
 
-    3. ED split within county. Each ED's share of its county moves linearly
-       from its 2010 share to its 2020 reference share (lambda = (t-2010)/10)
-       for 2015-2019 and holds the 2020 reference share for 2021-2025. A
-       blank 2010 value takes the 2020 reference share. A zero in both
-       censuses stays zero.
+Sheep classes (ewes 2+, ewes <2, rams, other sheep) are reconciled to annual
+AAA09 regional class totals without changing ED TOTAL_SHEEP.
 
-    4. Classes (ewes 2+, ewes <2, rams, other sheep). AAA09 regional class
-       totals, Hamilton-scaled to the regional total (AAA09 is published in
-       thousands to one decimal and its classes do not always add to the
-       published total), are allocated over all EDs of the region in
-       proportion to ED TOTAL_SHEEP and integerised without changing any ED
-       total. No county class totals are invented. In 2020 the class vector
-       is scaled to the published regional ED sum.
-
-Stage boundary: this module ends at CSO-level sheep (ED TOTAL_SHEEP and the
-four AAA09 classes). DAFM breed composition, the 10 GOBLIN sheep cohorts and
-any GOBLIN/COHORTS calibration are later, separate stages.
+Stage boundary: this module ends at CSO-level sheep. DAFM breed composition,
+the 10 GOBLIN sheep cohorts and later biological subdivision are separate
+stages.
 """
 
 from __future__ import annotations
@@ -79,7 +51,7 @@ KNOWN_YEAR = 2020
 DAFM_EWE_ANCHORS = (2015, 2016, 2020, 2022, 2025)
 PROVENANCE_KNOWN = "CSO_ED_2020_PUBLISHED_UNCHANGED"
 PROVENANCE_PATH = "AAA09_REGION_CONTROL_ED_2010_2020_PATH"
-PROVENANCE_HELD = "AAA09_REGION_CONTROL_ED_2020_REFERENCE_PATTERN"
+PROVENANCE_HELD = "AAA09_REGION_CONTROL_ED_2020_PUBLISHED_PATTERN"
 OUTPUT_CLASS_COLS = (*ED_CLASS_COLS, "EWES", "BREEDING_SHEEP")
 
 
@@ -210,127 +182,54 @@ def _ewe_index(shares: pd.DataFrame, year: int) -> pd.Series:
 # ---------------------------------------------------------- reference 2020
 
 
-def _reference_2020(ed: pd.DataFrame, region: pd.DataFrame, apply_seed: bool = True) -> tuple[pd.Series, list[dict]]:
-    """2020 region-consistent sheep reference distribution (unknown years only)."""
+def _reference_2020(
+    ed: pd.DataFrame, region: pd.DataFrame
+) -> tuple[pd.Series, list[dict]]:
+    """Published 2020 ED sheep pattern plus source-discrepancy audit."""
 
-    published = ed["TOTAL_SHEEP"].astype(float)
-    reference = published.copy()
-    s10 = ed["TOTAL_SHEEP_2010"]
-    positive_2010 = s10.gt(0)
-    blank_2010 = s10.isna()
-    eligible = published.eq(0) & (positive_2010 | (blank_2010 & ed["TOTAL_CATTLE"].gt(0)))
-
-    # One density scale for 2010-blank candidates. The regional density of EDs
-    # with published sheep overstates small-flock EDs, so it is scaled by a
-    # national small-flock factor: 2010 sheep per ha in the 2010-positive
-    # candidates over the density of EDs with published sheep. Both weight
-    # types are then on the scale of the EDs that faded from the 2020 census.
-    has_all = published.gt(0)
-    faded = eligible & positive_2010
-    published_grassland = float(ed.loc[has_all, "ALL_GRASSLAND"].sum())
-    faded_grassland = float(ed.loc[faded, "ALL_GRASSLAND"].sum())
-    if published_grassland <= 0 or faded_grassland <= 0:
-        raise AssertionError("cannot estimate sheep small-flock factor without grassland support")
-    sheep_density_national = float(published[has_all].sum() / published_grassland)
-    faded_density_national = float(s10[faded].sum() / faded_grassland)
-    small_flock_factor = faded_density_national / sheep_density_national
-    if not np.isfinite(small_flock_factor) or small_flock_factor <= 0:
-        raise AssertionError("invalid sheep small-flock factor")
-
-    audit = []
+    published = ed["TOTAL_SHEEP"].astype(float).copy()
+    audit: list[dict] = []
     for region_name, idx in ed.groupby("Region").groups.items():
-        idx = np.asarray(idx)
-        aaa09 = int(region.loc[(region["Year"] == KNOWN_YEAR) & (region["Region"] == region_name), "Total sheep__HEAD"].iloc[0])
+        aaa09 = int(
+            region.loc[
+                (region["Year"] == KNOWN_YEAR)
+                & (region["Region"] == region_name),
+                "Total sheep__HEAD",
+            ].iloc[0]
+        )
         observed = int(ed.loc[idx, "TOTAL_SHEEP"].sum())
-        gap = aaa09 - observed
-        if gap < 0:
+        if observed > aaa09:
             raise AssertionError(
                 f"{region_name}: published 2020 ED sheep exceed AAA09 regional total"
             )
-
-        has = ed.loc[idx, "TOTAL_SHEEP"].gt(0)
-        grassland_support = float(
-            ed.loc[idx[has.to_numpy()], "ALL_GRASSLAND"].sum()
-        )
-        if observed > 0 and grassland_support <= 0:
-            raise AssertionError(
-                f"{region_name}: positive published sheep but no positive grassland support"
-            )
-        density = (observed / grassland_support if grassland_support > 0 else 0.0) * small_flock_factor
-
-        weight = pd.Series(0.0, index=idx)
-        el = eligible.loc[idx]
-        weight[el & positive_2010.loc[idx]] = s10.loc[idx][el & positive_2010.loc[idx]]
-        blank_el = el & blank_2010.loc[idx]
-        weight[blank_el] = ed.loc[idx, "ALL_GRASSLAND"][blank_el] * density
-
-        seed = pd.Series(0.0, index=idx)
-        scale = np.nan
-        if apply_seed and gap > 0 and weight.sum() > 0:
-            scale = gap / float(weight.sum())
-            seed = weight * scale
-            reference.loc[idx] += seed
-
-        seeded = seed[seed > 0].sort_values(ascending=False)
-        cum = seeded.cumsum() / seeded.sum() if len(seeded) else seeded
-        county_pub = ed.loc[idx].groupby("County")["TOTAL_SHEEP"].transform("sum")
         audit.append(
             {
                 "RECORD_TYPE": "2020_SOURCE_DISCREPANCY",
                 "YEAR": KNOWN_YEAR,
                 "Region": region_name,
-                "SEED_REFERENCE": bool(apply_seed),
+                "SEED_REFERENCE": False,
                 "ED_PUBLISHED_TOTAL": observed,
                 "AAA09_TOTAL": aaa09,
                 "DIFFERENCE": observed - aaa09,
-                "REFERENCE_SEEDED_TOTAL": float(seed.sum()),
-                "UNSEEDED_RESIDUAL": float(max(gap, 0) - seed.sum()),
+                "REFERENCE_SEEDED_TOTAL": 0.0,
+                "UNSEEDED_RESIDUAL": float(aaa09 - observed),
                 "N_ZERO_EDS_2020": int(ed.loc[idx, "TOTAL_SHEEP"].eq(0).sum()),
-                "N_ELIGIBLE": int(el.sum()),
-                "N_ELIGIBLE_2010_POSITIVE": int((el & positive_2010.loc[idx]).sum()),
-                "N_ELIGIBLE_2010_BLANK": int(blank_el.sum()),
-                "BLANK_CANDIDATE_SHEEP_PER_HA": density,
-                "SMALL_FLOCK_FACTOR": small_flock_factor,
-                "SEED_SCALE_ON_WEIGHTS": scale,
-                "MAX_SEED": float(seed.max()) if len(seed) else 0.0,
-                "MAX_SEED_SHARE_OF_GAP": float(seed.max() / gap) if gap > 0 and seed.sum() > 0 else 0.0,
-                "MAX_SEED_SHARE_OF_COUNTY_PUBLISHED": float((seed / county_pub.clip(lower=1)).max()),
-                "P95_SEED": float(seeded.quantile(0.95)) if len(seeded) else 0.0,
-                "P99_SEED": float(seeded.quantile(0.99)) if len(seeded) else 0.0,
-                "N_EDS_FOR_50PCT": int((cum < 0.5).sum() + 1) if len(seeded) else 0,
-                "N_EDS_FOR_75PCT": int((cum < 0.75).sum() + 1) if len(seeded) else 0,
-                "N_EDS_FOR_90PCT": int((cum < 0.9).sum() + 1) if len(seeded) else 0,
             }
         )
-    if apply_seed:
-        for region_name, idx in ed.groupby("Region").groups.items():
-            target = int(
-                region.loc[
-                    (region["Year"] == KNOWN_YEAR)
-                    & (region["Region"] == region_name),
-                    "Total sheep__HEAD",
-                ].iloc[0]
-            )
-            if not np.isclose(float(reference.loc[idx].sum()), target, atol=1e-6):
-                raise AssertionError(
-                    f"{region_name}: 2020 reference distribution does not close to AAA09"
-                )
-
-    return reference, audit
-
+    return published, audit
 
 # ----------------------------------------------------------------- shares
 
 
 def _ed_shares(ed: pd.DataFrame, reference: pd.Series) -> pd.DataFrame:
-    """Within-county ED shares: 2010 (blank rule) and 2020 reference."""
+    """Within-county ED shares: 2010 (blank rule) and published 2020 pattern."""
 
     s2010 = pd.Series(0.0, index=ed.index)
     s2020 = pd.Series(0.0, index=ed.index)
     for _, idx in ed.groupby("County").groups.items():
         r20 = reference.loc[idx]
         if r20.sum() <= 0:
-            raise AssertionError("county with no 2020 sheep reference")
+            raise AssertionError("county with no published 2020 sheep support")
         c20 = r20 / r20.sum()
         s2020.loc[idx] = c20
         t10 = ed.loc[idx, "TOTAL_SHEEP_2010"]
@@ -355,12 +254,10 @@ def _region_class_targets(region: pd.DataFrame, year: int, region_name: str, tot
 # ------------------------------------------------------------------ build
 
 
-def build_annual_sheep_panel(config: SpatialConfig, seed_reference: bool = True) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Return (panel, log) for 2015-2025.
-
-    ``seed_reference=False`` is the sensitivity that guides the unknown years
-    with the published 2020 ED sheep only.
-    """
+def build_annual_sheep_panel(
+    config: SpatialConfig,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Return (panel, log) for 2015-2025 using published 2020 ED support."""
 
     crosswalk, region = _load_workbook(config.files["cso_sheep_workbook"])
     ed = _load_ed_2020(config.files["cso_ed_2020"], crosswalk, config.expected_eds)
@@ -371,13 +268,12 @@ def build_annual_sheep_panel(config: SpatialConfig, seed_reference: bool = True)
         crosswalk,
     )
 
-    reference, audit = _reference_2020(ed, region, apply_seed=seed_reference)
+    reference, audit = _reference_2020(ed, region)
     shares = _ed_shares(ed, reference)
 
-    # County and ED use the same 2020 reference so each county total carries
-    # the reference sheep of its own EDs.
+    # County and ED bases both come from the published 2020 ED pattern.
     county_published = ed.groupby("County")["TOTAL_SHEEP"].sum().astype(float)
-    county_reference = reference.groupby(ed["County"]).sum()
+    county_reference = county_published.copy()
     county_region = crosswalk.set_index("County")["Region"]
 
     identifiers = [c for c in IDENTIFIER_CANDIDATES if c in ed.columns]
@@ -411,7 +307,7 @@ def build_annual_sheep_panel(config: SpatialConfig, seed_reference: bool = True)
                             "YEAR": year,
                             "Region": region_name,
                             "County": county_name,
-                            "SEED_REFERENCE": bool(seed_reference),
+                            "SEED_REFERENCE": False,
                             "CSO2020_PUBLISHED_COUNTY_SHARE": float(published_share.loc[county_name]),
                             "CSO2020_REFERENCE_COUNTY_SHARE": float(base.loc[county_name]),
                             "DAFM_EWE_INDEX": float(m.loc[county_name]),
@@ -434,7 +330,7 @@ def build_annual_sheep_panel(config: SpatialConfig, seed_reference: bool = True)
                     "RECORD_TYPE": "REGION_CLASSES",
                     "YEAR": year,
                     "Region": region_name,
-                    "SEED_REFERENCE": bool(seed_reference),
+                    "SEED_REFERENCE": False,
                     "REGION_TOTAL": int(rows.sum()),
                     "AAA09_CLASS_SUM_MINUS_TOTAL_HEAD": rounding,
                     **{f"TARGET_{c}": int(v) for c, v in zip(ED_CLASS_COLS, cols)},
@@ -450,22 +346,10 @@ def build_annual_sheep_panel(config: SpatialConfig, seed_reference: bool = True)
     panel = panel[[c for c in panel.columns if c != "SHEEP_DATA_STATUS"] + ["SHEEP_DATA_STATUS"]]
     _validate(panel, ed, region, config.expected_eds)
 
-    seeded = reference - ed["TOTAL_SHEEP"]
-    reference_rows = pd.DataFrame(
-        {
-            "RECORD_TYPE": "REFERENCE_2020",
-            "YEAR": KNOWN_YEAR,
-            "Region": ed["Region"],
-            "County": ed["County"],
-            "CSOED": ed["CSOED"],
-            "SEED_REFERENCE": bool(seed_reference),
-            "ED_PUBLISHED_TOTAL": ed["TOTAL_SHEEP"],
-            "REFERENCE_SEED": seeded,
-            "REFERENCE_2020": reference,
-        }
-    ).loc[seeded > 0]
     log = pd.concat(
-        [pd.DataFrame(log_rows), pd.DataFrame(audit), reference_rows], ignore_index=True, sort=False
+        [pd.DataFrame(log_rows), pd.DataFrame(audit)],
+        ignore_index=True,
+        sort=False,
     )
     return panel.sort_values(["YEAR", "CSOED"], kind="stable").reset_index(drop=True), log
 
@@ -521,9 +405,7 @@ def _validate(panel: pd.DataFrame, ed: pd.DataFrame, region: pd.DataFrame, expec
                     f"{year} {region_name}: regional sheep classes do not close"
                 )
 
-    zero_both = ed.loc[
-        ed["TOTAL_SHEEP"].eq(0) & ed["TOTAL_SHEEP_2010"].eq(0),
-        "CSOED",
-    ]
-    if int(panel.loc[panel["CSOED"].isin(zero_both), "TOTAL_SHEEP"].sum()) != 0:
-        raise AssertionError("an ED with zero sheep in both censuses received sheep")
+    zero_2020 = set(ed.loc[ed["TOTAL_SHEEP"].eq(0), "CSOED"].astype(str))
+    post = panel.loc[panel["YEAR"].between(2021, 2025)]
+    if int(post.loc[post["CSOED"].isin(zero_2020), "TOTAL_SHEEP"].sum()) != 0:
+        raise AssertionError("a published 2020 sheep zero was filled after 2020")
