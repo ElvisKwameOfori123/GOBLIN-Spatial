@@ -5,6 +5,7 @@ The public repository README is the entry point. These documents provide the dee
 | Document | Purpose |
 |---|---|
 | `methodology.md` | Baseline, SC1, SC2, SC3 and post-SC3 methodology |
+| `historical_outputs.md` | Using the historical baseline outputs: which table, keys, SQLite/DuckDB, interpretation |
 | `running.md` | Guided and scripted execution |
 | `goblin_pathway_authority.md` | National-to-spatial authority and land-accounting boundary |
 | `SCIENTIFIC_ASSUMPTIONS.md` | Scientific assumptions and interpretation limits |

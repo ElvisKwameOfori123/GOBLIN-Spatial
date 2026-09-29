@@ -1,8 +1,12 @@
 #!/usr/bin/env python
-"""Build canonical manuscript-facing data for the historical GOBLIN-Spatial paper.
+"""Build the historical GOBLIN-Spatial release bundle.
 
-The ED x year baseline remains authoritative. This script materialises transparent
-CSV/Parquet tables plus a read-only-style DuckDB query copy for inspection.
+The ED x year baseline remains authoritative. This script materialises the
+manuscript tables, the two canonical livestock panels (CSO 13 groups, GOBLIN 31
+cohorts), every reporting geography and the validation tables as CSV and
+Parquet, plus two query copies of the same tables: DuckDB and SQLite. Each copy
+carries a `_columns` dictionary (unit and meaning of every column) and a
+`_readme` table.
 """
 
 from __future__ import annotations
@@ -16,7 +20,36 @@ import subprocess
 import pandas as pd
 
 from goblin_spatial.config import load_config
+from goblin_spatial.export.column_dictionary import describe_table, sqlite_safe_names
+from goblin_spatial.export.livestock_panels import README as LIVESTOCK_README
 from goblin_spatial.synthesis.historical import build_historical_result_tables
+from goblin_spatial.validation.coherence import output_paths
+
+# Tables whose every column must be described in the column dictionary.
+PUBLIC_TABLES = (
+    "cso13_ed_year",
+    "goblin31_ed_year",
+    "ed_year",
+    "county_year",
+    "national_year",
+    "wfd_catchment_year",
+    "colm_catchment_year",
+)
+
+BUNDLE_README = [
+    ("What this is", "GOBLIN-Spatial historical baseline for Ireland: livestock, land, farm structure and Standard Output for 2,857 Electoral Divisions (EDs), every year 2015-2025 (31,427 ED-years), with county, WFD catchment, Colm catchment and national tables that sum exactly from the EDs."),
+    ("Start here", "cso13_ed_year: CSO groups only (9 cattle, 4 sheep) with land and farm structure. goblin31_ed_year: 21 cattle + 10 sheep GOBLIN cohorts with the CSO groups kept as CSO_ columns. ed_year: everything wide, including Standard Output and derived signature metrics."),
+    ("Keys", "YEAR x CSOED identifies every ED-year row. County, WFD_CATCHMENT_ID, COLM_CATCHMENT and YEAR key the aggregate tables."),
+    ("Evidence rule", "2020 ED values are the published CSO Census of Agriculture values, unchanged. Other years are reconstructed and sum exactly to CSO annual controls (AAA10 county cattle, AAA09 regional sheep, AQA06 regional land). PROVENANCE and SHEEP_DATA_STATUS label every row."),
+    ("2020 discontinuity", "Published 2020 ED sums fall below the annual controls (dairy cows 187,716 head, sheep 259,807 head). This is a source difference between the census and the June surveys, not a modelled change; mark 2020 in time-series figures."),
+    ("2021-2022 land dip", "Area farmed falls about 3.9% in 2021-2022 and recovers in 2023. This is in the CSO AQA06 June series itself; the model follows the AQA06 regional index exactly."),
+    ("Columns", "_columns gives the unit and meaning of every column in every public table."),
+    ("Validation", "validation_summary is the headline table; validation_detail_* are the underlying diagnostics; baseline_coherence_audit re-derives every cross-product identity (must be all PASS)."),
+    ("Standard Output", "Fixed 2020 IFS coefficients by historic FADN region. A production-value indicator, not income, profit or welfare."),
+    ("SQLite names", "SQLite ignores case in column names. In the SQLite copy only, GOBLIN cohort columns that clash with a CSO column differing only in case get the suffix _goblin (e.g. bulls -> bulls_goblin). _columns records SQLITE_COLUMN_NAME."),
+    *[(f"Livestock: {item}", text) for item, text in LIVESTOCK_README if item not in ("Checks", "Purpose")],
+]
+
 
 
 def _configured_output(cfg, key: str, default: str) -> Path:
@@ -85,13 +118,71 @@ def main() -> None:
         validation_dir=validation_dir,
     )
 
+    # Canonical livestock panels, the Colm reporting geography, and validation
+    # detail tables, so the bundle is self-contained.
+    paths = output_paths(cfg)
+    tables["cso13_ed_year"] = pd.read_csv(paths["cso13"], dtype={"CSOED": str}, low_memory=False)
+    tables["goblin31_ed_year"] = pd.read_csv(paths["goblin31"], dtype={"CSOED": str}, low_memory=False)
+    tables["colm_catchment_year"] = pd.read_csv(paths["colm"], low_memory=False)
+    audit_path = validation_dir / "baseline_coherence_audit.csv"
+    if not audit_path.exists():
+        raise FileNotFoundError(
+            f"{audit_path} missing: run scripts/audit_historical_baseline.py first"
+        )
+    audit = pd.read_csv(audit_path)
+    if not audit["PASS"].all():
+        failed = audit.loc[~audit["PASS"], "CHECK"].tolist()
+        raise AssertionError(f"baseline coherence audit has failures: {failed}")
+    tables["baseline_coherence_audit"] = audit
+    for path in sorted(validation_dir.glob("*.csv")):
+        if path.name in {"baseline_coherence_audit.csv", "historical_validation_overview.csv"}:
+            continue
+        tables[f"validation_detail_{path.stem}"] = pd.read_csv(path, low_memory=False)
+
+    # The wide ED table must carry the authoritative values unchanged.
+    check = tables["ed_year"].copy()
+    check["CSOED"] = check["CSOED"].astype(str)
+    reference = master.copy()
+    reference["CSOED"] = reference["CSOED"].astype(str)
+    joined = check.merge(reference, on=["YEAR", "CSOED"], suffixes=("", "__master"))
+    if len(joined) != len(reference):
+        raise AssertionError("ed_year does not cover the authoritative master rows")
+    for column in reference.columns:
+        if column in ("YEAR", "CSOED") or column not in check.columns:
+            continue
+        left, right = joined[column], joined[f"{column}__master"]
+        same = (
+            (left.astype(float) - right.astype(float)).abs().max() < 1e-6
+            if left.dtype.kind in "if" and right.dtype.kind in "if"
+            else left.astype(str).equals(right.astype(str))
+        )
+        if not same:
+            raise AssertionError(f"ed_year.{column} differs from the authoritative master")
+
+    dictionary = pd.concat(
+        [describe_table(name, frame) for name, frame in tables.items()], ignore_index=True
+    )
+    public = dictionary["TABLE_NAME"].isin(PUBLIC_TABLES)
+    undescribed = dictionary.loc[public & dictionary["DESCRIPTION"].eq(""), ["TABLE_NAME", "COLUMN_NAME"]]
+    if not undescribed.empty:
+        raise AssertionError(f"public columns without a dictionary entry: {undescribed.values.tolist()}")
+    dictionary.loc[~public & dictionary["DESCRIPTION"].eq(""), "DESCRIPTION"] = (
+        "Validation or manuscript diagnostic column; see docs/validation.md and docs/historical_results_bundle.md."
+    )
+    sqlite_rename = {name: sqlite_safe_names(list(frame.columns)) for name, frame in tables.items()}
+    dictionary["SQLITE_COLUMN_NAME"] = [
+        sqlite_rename[t].get(c, c) for t, c in zip(dictionary["TABLE_NAME"], dictionary["COLUMN_NAME"])
+    ]
+    readme = pd.DataFrame(BUNDLE_README, columns=["ITEM", "DESCRIPTION"])
+    extras = {"_columns": dictionary, "_readme": readme}
+
     out = Path(args.output_root)
     if not out.is_absolute():
         out = root / out
     out.mkdir(parents=True, exist_ok=True)
 
     table_meta: dict[str, dict[str, object]] = {}
-    for name, frame in tables.items():
+    for name, frame in {**tables, **extras}.items():
         csv_path = out / f"{name}.csv"
         parquet_path = out / f"{name}.parquet"
         frame.to_csv(csv_path, index=False)
@@ -117,7 +208,7 @@ def main() -> None:
             db_path.unlink()
         con = duckdb.connect(str(db_path))
         try:
-            for name, frame in tables.items():
+            for name, frame in {**tables, **extras}.items():
                 con.register("_frame", frame)
                 con.execute(f'CREATE TABLE "{name}" AS SELECT * FROM _frame')
                 con.unregister("_frame")
@@ -131,6 +222,23 @@ def main() -> None:
         finally:
             con.close()
 
+    # SQLite copy of the same tables, for users without DuckDB (R, QGIS,
+    # DB Browser, Excel via ODBC). Column clashes that differ only in case are
+    # renamed as recorded in _columns.SQLITE_COLUMN_NAME.
+    import sqlite3
+
+    sqlite_path = out / "historical_results.sqlite"
+    if sqlite_path.exists():
+        sqlite_path.unlink()
+    with sqlite3.connect(sqlite_path) as con:
+        for name, frame in {**tables, **extras}.items():
+            frame.rename(columns=sqlite_rename.get(name, {})).to_sql(name, con, index=False)
+            if {"YEAR", "CSOED"} <= set(frame.columns):
+                con.execute(f'CREATE INDEX "ix_{name}_year_ed" ON "{name}" (YEAR, CSOED)')
+        pd.DataFrame(
+            [{"model_commit": _git_commit(root), "note": "Query copy only; CSV/Parquet are canonical reporting data."}]
+        ).to_sql("_bundle_metadata", con, index=False)
+
     sources = {
         str(master_path.relative_to(root)): _sha(master_path),
         str(wfd_path.relative_to(root)): _sha(wfd_path),
@@ -141,7 +249,7 @@ def main() -> None:
     }
     manifest = {
         "bundle": "GOBLIN_SPATIAL_HISTORICAL_RESULTS",
-        "version": "1.0",
+        "version": "1.1",
         "model_commit": _git_commit(root),
         "authoritative_state": str(master_path.relative_to(root)),
         "reporting_boundary": (
@@ -150,6 +258,7 @@ def main() -> None:
         "sources": sources,
         "tables": table_meta,
         "duckdb": str(db_path.relative_to(root)) if db_path.exists() else None,
+        "sqlite": str(sqlite_path.relative_to(root)),
     }
     (out / "historical_results_manifest.json").write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n",

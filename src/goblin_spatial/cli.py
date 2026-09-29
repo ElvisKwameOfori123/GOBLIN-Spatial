@@ -273,3 +273,7 @@ def main() -> None:
         return
 
     raise ValueError(f"unknown command: {args.command}")
+
+
+if __name__ == "__main__":
+    main()
