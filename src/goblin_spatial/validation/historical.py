@@ -135,10 +135,12 @@ def validate_dafm_sheep_counties(
     master: pd.DataFrame,
     validation_path: str | Path,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Compare reconstructed county sheep totals with independent DAFM census totals.
+    """Compare reconstructed county sheep totals with the DAFM county pattern.
 
-    The model's sheep population remains controlled by CSO data. DAFM county
-    totals are retained only as external validation evidence.
+    The model's sheep population remains controlled by CSO/AAA09, but the DAFM
+    breeding-ewe geography also informs relative county movement in the
+    reconstruction. This is therefore a pattern-fidelity diagnostic, not
+    independent validation.
     """
     required = {"YEAR", "County", "TOTAL_SHEEP"}
     missing = sorted(required - set(master.columns))
