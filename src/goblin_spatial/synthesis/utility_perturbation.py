@@ -13,10 +13,11 @@ Design (agreed; see docs/historical_outputs.md):
   finest valid frozen parent-follower relationship: the ED's own parents; the
   county's where the ED has followers but no parents (COUNTY_RECEIVER); the
   nation's only as a final fallback. Followers stay in their baseline EDs.
-* HEADCOUNT method (national-coefficient benchmark): the national
-  followers-per-parent coefficient of each cohort is applied to each ED's adult
-  change, so follower change is located by the geography of adult cows rather
-  than of followers.
+* HEADCOUNT attribution benchmark: the national followers-per-parent
+  coefficient of each cohort is applied to each ED's adult change, so follower
+  change is attributed to the geography of adult cows rather than of followers.
+  It is a spatial attribution benchmark, not a feasible alternative ED herd;
+  local post-change cohort non-negativity is therefore not imposed.
 * Both methods remove the same national number of each follower cohort; the
   difference between them is only where the change lands. Its size is the
   spatial information carried by the ED and county signatures.
@@ -133,7 +134,12 @@ def perturb_year(frame: pd.DataFrame, arm: str, change: float = DEFAULT_CHANGE) 
 
 
 def headcount_benchmark(frame: pd.DataFrame, arm: str, change: float = DEFAULT_CHANGE) -> pd.DataFrame:
-    """National-coefficient benchmark: follower change placed where parent cows are."""
+    """National-coefficient spatial attribution benchmark.
+
+    The returned pseudo-state is used only to obtain the benchmark change
+    allocation. It is not a feasible alternative ED herd and is not constrained
+    to keep every implied local follower level non-negative.
+    """
 
     base = frame[list(FINAL_21_COHORTS)].astype(float)
     new = base.copy()
