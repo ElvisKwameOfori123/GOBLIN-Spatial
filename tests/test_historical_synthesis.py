@@ -13,7 +13,9 @@ from goblin_spatial.synthesis.historical import (
     aggregate_state,
     build_matched_pairs,
     build_so_decomposition,
+    dairy_2020_discontinuity_eds,
     information_geography,
+    stable_ed_change_detail,
     stable_ed_sensitivity,
 )
 
@@ -106,11 +108,22 @@ def test_so_decomposition_closes_exactly():
     assert np.isclose(parts, total)
 
 
-def test_stable_ed_sensitivity_reports_all_three_bands():
+def test_stable_ed_sensitivity_reports_all_three_bands_and_net_trends():
     out = add_signature_metrics(_frame())
     result = stable_ed_sensitivity(out)
     assert result["STABILITY_BAND_PCT"].tolist() == [2.5, 5.0, 10.0]
     assert (result["N_ED"] >= 0).all()
+    assert "MEDIAN_ABS_DAIRY_COUNTY_CENTRED_CHANGE_PP" in result.columns
+    assert "MEDIAN_ABS_DAIRY_NATIONAL_CENTRED_CHANGE_PP" in result.columns
+    assert np.allclose(
+        result["MEDIAN_ABS_DAIRY_CHANGE_PP"],
+        result["MEDIAN_ABS_DAIRY_RAW_CHANGE_PP"],
+        equal_nan=True,
+    )
+
+    detail = stable_ed_change_detail(out)
+    assert "DAIRY_SHARE_ADULT_PCT_COUNTY_CENTRED_CHANGE_PP" in detail.columns
+    assert "DAIRY_SHARE_ADULT_PCT_NATIONAL_CENTRED_CHANGE_PP" in detail.columns
 
 
 def test_matched_pairs_uses_common_farmed_area_denominator():
@@ -121,6 +134,28 @@ def test_matched_pairs_uses_common_farmed_area_denominator():
     assert "SO_PER_FARMED_HA_A" in result.columns
 
 
+
+
+def test_dairy_discontinuity_exclusion_is_reused_across_years():
+    rows = []
+    for year, dairy1, dairy2 in (
+        (2019, 300, 200),
+        (2020, 0, 200),
+        (2021, 320, 200),
+        (2025, 350, 200),
+    ):
+        rows.append(_row(year, "1", "A", dairy1, 300, 700))
+        rows.append(_row(year, "2", "A", dairy2, 300, 700))
+    out = add_signature_metrics(pd.DataFrame(rows))
+    excluded = dairy_2020_discontinuity_eds(out)
+    assert excluded == {"1"}
+
+    primary = build_matched_pairs(out, year=2025, exclude_csoeds=excluded)
+    unrestricted = build_matched_pairs(out, year=2025)
+    if not primary.empty:
+        assert "1" not in set(primary["CSOED_A"]) | set(primary["CSOED_B"])
+    if not unrestricted.empty:
+        assert len(unrestricted) >= len(primary)
 
 def test_aggregate_state_recomputes_structure_metrics():
     frame = _frame()
