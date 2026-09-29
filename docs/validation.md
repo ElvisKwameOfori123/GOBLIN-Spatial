@@ -40,7 +40,7 @@ It writes diagnostics beneath `data/processed/validation/historical/`.
 
 Four additional checks are implemented.
 
-1. **DAFM county-pattern fidelity diagnostic.** Reconstructed county sheep totals are compared with the retained DAFM National Sheep and Goat Census totals for 2015, 2020, 2022 and 2025. CSO/AAA09 remains the population control, while the DAFM breeding-ewe geography also informs the relative county movement used in reconstruction. This comparison therefore measures fidelity to an input spatial pattern and is not independent validation. Diagnostics report county-level error and spatial-rank agreement.
+1. **DAFM county-pattern fidelity diagnostic.** Reconstructed county sheep totals are compared with the retained DAFM National Sheep and Goat Census totals for 2015, 2020, 2022 and 2025. CSO/AAA09 remains the population control, while the DAFM breeding-ewe geography also informs the relative county weighting used in reconstruction. This comparison therefore measures fidelity to an input spatial pattern and is not independent validation. Diagnostics report county-level error and spatial-rank agreement.
 
 2. **2022 sheep-composition holdout.** The observed 2022 DAFM breed-composition anchor is omitted. County-category breed shares are reconstructed by interpolation from the 2020 and 2025 anchors and then compared with the withheld 2022 observations. This tests reconstruction performance rather than accounting closure.
 
