@@ -21,10 +21,12 @@ reporting/report_data/historical/
 ├── validation_summary.parquet
 ├── anchor_reconciliation_2020.parquet
 ├── so_change_2015_2025.parquet
-├── signature_ranges_2020.parquet
-├── information_geography_2020.parquet
-├── concentration_2020.parquet
-├── matched_pairs_2020.parquet
+├── signature_ranges_2020.parquet (+ 2025 and unrestricted sensitivity tables)
+├── information_geography_2020.parquet (+ 2025 and unrestricted sensitivity tables)
+├── concentration_2020.parquet (+ 2025 and unrestricted sensitivity tables)
+├── matched_pairs_2020.parquet (+ 2025 and unrestricted sensitivity tables)
+├── dairy_2020_discontinuity_eds.parquet
+├── stable_ed_change_detail.parquet
 ├── stable_ed_sensitivity.parquet
 ├── multiscale_example_2020.parquet
 ├── multiscale_county_selection_scores_2020.parquet
@@ -86,11 +88,11 @@ The bundle materialises the checks required for the model paper:
   other/suckler cows;
 - complete 2015-2025 fixed-coefficient Standard Output change decomposition;
 - held-out, external-source, applied and temporal validation summaries;
-- 2020 multiscale signature ranges;
-- information-geography statistics;
-- land-normalised concentration summaries;
-- within-county matched ED contrasts using a common farmed-area denominator;
-- stable-cattle ED sensitivity at ±2.5%, ±5% and ±10%;
+- 2020 and 2025 multiscale signature ranges, with the primary ED distributions excluding the 931 documented 2020-only dairy-zero EDs and unrestricted results retained as sensitivity outputs;
+- information-geography statistics for 2020 and 2025 on the same primary admissible ED set, plus unrestricted sensitivity results;
+- land-normalised concentration summaries for 2020 and 2025 using the same exclusion, plus unrestricted sensitivity results;
+- within-county matched ED contrasts for 2020 and 2025 using the same admissible ED set and a common farmed-area denominator, with unrestricted matches retained as sensitivity outputs;
+- stable-cattle ED sensitivity at ±2.5%, ±5% and ±10%, reporting raw compositional change alongside county-centred and national-centred change;
 - a pre-specified multiscale illustration chosen by maximum adult-cow-weighted
   within-county dairy-share heterogeneity.
 
@@ -124,3 +126,29 @@ ORDER BY TOTAL_CATTLE DESC;
 
 A publication workbook can later be generated from these frozen tables without
 rerunning the scientific model.
+
+
+## Cross-sectional dairy-discontinuity sensitivity
+
+The published 2020 Census reports zero dairy cows in 931 EDs that have positive
+reconstructed dairy populations in both 2019 and 2021. Because a contrast
+algorithm that maximises dairy-orientation differences can select these EDs
+systematically, they are excluded from the **primary** matched-pair,
+concentration, ED signature-range and information-geography analyses. The same
+931 EDs are excluded from the corresponding 2025 primary analyses so that both
+years use a common admissible ED set. Unrestricted 2020 and 2025 tables are
+released alongside the primary outputs as sensitivity checks.
+
+This exclusion changes only manuscript-facing synthesis tables. It does not
+alter the authoritative ED baseline, any county or national control, the WFD
+crosswalk, livestock signatures themselves, or the utility perturbation.
+
+## Stable-abundance change relative to broader trends
+
+The stable-ED analysis now reports three versions of 2015-2025 compositional
+change: raw ED change, ED change centred on the corresponding county aggregate
+change, and ED change centred on national aggregate change. County-centred
+change is the primary net-of-trend diagnostic because annual cattle controls
+enter at county level. National-centred change is retained as a sensitivity
+measure. These are reconstruction diagnostics, not claims of independently
+observed annual ED transitions.
