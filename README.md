@@ -119,7 +119,15 @@ Verify the frozen production inputs:
 goblin-spatial fetch-data --verify-only
 ```
 
-Build the complete historical baseline:
+Build the complete historical release (baseline, validation, catchment views, coherence audit, and the CSV/Parquet/SQLite/DuckDB bundle) in one step:
+
+```bash
+python scripts/build_historical_release.py
+```
+
+Everything lands in `reporting/report_data/historical/`; start with `historical_results.sqlite` and read [`docs/historical_outputs.md`](docs/historical_outputs.md).
+
+Build only the core historical baseline:
 
 ```bash
 goblin-spatial build --config configs/ireland_2015_2025.yaml
@@ -302,6 +310,7 @@ Together, these tools provide connected views of Ireland's agricultural and land
 | [`docs/methodology.md`](docs/methodology.md) | Reconstruction methodology and model architecture |
 | [`docs/SCIENTIFIC_ASSUMPTIONS.md`](docs/SCIENTIFIC_ASSUMPTIONS.md) | Scientific assumptions and interpretation |
 | [`docs/catchment_bridge.md`](docs/catchment_bridge.md) | County and WFD catchment aggregation |
+| [`docs/historical_outputs.md`](docs/historical_outputs.md) | Using the outputs: tables, keys, databases, how to read them |
 | [`docs/historical_results_bundle.md`](docs/historical_results_bundle.md) | Historical reporting products |
 | [`docs/validation.md`](docs/validation.md) | Validation and reproducibility |
 | [`docs/data_dictionary.md`](docs/data_dictionary.md) | Variables and definitions |

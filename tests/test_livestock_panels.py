@@ -138,3 +138,31 @@ def test_sqlite_round_trip(tmp_path) -> None:
         n31 = con.execute(f'select count(*) from "{NAME_31}"').fetchone()[0]
     assert len(back) == len(panel13) and n31 == len(panel31)
     assert (back[CSO_13].to_numpy() == panel13[CSO_13].to_numpy()).all()
+
+
+def test_production_master_provenance_reaches_both_panels() -> None:
+    """The pipeline projects from the master, whose provenance columns are
+    named PROVENANCE and SHEEP_DATA_STATUS; both panels must still carry them."""
+
+    from goblin_spatial.export.livestock_panels import (
+        CSO_TOTALS,
+        project_enriched_livestock_panels,
+    )
+
+    row = {column: 0 for column in [*CSO_TOTALS, *CSO_13, *COHORTS_31]}
+    row.update({column: "x" for column in ID_COLS})
+    master = pd.DataFrame(
+        [
+            {**row, "YEAR": 2020, "CSOED": "1", "PROVENANCE": "CSO_ED_2020_PUBLISHED_UNCHANGED",
+             "SHEEP_DATA_STATUS": "CSO_ED_2020_PUBLISHED_UNCHANGED"},
+            {**row, "YEAR": 2021, "CSOED": "1", "PROVENANCE": "AAA10_COUNTY_CONTROL_ED_2020_PATTERN",
+             "SHEEP_DATA_STATUS": "AAA09_REGION_CONTROL_ED_2020_REFERENCE_PATTERN"},
+        ]
+    )
+    panel13, panel31 = project_enriched_livestock_panels(master)
+    for panel in (panel13, panel31):
+        assert panel["CATTLE_PROVENANCE"].tolist() == [
+            "CSO_ED_2020_PUBLISHED_UNCHANGED",
+            "AAA10_COUNTY_CONTROL_ED_2020_PATTERN",
+        ]
+        assert panel["SHEEP_PROVENANCE"].iloc[1] == "AAA09_REGION_CONTROL_ED_2020_REFERENCE_PATTERN"

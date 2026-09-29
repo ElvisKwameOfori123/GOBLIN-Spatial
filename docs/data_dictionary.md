@@ -1,6 +1,6 @@
 # GOBLIN-Spatial data dictionary
 
-This document describes the principal variables exposed by the historical baseline and the final SC1-SC3 scientific engine. It focuses on interpretation-safe quantities rather than every internal diagnostic column.
+This document describes the principal variables exposed by the historical baseline and the final SC1-SC3 scientific engine. It focuses on interpretation-safe quantities rather than every internal diagnostic column. A complete column-by-column dictionary (unit and meaning of every column in every public table) ships with the release bundle as the `_columns` table and `_columns.csv`; see `historical_outputs.md`.
 
 ## Core identifiers
 

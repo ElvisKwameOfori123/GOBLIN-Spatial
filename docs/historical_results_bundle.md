@@ -28,11 +28,22 @@ reporting/report_data/historical/
 ├── stable_ed_sensitivity.parquet
 ├── multiscale_example_2020.parquet
 ├── multiscale_county_selection_scores_2020.parquet
+├── cso13_ed_year.parquet
+├── goblin31_ed_year.parquet
+├── colm_catchment_year.parquet
+├── baseline_coherence_audit.parquet
+├── validation_detail_*.parquet
+├── _columns.parquet
+├── _readme.parquet
 ├── historical_results.duckdb
+├── historical_results.sqlite
 └── historical_results_manifest.json
 ```
 
-CSV companions are written beside every Parquet file.
+CSV companions are written beside every Parquet file. The bundle requires
+`scripts/audit_historical_baseline.py` to have run and passed; it refuses to
+build otherwise, and it checks that `ed_year` carries the authoritative master
+values unchanged. `docs/historical_outputs.md` is the user guide.
 
 ## Authority
 
@@ -81,8 +92,11 @@ The bundle materialises the checks required for the model paper:
 
 ## SQL access
 
-`historical_results.duckdb` contains a query copy of every table. The
-CSV/Parquet files remain the canonical reporting products.
+`historical_results.duckdb` and `historical_results.sqlite` each contain a
+query copy of every table, plus `_columns` and `_readme`. The CSV/Parquet files
+remain the canonical reporting products. SQLite ignores case in column names,
+so in its copy the GOBLIN cohort `bulls` in `ed_year` is stored as
+`bulls_goblin`; `_columns.SQLITE_COLUMN_NAME` records every such rename.
 
 Example:
 

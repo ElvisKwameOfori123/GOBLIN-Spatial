@@ -45,6 +45,7 @@ jobs:
             tests/test_cattle_annual_genetics.py \
             tests/test_cattle_annual_panel.py \
             tests/test_cattle_two_anchor.py \
+            tests/test_column_dictionary.py \
             tests/test_cli_data_boundary.py \
             tests/test_cli_study.py \
             tests/test_data_fetch.py \
@@ -164,7 +165,8 @@ jobs:
           print("National-years:", len(national))
           print("Crosswalk rows:", len(crosswalk))
           PY
-
+      - name: Audit coherence of the built baseline
+        run: python scripts/audit_historical_baseline.py
       - name: Build historical manuscript result bundle
         run: python scripts/build_historical_results_bundle.py
 
@@ -181,6 +183,11 @@ jobs:
           test -f reporting/report_data/historical/stable_ed_sensitivity.csv
           test -f reporting/report_data/historical/multiscale_example_2020.csv
           test -f reporting/report_data/historical/historical_results.duckdb
+          test -f reporting/report_data/historical/historical_results.sqlite
+          test -f reporting/report_data/historical/cso13_ed_year.parquet
+          test -f reporting/report_data/historical/goblin31_ed_year.parquet
+          test -f reporting/report_data/historical/colm_catchment_year.parquet
+          test -f reporting/report_data/historical/_columns.csv
           python - <<'PY'
           import duckdb
           from pathlib import Path
@@ -190,7 +197,16 @@ jobs:
           assert con.sql("select count(*) from ed_year").fetchone()[0] == 31427
           assert con.sql("select count(distinct County) from county_year").fetchone()[0] == 26
           assert con.sql("select count(distinct WFD_CATCHMENT_ID) from wfd_catchment_year").fetchone()[0] == 46
+          for table in ("cso13_ed_year", "goblin31_ed_year"):
+              assert con.sql(f"select count(*) from {table}").fetchone()[0] == 31427
+          assert con.sql("select count(*) from baseline_coherence_audit where not PASS").fetchone()[0] == 0
           con.close()
+
+          import sqlite3
+          lite = sqlite3.connect("reporting/report_data/historical/historical_results.sqlite")
+          assert lite.execute("select count(*) from ed_year").fetchone()[0] == 31427
+          assert lite.execute("select count(*) from _columns where DESCRIPTION = ''").fetchone()[0] == 0
+          lite.close()
           PY
 
       - name: Upload historical result bundle

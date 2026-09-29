@@ -132,7 +132,21 @@ def project_enriched_livestock_panels(
         )
     ids = list(ID_COLS)
     context = [column for column in CONTEXT_COLUMNS if column in master.columns]
+    # The production master names provenance PROVENANCE (cattle) and
+    # SHEEP_DATA_STATUS (sheep); the public panels call them CATTLE_PROVENANCE
+    # and SHEEP_PROVENANCE. Accept either so both build paths carry them.
+    master = master.rename(
+        columns={
+            old: new
+            for old, new in (("PROVENANCE", "CATTLE_PROVENANCE"), ("SHEEP_DATA_STATUS", "SHEEP_PROVENANCE"))
+            if old in master.columns and new not in master.columns
+        }
+    )
     provenance = [column for column in PROVENANCE if column in master.columns]
+    if len(provenance) != len(PROVENANCE):
+        raise ValueError(
+            f"enriched master missing provenance fields: {sorted(set(PROVENANCE) - set(provenance))}"
+        )
     required = {*CSO_TOTALS, *CSO_13, *COHORTS_31}
     missing = sorted(required - set(master.columns))
     if missing:
