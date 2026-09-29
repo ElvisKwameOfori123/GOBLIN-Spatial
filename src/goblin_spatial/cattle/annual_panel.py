@@ -26,16 +26,11 @@ Unknown years (2015-2019, 2021-2025)
        total is published, the remaining block is split over the blank cells
        in the ED's 2020 proportions (county proportions if the ED has none).
 
-    3. 2020 reference mix for the unknown years. The published 2020 ED sums
-       fall short of AAA10 2020 for dairy and other cows; the discrepancy is
-       reflected in the published component balance as a larger other-cattle
-       residual. No cause is assigned to it. To stop later years placing a county's whole cow
-       shortfall on the few EDs published with cows, each cow class's 2020
-       county shortfall is seeded, for the reference mix only, into the
-       other cattle of eligible EDs published with zero of that class:
-       cattle present, cows of some class present, and not a published 2010
-       zero for that class; in proportion to the ED's other cattle. The
-       published 2020 values themselves are never changed.
+    3. 2020 reference mix for the unknown years. The published 2020 ED
+       composition is used as published. No explanation is assigned to a
+       published zero and no cow population is seeded into a zero cell.
+       For 2021-2025 the 2020 within-county spatial pattern and component
+       support are held while annual AAA10 county totals change.
 
     4. Joint county calibration. For each county and year, the ED x
        (dairy, other cows, other cattle) table starts from ED total x ED mix
@@ -178,48 +173,22 @@ def _size_shares(ed: pd.DataFrame) -> pd.DataFrame:
     return shares
 
 
-def _reference_mix_2020(
-    ed: pd.DataFrame, controls_2020: pd.DataFrame, apply_seed: bool = True
-) -> pd.DataFrame:
-    """2020 mix used only to guide unknown years (published values untouched)."""
+def _reference_mix_2020(ed: pd.DataFrame) -> pd.DataFrame:
+    """Published 2020 ED component mix used to guide unknown years.
+
+    Published zeros remain zero. The difference between published 2020 ED sums
+    and the separate AAA10 June controls is recorded only as a source
+    discrepancy and is not assigned to individual EDs.
+    """
 
     counts = ed[list(COMPONENTS)].astype(float).copy()
-    seeded = pd.Series(0.0, index=ed.index)
-    seeded_by_component = pd.DataFrame(
-        0.0, index=ed.index, columns=("DAIRY_COW", "OTHER_COW")
-    )
-    for county_name, idx in ed.groupby("County").groups.items():
-        for component in ("DAIRY_COW", "OTHER_COW"):
-            shortfall = float(controls_2020.loc[county_name, component]) - float(
-                ed.loc[idx, component].sum()
-            )
-            if shortfall <= 0 or not apply_seed:
-                continue
-            published = ed.loc[idx, component]
-            cows_present = (ed.loc[idx, "DAIRY_COW"] + ed.loc[idx, "OTHER_COW"]) > 0
-            zero_2010 = ed.loc[idx, f"{component}_2010"].eq(0.0)
-            eligible = (
-                published.eq(0)
-                & ed.loc[idx, "TOTAL_CATTLE"].gt(0)
-                & cows_present
-                & ~zero_2010
-            )
-            room = (counts.loc[idx, "OTHER_CATTLE"]).where(eligible, 0.0).clip(lower=0.0)
-            if room.sum() <= 0:
-                continue
-            seed = np.minimum(room, shortfall * room / room.sum())
-            counts.loc[idx, component] += seed
-            counts.loc[idx, "OTHER_CATTLE"] -= seed
-            seeded.loc[idx] += seed
-            seeded_by_component.loc[idx, component] += seed
-
     total = counts.sum(axis=1)
     mix = counts.div(total.where(total > 0), axis=0)
-    mix["SEEDED_HEAD_2020_REFERENCE"] = seeded
-    mix["SEEDED_DAIRY_COW_2020_REFERENCE"] = seeded_by_component["DAIRY_COW"]
-    mix["SEEDED_OTHER_COW_2020_REFERENCE"] = seeded_by_component["OTHER_COW"]
+    # Retained as zero-valued audit fields for backwards-compatible logs.
+    mix["SEEDED_HEAD_2020_REFERENCE"] = 0.0
+    mix["SEEDED_DAIRY_COW_2020_REFERENCE"] = 0.0
+    mix["SEEDED_OTHER_COW_2020_REFERENCE"] = 0.0
     return mix
-
 
 def _mix_2010(ed: pd.DataFrame, mix_2020: pd.DataFrame) -> pd.DataFrame:
     """2010 mix from published 2010 cells.
@@ -366,12 +335,13 @@ def _calibrate_county(
 
 
 def build_annual_ed_panel(
-    config: SpatialConfig, seed_reference_mix: bool = True
+    config: SpatialConfig,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Return (panel, calibration_log) for 2015-2025.
 
-    ``seed_reference_mix=False`` is the sensitivity that guides the unknown
-    years with the published 2020 composition only (no cow-shortfall seeding).
+    The published 2020 ED pattern is the post-2020 spatial anchor. Published
+    component zeros remain outside post-2020 support; annual AAA10 county
+    controls change the magnitudes, not the observed 2020 support pattern.
     """
 
     county = _load_aaa10(config.files["cso_cattle_county"])
@@ -381,15 +351,22 @@ def build_annual_ed_panel(
     sizes = _size_shares(ed)
     _check_2010_consistency(ed)
     controls_2020 = _county_controls(county, KNOWN_YEAR)
-    mix20 = _reference_mix_2020(ed, controls_2020, apply_seed=seed_reference_mix)
+    mix20 = _reference_mix_2020(ed)
     mix10 = _mix_2010(ed, mix20)
 
-    # a component zero in both censuses (published zero, not seeded) stays zero
-    possible = pd.DataFrame(index=ed.index)
+    # Before 2020, support can come from either census along the 2010-2020
+    # reconstruction path. After 2020, support is the published 2020 support
+    # only: a published 2020 component zero remains zero in 2021-2025.
+    possible_path = pd.DataFrame(index=ed.index)
+    possible_2020 = pd.DataFrame(index=ed.index)
     for component in COMPONENTS:
         was_2010 = ed[f"{component}_2010"].isna() | ed[f"{component}_2010"].gt(0)
-        possible[component] = (mix20[component].fillna(0) > 0) | (was_2010 & mix10[component].gt(0))
-    possible = possible.to_numpy(dtype=float)
+        possible_2020[component] = mix20[component].fillna(0) > 0
+        possible_path[component] = possible_2020[component] | (
+            was_2010 & mix10[component].gt(0)
+        )
+    possible_path = possible_path.to_numpy(dtype=float)
+    possible_2020 = possible_2020.to_numpy(dtype=float)
 
     frames = []
     log_rows = []
@@ -409,6 +386,7 @@ def build_annual_ed_panel(
         mix = _blend(mix10, mix20, weight) if year < KNOWN_YEAR else mix20[list(COMPONENTS)].fillna(0.0)
         controls = _county_controls(county, year)
 
+        support = possible_path if year < KNOWN_YEAR else possible_2020
         values = np.zeros((len(ed), len(COMPONENTS)), dtype=np.int64)
         for county_name, idx in ed.groupby("County").groups.items():
             idx = np.asarray(idx)
@@ -421,7 +399,7 @@ def build_annual_ed_panel(
                 # ED with cattle on the path but no usable mix in either census:
                 # county mix, restricted to components not published zero.
                 county_mix = cols / max(1, cols.sum())
-                allowed = possible[idx][empty] * county_mix[None, :]
+                allowed = support[idx][empty] * county_mix[None, :]
                 none = allowed.sum(axis=1) <= 0
                 if none.any():
                     bad = idx[empty][none]
@@ -432,7 +410,7 @@ def build_annual_ed_panel(
                     )
                 m[empty] = allowed / allowed.sum(axis=1, keepdims=True)
             allocation, level = _calibrate_county(
-                rows, m, cols, possible[idx], label=f"{county_name} {year}"
+                rows, m, cols, support[idx], label=f"{county_name} {year}"
             )
             values[idx] = allocation
             log_rows.append(
@@ -441,7 +419,7 @@ def build_annual_ed_panel(
                     "YEAR": year,
                     "County": county_name,
                     "SUPPORT_FALLBACK_LEVEL": level,
-                    "SEED_REFERENCE_MIX": bool(seed_reference_mix),
+                    "SEED_REFERENCE_MIX": False,
                 }
             )
 
@@ -463,7 +441,7 @@ def build_annual_ed_panel(
             "YEAR": KNOWN_YEAR,
             "County": county_name,
             "SUPPORT_FALLBACK_LEVEL": np.nan,
-            "SEED_REFERENCE_MIX": bool(seed_reference_mix),
+            "SEED_REFERENCE_MIX": False,
             "REFERENCE_SEEDED_DAIRY_COW": float(
                 mix20.loc[idx, "SEEDED_DAIRY_COW_2020_REFERENCE"].sum()
             ),
@@ -495,8 +473,8 @@ def build_annual_ed_panel(
                 - float(ed.loc[idx, component].sum()),
             )
     log.attrs["cow_shortfall_2020"] = shortfall
-    log.attrs["seeded_head_2020_reference"] = float(mix20["SEEDED_HEAD_2020_REFERENCE"].sum())
-    log.attrs["unseeded_head_2020_reference"] = shortfall - log.attrs["seeded_head_2020_reference"]
+    log.attrs["seeded_head_2020_reference"] = 0.0
+    log.attrs["unseeded_head_2020_reference"] = shortfall
     return panel, log
 
 
