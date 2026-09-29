@@ -40,7 +40,7 @@ It writes diagnostics beneath `data/processed/validation/historical/`.
 
 Four additional checks are implemented.
 
-1. **Independent DAFM county sheep comparison.** Reconstructed county sheep totals are compared with the retained DAFM National Sheep and Goat Census totals for 2015, 2020, 2022 and 2025. CSO remains the controlling model source. DAFM is used only as independent validation evidence. Diagnostics report county-level error and spatial-rank agreement.
+1. **DAFM county-pattern fidelity diagnostic.** Reconstructed county sheep totals are compared with the retained DAFM National Sheep and Goat Census totals for 2015, 2020, 2022 and 2025. CSO/AAA09 remains the population control, while the DAFM breeding-ewe geography also informs the relative county movement used in reconstruction. This comparison therefore measures fidelity to an input spatial pattern and is not independent validation. Diagnostics report county-level error and spatial-rank agreement.
 
 2. **2022 sheep-composition holdout.** The observed 2022 DAFM breed-composition anchor is omitted. County-category breed shares are reconstructed by interpolation from the 2020 and 2025 anchors and then compared with the withheld 2022 observations. This tests reconstruction performance rather than accounting closure.
 
@@ -54,8 +54,8 @@ The validation suite therefore distinguishes:
 accounting closure
     -> verifies implementation and conservation identities
 
-independent / holdout comparisons
-    -> validate reconstruction performance where external evidence exists
+fidelity / holdout / external comparisons
+    -> assess reconstruction performance while preserving whether evidence was an input, withheld anchor or external benchmark
 
 applied benchmark reproduction
     -> demonstrates that the model can reproduce a real Irish ED-to-catchment workflow
@@ -68,7 +68,7 @@ No arbitrary pass/fail thresholds are imposed on independent empirical discrepan
 
 For the cattle two-anchor reconstruction, protected implementation checks additionally require exact county closure by component and year, exact preservation of the published 2020 support pattern for 2021-2025 with annual county component controls imposed exactly, non-negative ED values, component accounting closure, within-county shares summing to one, no support where both anchors are zero, bounded intermediate shares, and equal yearly share increments between the two census anchors. These checks verify the reconstruction mathematics; they do not constitute independent ED-level validation for 2015-2019.
 
-For the Step 3 cattle age-sex split, A0 is the flat county-composition null and A1 is the DAFM-informed log-odds prior. Both must preserve every ED \`OTHER_CATTLE\` row and the same rescaled AAA10 county age-sex columns exactly. The pre-specified LSU plausibility screen is cattle > 0, LSU > 0 and \(LSU \le LSU_{\max}+1\), where \(LSU_{\max}=D+0.8S+O+0.1\,sheep\). A1 is retained unless its eligible share is more than one percentage point below A0. Median absolute LSU residual is reported as a diagnostic, pooled and across the fixed five county folds, but is not substituted for the pre-specified gate. DAFM linkage coverage and the neutral fallback for unmatched EDs are also regression-tested.
+For the Step 3 cattle age-sex split, A0 is the flat county-composition null and A1 is the DAFM-informed log-odds prior. Both must preserve every ED \`OTHER_CATTLE\` row and the same rescaled AAA10 county age-sex columns exactly. Published 2020 ED livestock-unit values are used as a prespecified plausibility screen during model development, not as held-out validation. The eligibility rule is cattle > 0, LSU > 0 and \(LSU \le LSU_{\max}+1\), where \(LSU_{\max}=D+0.8S+O+0.1\,sheep\). A1 is retained unless its eligible share is more than one percentage point below A0. Median absolute LSU residual is reported as a model-selection diagnostic, pooled and across the fixed five county folds. DAFM linkage coverage and the neutral fallback for unmatched EDs are also regression-tested.
 
 For Step 4 cattle genetics, G0 is the legacy adult-cow-support allocator and G1 is the production AIM-hierarchical prior. Both must reproduce the same frozen ED age-sex cells and the same national GOBLIN DxD/DxB/BxB margins exactly. The DAFM broad dairy/beef comparison is reported using DxD as the broad dairy-type young-stock component and DxB + BxB as the broad beef-type young-stock component. Because G1 uses this AIM cattle-type information in its prior, G1 agreement with AIM is a calibration/coherence diagnostic, not independent validation. G0 remains a structural sensitivity. Additional diagnostics report the number of EDs using a coherent local AIM signal versus county fallback, genetic shares placed in zero-origin-cow EDs, no-adult-cow receiver/rearing EDs, concentration and adjacent-year rank stability.
 
