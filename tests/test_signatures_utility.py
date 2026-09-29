@@ -1,4 +1,4 @@
-"""Parent-follower propagation rule, 10% utility arms and signature algebra."""
+"""Parent-follower propagation rule, 30% utility arms and signature algebra."""
 
 from __future__ import annotations
 
