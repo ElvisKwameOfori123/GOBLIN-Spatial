@@ -681,6 +681,12 @@ def stable_ed_sensitivity(ed_state: pd.DataFrame) -> pd.DataFrame:
                 row[f"PCT_{short}_{label}_CHANGE_GE_10PP"] = (
                     100.0 * float((x >= 10.0).mean()) if len(x) else np.nan
                 )
+                if label == "RAW":
+                    # Preserve the original public column names while adding
+                    # explicit RAW / COUNTY_CENTRED / NATIONAL_CENTRED results.
+                    row[f"MEDIAN_ABS_{short}_CHANGE_PP"] = row[f"MEDIAN_ABS_{short}_RAW_CHANGE_PP"]
+                    row[f"P90_ABS_{short}_CHANGE_PP"] = row[f"P90_ABS_{short}_RAW_CHANGE_PP"]
+                    row[f"PCT_{short}_CHANGE_GE_10PP"] = row[f"PCT_{short}_RAW_CHANGE_GE_10PP"]
         so = s["SO_INTENSITY_CHANGE_PCT"].abs().dropna()
         row["PCT_ABS_SO_INTENSITY_CHANGE_GE_10PCT"] = (
             100.0 * float((so >= 10.0).mean()) if len(so) else np.nan
