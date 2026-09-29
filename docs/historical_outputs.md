@@ -38,10 +38,43 @@ CSV and Parquet are the canonical files; the two databases are query copies of t
 | `validation_summary` | | Headline validation results. |
 | `baseline_coherence_audit` | | Every cross-product identity, re-derived. All rows must be `PASS`. |
 | `validation_detail_*` | | The diagnostics behind the validation summary. |
+| `livestock_signature`, `livestock_signature_long` | | Full cohort signatures for 2020 and 2025 at ED, WFD catchment, county, Colm catchment and national scale (see below). |
+| `parent_follower_relationship_*` | | ED parent-follower relationships and their shares by geography. |
+| `utility_perturbation_*` | | The controlled 10% dairy / suckler / pro-rata test. |
 | `_columns` | | Unit and meaning of every column in every public table. |
 | `_readme` | | The points in this guide, inside the database. |
 
 `YEAR` and `CSOED` key every ED table. Aggregate tables are exact sums of EDs: ED, county, WFD catchment, Colm catchment and national totals always agree. County and catchment are alternative geographies, not a nested hierarchy.
+
+## Livestock signatures (ED and WFD catchment first)
+
+The two primary geographies are the **ED**, for spatial pattern, and the **WFD catchment**, for water-framework work. County, Colm catchment and national rows are provided for context.
+
+| Table | What it holds |
+|---|---|
+| `livestock_signature` | For 2020 and 2025 and every geography unit: the full 21-cohort cattle state (dairy cows, suckler cows, bulls, and DxD/DxB/BxB by age and sex), adult and follower totals, sheep and upland sheep, farmed area, grassland, covered SO, and the signature ratios. Filter `GEOGRAPHY_TYPE` to `ED` or `WFD_CATCHMENT`. |
+| `livestock_signature_long` | Each signature ratio with its numerator, denominator and scale. Re-aggregate by summing numerators and denominators, never by averaging `VALUE`. |
+| `parent_follower_relationship_ed` | One row per ED, follower cohort and signature year: parent population (dairy cows for DxD and DxB, suckler cows for BxB, all cows for bulls), parent head, follower head, follower-per-parent ratio, and relationship class. |
+| `parent_follower_relationship_shares` | For each ED, WFD catchment, county, Colm catchment and Ireland: follower head by origin group split into `LOCAL_ED`, `COUNTY_RECEIVER` and `NATIONAL_ORPHAN`. The class is an ED property; aggregate rows only say how much of their follower stock sits in each class. |
+| `parent_follower_relationship_by_year` | National shares by class for every year 2015-2025. |
+
+Relationship classes: `LOCAL_ED` means the follower's parent cows are in the same ED; `COUNTY_RECEIVER` means the ED has followers but none of their parent cows, which the county does have; `NATIONAL_ORPHAN` is the final fallback (no parent cows in the county) and does not occur in 2020 or 2025.
+
+**Read 2020 relationship classes with care.** About 26% of dairy-origin followers are `COUNTY_RECEIVER` in 2020, against 4-6% in every other year. The published 2020 Census reports zero dairy cows in 931 EDs that hold dairy cows in 2019 and 2021, so their followers lose their local parents only in 2020. 2025 (or an adjacent reconstructed year) gives the more consistent receiver structure.
+
+## The 10% utility test
+
+`utility_perturbation_ed`, `utility_perturbation_aggregate` and `utility_perturbation_national` hold a controlled test on the frozen 2020 and 2025 baselines. It is not a scenario or a forecast, and nothing is rebuilt.
+
+| Arm | Reduced by 10% | Unchanged |
+|---|---|---|
+| `DAIRY_PARENT` | dairy cows, all DxD and DxB followers | suckler cows, BxB, bulls, sheep |
+| `SUCKLER_PARENT` | suckler cows, all BxB followers | dairy cows, DxD, DxB, bulls, sheep |
+| `PRO_RATA` | all 21 cattle cohorts | sheep |
+
+Each follower cohort changes by the proportion its parents change, through its ED relationship class: the ED's own parents (`LOCAL_ED`), the county's (`COUNTY_RECEIVER`) or the nation's (`NATIONAL_ORPHAN`). Followers stay where the baseline places them. With a uniform 10% cut every targeted cohort falls by exactly 10%, so the national effect of a parent arm is 10% times that system's share of cattle. The information is spatial: where the change lands. Livestock units use one fixed schedule and Standard Output the fixed IFS 2020 coefficients, so changes come only from composition. Head counts stay fractional so the arms are the exact stated transformation.
+
+`utility_perturbation_aggregate` gives the same changes by WFD catchment (area-weighted), county, Colm catchment and Ireland.
 
 ## Reading the numbers correctly
 
@@ -65,6 +98,15 @@ SQLite, from the command line or any client:
 -- national cattle, sheep and farmed area by year
 SELECT YEAR, SUM(TOTAL_CATTLE) AS cattle, SUM(TOTAL_SHEEP) AS sheep, SUM(AREA_FARMED) AS ha
 FROM cso13_ed_year GROUP BY YEAR ORDER BY YEAR;
+
+-- WFD catchments: where would a 10% dairy-parent cut remove most grazing LU? (2025)
+SELECT GEOGRAPHY_ID, CHANGE_LU, CHANGE_LU_PCT FROM utility_perturbation_aggregate
+WHERE GEOGRAPHY_TYPE = 'WFD_CATCHMENT' AND ARM = 'DAIRY_PARENT' AND YEAR = 2025
+ORDER BY CHANGE_LU LIMIT 10;
+
+-- ED signatures for mapping (2025)
+SELECT GEOGRAPHY_ID AS CSOED, DAIRY_SHARE_ADULT_PCT, DXB_SHARE_FOLLOWERS_PCT, FOLLOWER_TO_ADULT_RATIO
+FROM livestock_signature WHERE GEOGRAPHY_TYPE = 'ED' AND YEAR = 2025;
 
 -- what a column means
 SELECT COLUMN_NAME, UNIT, DESCRIPTION FROM _columns

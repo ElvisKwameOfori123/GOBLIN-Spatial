@@ -46,6 +46,7 @@ jobs:
             tests/test_cattle_annual_panel.py \
             tests/test_cattle_two_anchor.py \
             tests/test_column_dictionary.py \
+            tests/test_signatures_utility.py \
             tests/test_cli_data_boundary.py \
             tests/test_cli_study.py \
             tests/test_data_fetch.py \
@@ -188,6 +189,10 @@ jobs:
           test -f reporting/report_data/historical/goblin31_ed_year.parquet
           test -f reporting/report_data/historical/colm_catchment_year.parquet
           test -f reporting/report_data/historical/_columns.csv
+          test -f reporting/report_data/historical/livestock_signature.parquet
+          test -f reporting/report_data/historical/parent_follower_relationship_ed.parquet
+          test -f reporting/report_data/historical/utility_perturbation_ed.parquet
+          test -f reporting/report_data/historical/utility_perturbation_aggregate.parquet
           python - <<'PY'
           import duckdb
           from pathlib import Path
@@ -200,6 +205,10 @@ jobs:
           for table in ("cso13_ed_year", "goblin31_ed_year"):
               assert con.sql(f"select count(*) from {table}").fetchone()[0] == 31427
           assert con.sql("select count(*) from baseline_coherence_audit where not PASS").fetchone()[0] == 0
+          assert con.sql("select count(*) from livestock_signature where GEOGRAPHY_TYPE = 'ED'").fetchone()[0] == 2 * 2857
+          assert con.sql("select count(distinct GEOGRAPHY_ID) from livestock_signature where GEOGRAPHY_TYPE = 'WFD_CATCHMENT'").fetchone()[0] == 46
+          assert con.sql("select count(*) from utility_perturbation_ed").fetchone()[0] == 3 * 2 * 2857
+          assert abs(con.sql("select CHANGE_CATTLE_PCT from utility_perturbation_national where ARM = 'PRO_RATA' and YEAR = 2020").fetchone()[0] + 10) < 1e-9
           con.close()
 
           import sqlite3
