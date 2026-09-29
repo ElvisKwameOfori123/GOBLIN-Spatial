@@ -73,7 +73,7 @@ A static endpoint perturbation of the frozen 2020 and 2025 baselines. It is not 
 | `METHOD` | Where follower change lands |
 |---|---|
 | `SIGNATURE` | Each linked follower cohort (DxD and DxB for dairy; BxB for suckler; 6 age-sex cohorts each) follows its frozen parent relationship: the ED's own cows; the county's cows where the ED has followers but no cows; national cows only as a fallback that does not occur. Followers stay in their ED. |
-| `HEADCOUNT` | National followers-per-cow coefficients applied to each ED's cow change: follower change goes where the cows are. |
+| `HEADCOUNT` | National followers-per-cow coefficients applied to each ED's cow change: follower change is attributed to where the cows are. This is an unconstrained spatial attribution benchmark, not a feasible alternative ED herd; it is used to measure spatial allocation error and should not be interpreted as post-perturbation local stock. |
 
 Both remove the same national number of each follower cohort. Their difference is where the change lands, and its size is the information the ED and county signatures carry. `PRO_RATA` (all 21 cohorts, `METHOD = UNIFORM`) is kept as a supplementary reference.
 
