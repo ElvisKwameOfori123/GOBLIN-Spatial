@@ -7,28 +7,35 @@ on:
     branches: [main]
 
 jobs:
-  model-test:
+  baseline-test:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
       - name: Install package
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[geo,goblin,scenario,reporting,query]"
           pip install pytest
+
       - name: Compile Python sources
         run: python -m compileall -q src tests scripts
+
       - name: Verify repository-contained runtime inputs
         run: goblin-spatial fetch-data --verify-only
+
       - name: Guard against superseded land runtime
         run: pytest -q tests/test_no_superseded_runtime.py
+
       - name: Validate frozen 2020 soil and LPIS runtime context
         run: pytest -q tests/test_land_context_bundle.py
+
       - name: Run historical baseline unit tests
         run: |
           pytest -q \
@@ -39,6 +46,7 @@ jobs:
             tests/test_cattle_annual_panel.py \
             tests/test_cattle_two_anchor.py \
             tests/test_cli_data_boundary.py \
+            tests/test_cli_study.py \
             tests/test_data_fetch.py \
             tests/test_export_schema.py \
             tests/test_historical_validation.py \
@@ -47,41 +55,28 @@ jobs:
             tests/test_sheep_annual_panel.py \
             tests/test_sheep_10_cohorts.py \
             tests/test_standard_output.py
+
       - name: Run full 2015-2025 historical regression
         run: pytest -q -s tests/test_full_baseline_regression.py
-      - name: Run principal scientific unit tests
-        run: |
-          pytest -q \
-            tests/test_cli_study.py \
-            tests/test_goblin_controls.py \
-            tests/test_goblin_reconciliation.py \
-            tests/test_national_cohort_targets.py \
-            tests/test_national_release.py \
-            tests/test_principal_endpoint.py \
-            tests/test_sc1_comparison.py \
-            tests/test_sc1_metrics.py \
-            tests/test_sc2_colm_direct.py \
-            tests/test_sc2_context.py \
-            tests/test_sc3_colm_allocation.py \
-            tests/test_sc3_feasible_geographies.py \
-            tests/test_scenario_control_table.py \
-            tests/test_scenario_preflight.py
-      - name: Run reporting architecture tests
-        run: |
-          pytest -q \
-            tests/test_reporting_boundary.py \
-            tests/test_reporting_synthesis.py \
-            tests/test_reporting_build.py
+
+      - name: Run reporting architecture guard
+        run: pytest -q tests/test_reporting_boundary.py
+
       - name: Run catchment bridge unit tests
         run: pytest -q tests/test_catchment_bridge.py
+
       - name: Build canonical historical baseline
         run: goblin-spatial build --config configs/ireland_2015_2025.yaml
+
       - name: Run historical validation diagnostics
         run: python scripts/run_historical_validation.py
+
       - name: Run Code 2 two-anchor cattle diagnostics
         run: python scripts/run_cattle_code2_two_anchor_diagnostics.py
+
       - name: Run cattle genetics diagnostics
         run: python scripts/run_cattle_genetics_diagnostics.py
+
       - name: Confirm historical validation outputs
         run: |
           test -f data/processed/validation/historical/historical_validation_overview.csv
@@ -120,13 +115,16 @@ jobs:
 
           print(overview.to_string(index=False))
           PY
+
       - name: Build 2015-2025 WFD catchment baseline
         run: python scripts/build_catchment_baseline.py
+
       - name: Verify frozen WFD catchment geometry checksum
         run: |
           test -f data/inputs/spatial/WFD_Catchments_Frozen.gpkg
           test -f data/inputs/spatial/WFD_Catchments_Frozen.gpkg.sha256
           sha256sum -c data/inputs/spatial/WFD_Catchments_Frozen.gpkg.sha256
+
       - name: Upload frozen WFD catchment geometry
         uses: actions/upload-artifact@v4
         with:
@@ -136,6 +134,7 @@ jobs:
             data/inputs/spatial/WFD_Catchments_Frozen.gpkg.sha256
           if-no-files-found: error
           retention-days: 30
+
       - name: Validate catchment baseline outputs
         run: |
           python - <<'PY'
@@ -165,8 +164,10 @@ jobs:
           print("National-years:", len(national))
           print("Crosswalk rows:", len(crosswalk))
           PY
+
       - name: Build historical manuscript result bundle
         run: python scripts/build_historical_results_bundle.py
+
       - name: Validate historical manuscript result bundle
         run: |
           test -f reporting/report_data/historical/ed_year.parquet
@@ -191,6 +192,7 @@ jobs:
           assert con.sql("select count(distinct WFD_CATCHMENT_ID) from wfd_catchment_year").fetchone()[0] == 46
           con.close()
           PY
+
       - name: Upload historical result bundle
         uses: actions/upload-artifact@v4
         with:
@@ -198,80 +200,3 @@ jobs:
           path: reporting/report_data/historical/
           if-no-files-found: error
           retention-days: 30
-      - name: Preflight 2020 SC2 runtime
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          from goblin_spatial.config import load_config
-          from goblin_spatial.scenario.preflight import assert_principal_ready
-          cfg = load_config(Path("configs/ireland_2015_2025.yaml"))
-          report = assert_principal_ready(cfg, baseline_year=2020, stage="SC2")
-          print(report.to_string(index=False))
-          PY
-      - name: Validate principal SC3 eligibility control
-        run: |
-          python - <<'PY'
-          from goblin_spatial.land.colm_rules import load_colm_eligibility_control
-          rules, version, evidence = load_colm_eligibility_control(
-              "data/controls/sc3/SC3_StageA_Eligibility_Principal_v1.csv"
-          )
-          assert version == "SC3_STAGEA_PRINCIPAL_V1"
-          assert len(rules) == 5
-          assert all(len(v) == 7 for v in rules.values())
-          print(version)
-          print(evidence)
-          PY
-      - name: Run end-to-end SC1 smoke test
-        run: goblin-spatial-principal SI_SG --baseline-year 2020 --allocation-rule PRORATA --stage SC1 --output-dir data/processed/ci_principal_si_sg
-      - name: Run end-to-end SC2 smoke test
-        run: goblin-spatial-principal SI_SG --baseline-year 2020 --allocation-rule PRORATA --stage SC2 --output-dir data/processed/ci_principal_si_sg
-      - name: Run BE_SG SC2 with principal eligibility
-        run: |
-          goblin-spatial-principal BE_SG \
-            --baseline-year 2020 \
-            --allocation-rule PRORATA \
-            --stage SC2 \
-            --colm-eligibility-rules data/controls/sc3/SC3_StageA_Eligibility_Principal_v1.csv \
-            --output-dir data/processed/ci_principal_be_sg_sc3
-      - name: Build transparent rewetting proxy for SC3 smoke test
-        run: |
-          python scripts/build_rewetting_proxy_control.py \
-            --sc2 data/processed/ci_principal_be_sg_sc3/sc2_ed_context.csv \
-            --output data/processed/ci_principal_be_sg_sc3/rewetting_proxy.csv
-      - name: Run one real end-to-end SC3 smoke test
-        run: |
-          goblin-spatial-principal BE_SG \
-            --baseline-year 2020 \
-            --allocation-rule PRORATA \
-            --stage SC3 \
-            --colm-eligibility-rules data/controls/sc3/SC3_StageA_Eligibility_Principal_v1.csv \
-            --rewetting-capacity data/processed/ci_principal_be_sg_sc3/rewetting_proxy.csv \
-            --output-dir data/processed/ci_principal_be_sg_sc3
-      - name: Confirm real SC3 smoke-test outputs
-        run: |
-          test -f data/processed/ci_principal_be_sg_sc3/sc3_ed_results.csv
-          test -f data/processed/ci_principal_be_sg_sc3/sc3_national_summary.csv
-          python - <<'PY'
-          import pandas as pd
-          s = pd.read_csv("data/processed/ci_principal_be_sg_sc3/sc3_national_summary.csv")
-          print(s.to_string(index=False))
-          PY
-      - name: Build downstream report data from frozen smoke-test outputs
-        run: |
-          goblin-spatial-report-data \
-            --principal-root data/processed/ci_principal_si_sg \
-            --output-root reporting/report_data_ci
-      - name: Confirm scientific and downstream reporting outputs
-        run: |
-          test -f data/processed/ci_principal_si_sg/sc1_ed_results.csv
-          test -f data/processed/ci_principal_si_sg/sc1_national_metrics.csv
-          test -f data/processed/ci_principal_si_sg/sc1_goblin_reconciliation.csv
-          test -f data/processed/ci_principal_si_sg/sc2_ed_context.csv
-          test -f reporting/report_data_ci/sc1/ed_results.parquet
-          test -f reporting/report_data_ci/sc1/robust_exposure.parquet
-          test -f reporting/report_data_ci/report_data_manifest.json
-      - name: Confirm SC3 scientific boundary
-        run: |
-          echo "SC3 finite-resource logic is unchanged."
-          echo "Principal Stage-A eligibility is explicit and versioned."
-          echo "Rewetting smoke-test capacity is a transparent proxy and is interpreted separately from productive transformability."

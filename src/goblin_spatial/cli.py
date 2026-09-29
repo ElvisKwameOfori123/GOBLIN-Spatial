@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -44,7 +45,12 @@ def _parser() -> argparse.ArgumentParser:
         "study",
         help="Build the baseline and continue through the requested scenario stage.",
     )
-    study_parser.add_argument("--through", choices=THROUGH_STAGES, default="sc3")
+    study_parser.add_argument(
+        "--through",
+        choices=THROUGH_STAGES,
+        default="baseline",
+        help="Stage to run to. Default: baseline (SC1-SC3 are deferred; pass them explicitly).",
+    )
     study_parser.add_argument(
         "--scenario",
         default=None,
@@ -168,12 +174,27 @@ def _run_study(
     print(f"Study completed through {stage.upper()}.")
 
 
+SCENARIO_MENU_ENV = "GOBLIN_SPATIAL_SCENARIOS"
+
+
 def _interactive_study() -> None:
     config_path = "configs/ireland_2015_2025.yaml"
-    stage = _choose(
-        "\nWhat would you like to run?",
-        [("1", "baseline"), ("2", "sc1"), ("3", "sc2"), ("4", "sc3")],
-    )
+    # SC1-SC3 are dormant while the historical baseline is finalised. The
+    # guided runner offers the baseline only; scenario stages remain available
+    # explicitly (``study --through sc1|sc2|sc3`` or ``goblin-spatial-principal``)
+    # and in this menu when GOBLIN_SPATIAL_SCENARIOS=1.
+    if os.environ.get(SCENARIO_MENU_ENV) == "1":
+        stage = _choose(
+            "\nWhat would you like to run?",
+            [("1", "baseline"), ("2", "sc1"), ("3", "sc2"), ("4", "sc3")],
+        )
+    else:
+        print(
+            "\nRunning the 2015-2025 historical baseline. "
+            "Scenario stages (SC1-SC3) are dormant; run them explicitly with "
+            "'goblin-spatial study --through sc1|sc2|sc3' if needed."
+        )
+        stage = "baseline"
     if stage == "baseline":
         _run_study(
             config_path=config_path,
