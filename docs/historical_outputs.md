@@ -60,7 +60,7 @@ The two primary geographies are the **ED**, for spatial pattern, and the **WFD c
 
 Relationship classes: `LOCAL_ED` means the follower's parent cows are in the same ED; `COUNTY_RECEIVER` means the ED has followers but none of their parent cows, which the county does have; `NATIONAL_ORPHAN` is the final fallback (no parent cows in the county) and does not occur in 2020 or 2025.
 
-**Read 2020 relationship classes with care.** About 26% of dairy-origin followers are `COUNTY_RECEIVER` in 2020, against 4-6% in every other year. The published 2020 Census reports zero dairy cows in 931 EDs that hold dairy cows in 2019 and 2021, so their followers lose their local parents only in 2020. 2025 (or an adjacent reconstructed year) gives the more consistent receiver structure.
+**Relationship support classes are not movement classes.** `COUNTY_RECEIVER` means only that an ED contains a follower cohort while the corresponding parent cows are absent locally and present elsewhere in the county. Under the corrected reconstruction, the published 2020 adult-cow support pattern is retained after 2020, so this relationship can persist in later years. It should be interpreted as biological support for the parent-follower representation, not as evidence that animals were bought in or moved from a particular place.
 
 ## Livestock-signature perturbation (illustrative)
 
@@ -93,14 +93,14 @@ Both remove the same national number of each follower cohort. Their difference i
 `ED_PURE_RATIO_DISPLACEMENT` is the displacement among parent-cow EDs if parent-less EDs did not exist, the cleanest measure of the ED signature itself. `WFD_TOTAL_DISPLACEMENT` repeats the half-sum after aggregation to catchments.
 
 **Two cautions.**
-- The 2020 dairy receiver component is inflated by the 931 EDs that report zero dairy cows only in the published 2020 Census. Compare with 2025.
+- The receiver component reflects the frozen parent-support geography. Because a published 2020 zero remains zero after 2020, parent-less follower EDs can remain a material part of the dairy perturbation in 2025. This is a support-structure result, not a movement estimate.
 - Standard Output coefficients differ by region, so the headcount method also changes the national SO total (`NATIONAL_METHOD_DIFFERENCE`). SO differences are therefore reported but not decomposed.
 
 ## Reading the numbers correctly
 
 **2020 is the observed year.** 2020 ED values for cattle (dairy cows, other cows, other cattle, total), sheep, land and holdings are the published CSO Census of Agriculture 2020 values, unchanged. Every other year is reconstructed and sums exactly to an annual CSO control: AAA10 county cattle, AAA09 regional sheep, AQA06 regional land (all June). `PROVENANCE` (cattle) and `SHEEP_DATA_STATUS` (sheep) label every ED row; in the two livestock panels they are `CATTLE_PROVENANCE` and `SHEEP_PROVENANCE`.
 
-**Expect a step at 2020.** The published 2020 ED sums fall below the June controls: dairy cows by 187,716 head (12%), sheep by 259,807 head (4.7%). This is a difference between two CSO sources with different reference dates and coverage, not a modelled event. Mark 2020 in time-series figures rather than smoothing it.
+**Treat 2020 as a source boundary.** The published 2020 ED sums differ from the annual higher-level controls: dairy cows are 187,716 head below AAA10 and sheep are 259,807 head below AAA09. The model records these as source differences without assigning a cause or spatially reallocating the gaps. Mark 2020 in time-series figures rather than smoothing it.
 
 **The 2021-2022 land dip is in the CSO data.** Area farmed falls about 3.9% in 2021-2022 and recovers in 2023 because the AQA06 June series does; the model follows each AQA06 regional index exactly.
 
