@@ -209,9 +209,11 @@ def build_relationship_by_year(master: pd.DataFrame, cfg: SpatialConfig) -> pd.D
     """National follower head by relationship class for every baseline year.
 
     Diagnostic: shows how the ED relationship classes depend on the year's
-    parent geography. In 2020 the published Census ED values carry many zero
-    dairy-cow cells, so more dairy-origin followers fall in COUNTY_RECEIVER EDs
-    than in any reconstructed year.
+    parent geography. COUNTY_RECEIVER is a support classification only: the
+    follower cohort is present in the ED, the corresponding parent cows are
+    absent locally, and parent cows are present elsewhere in the county. Under
+    the corrected reconstruction, published 2020 adult-cow support is retained
+    after 2020, so this class can persist in reconstructed years.
     """
 
     rows = []
