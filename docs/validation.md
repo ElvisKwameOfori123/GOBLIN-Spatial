@@ -18,7 +18,7 @@ sum(10 GOBLIN sheep cohorts) = TOTAL_SHEEP
 AREA_FARMED = ALL_GRASSLAND + TOTAL_CEREALS + OTHER_CROPS_HA
 ```
 
-For cattle, the 2010 and 2020 ED census distributions jointly inform 2015-2019 within-county shares through temporal-proximity weighting, with AAA10 county totals imposed exactly. The 2020 ED state is locked as the census anchor, and its within-county shares are held for 2021-2025 while annual AAA10 county totals continue to change. The exact ED path between censuses is therefore a reconstruction assumption rather than directly observed annual ED evidence.
+For cattle, the 2010 and 2020 ED census distributions jointly inform 2015-2019 within-county shares through temporal-proximity weighting, with AAA10 county totals imposed exactly. The 2020 ED state is locked as the census anchor, and its within-county shares are held for 2021-2025 while annual AAA10 county totals continue to change. The exact ED path between censuses is therefore a reconstruction assumption rather than directly observed annual ED evidence. Dairy cows, other cows and other cattle are each allocated pro rata to their own ED shares and Hamilton-rounded to the county control; total cattle is their sum. A component published as zero in 2020 stays zero from 2021 to 2025, and the 2020 difference between the ED census and AAA10 is logged as a source difference without being placed into any ED. Where few EDs publish dairy cows (Leitrim 1, Roscommon 4, Dublin 2, Sligo 6), the county dairy control is concentrated in those EDs after 2020; this is reported, not adjusted.
 
 ### Historical validation evidence
 

@@ -78,28 +78,43 @@ def test_zero_in_both_censuses_stays_zero() -> None:
         assert int(values.sum()) == 0, column
 
 
-def test_no_single_ed_absorbs_county_cow_shortfall() -> None:
-    _, panel, _ = _built()
-    wide = panel.pivot_table(index="CSOED", columns="YEAR", values="DAIRY_COW")
-    # Carrigallen East published 201 dairy cows; the unknown years stay near it.
-    assert wide.loc["28060"].drop(KNOWN_YEAR).max() < 2 * 201
-    # published dairy EDs follow the national trend 2020 -> 2021
-    has = wide[KNOWN_YEAR] > 0
-    ratio = wide.loc[has, 2021] / wide.loc[has, KNOWN_YEAR]
-    assert ratio.max() < 1.5
+def test_published_2020_zero_stays_zero_after_2020() -> None:
+    cfg, panel, _ = _built()
+    e20 = pd.read_csv(cfg.files["cso_ed_2020"])
+    e20["CSOED"] = e20["CSOED"].astype(str)
+    later = panel.loc[panel["YEAR"] > KNOWN_YEAR]
+    for column in COLUMNS:
+        zero = e20.loc[e20[column].eq(0), "CSOED"]
+        assert int(later.loc[later["CSOED"].isin(zero), column].sum()) == 0, column
 
 
-def test_every_county_year_calibrated_without_fallback() -> None:
-    _, _, log = _built()
-    calibration = log.loc[log["RECORD_TYPE"] == "CALIBRATION"]
-    assert len(calibration) == 26 * (len(YEARS) - 1)
-    assert calibration["SUPPORT_FALLBACK_LEVEL"].eq(0).all()
+def test_post_2020_is_published_share_pro_rata() -> None:
+    cfg, panel, _ = _built()
+    county = _load_aaa10(cfg.files["cso_cattle_county"])
+    e20 = pd.read_csv(cfg.files["cso_ed_2020"])
+    e20["CSOED"] = e20["CSOED"].astype(str)
+    e20 = e20.set_index("CSOED")
+    for year in (2021, 2025):
+        frame = panel.loc[panel["YEAR"] == year].set_index("CSOED")
+        controls = _county_controls(county, year)
+        for component in COMPONENTS:
+            share = e20[component] / e20.groupby("County")[component].transform("sum")
+            expected = share * e20["County"].map(_normalise(controls[component]))
+            # Hamilton rounding moves each ED by less than one head
+            gap = (frame.loc[e20.index, component] - expected).abs()
+            assert float(gap.max()) < 1.0, (year, component)
 
 
-def test_2020_source_discrepancy_is_written_to_log() -> None:
+def _normalise(series: pd.Series) -> pd.Series:
+    from goblin_spatial.cattle.panel import _normalise_county
+
+    return series.rename(index=_normalise_county)
+
+
+def test_2020_source_difference_is_written_to_log() -> None:
     cfg, panel, log = _built()
-    audit = log.loc[log["RECORD_TYPE"] == "2020_SOURCE_DISCREPANCY"].copy()
-    assert len(audit) == 26
+    assert len(log) == 26
+    assert (log["RECORD_TYPE"] == "2020_SOURCE_DIFFERENCE").all()
 
     county = _load_aaa10(cfg.files["cso_cattle_county"])
     target = _county_controls(county, KNOWN_YEAR)
@@ -110,12 +125,9 @@ def test_2020_source_discrepancy_is_written_to_log() -> None:
     )
     for column in COLUMNS:
         expected = observed[column] - target.loc[observed.index, column]
-        actual = audit.set_index("County").loc[observed.index, f"DIFF_{column}"]
+        actual = log.set_index("County").loc[observed.index, f"DIFF_{column}"]
         assert np.array_equal(actual.to_numpy(), expected.to_numpy())
-
-    assert audit["REFERENCE_SEEDED_TOTAL"].sum() == pytest.approx(
-        log.attrs["seeded_head_2020_reference"]
-    )
+    assert int(log["DIFF_DAIRY_COW"].sum()) == -187716
 
 
 def test_integerisation_keeps_structural_zeros() -> None:
@@ -126,12 +138,3 @@ def test_integerisation_keeps_structural_zeros() -> None:
     assert np.array_equal(out.sum(axis=1), rows)
     assert np.array_equal(out.sum(axis=0), cols)
     assert out[0, 1] == 0 and out[2, 0] == 0
-
-
-def test_reference_seeding_is_what_prevents_single_ed_absorption() -> None:
-    cfg, panel, log = _built()
-    assert log.attrs["unseeded_head_2020_reference"] < 0.02 * log.attrs["cow_shortfall_2020"]
-    unseeded, _ = build_annual_ed_panel(cfg, seed_reference_mix=False)
-    wide = unseeded.pivot_table(index="CSOED", columns="YEAR", values="DAIRY_COW")
-    # without seeding, Leitrim's whole dairy herd returns to Carrigallen East
-    assert wide.loc["28060", 2021] > 5 * 201
