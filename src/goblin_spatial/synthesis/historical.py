@@ -43,6 +43,27 @@ SIGNATURE_METRICS = (
 )
 
 
+def dairy_2020_discontinuity_eds(ed_state: pd.DataFrame) -> set[str]:
+    """Return EDs with a published 2020 dairy zero but positive 2019 and 2021 dairy.
+
+    These EDs define the documented 2020-only dairy discontinuity and are
+    excluded from primary cross-sectional signature contrasts. The unrestricted
+    results remain available as sensitivity outputs.
+    """
+
+    work = ed_state[["YEAR", "CSOED", "dairy_cows"]].copy()
+    work["YEAR"] = pd.to_numeric(work["YEAR"], errors="raise").astype(int)
+    work["CSOED"] = work["CSOED"].astype(str)
+    wide = work.loc[work["YEAR"].isin([2019, 2020, 2021])].pivot(
+        index="CSOED", columns="YEAR", values="dairy_cows"
+    )
+    needed = {2019, 2020, 2021}
+    if not needed.issubset(wide.columns):
+        raise ValueError("2019, 2020 and 2021 are required to identify the dairy discontinuity")
+    mask = (wide[2020] == 0) & (wide[2019] > 0) & (wide[2021] > 0)
+    return set(wide.index[mask].astype(str))
+
+
 def _num(frame: pd.DataFrame, column: str) -> pd.Series:
     if column not in frame.columns:
         raise KeyError(f"missing historical-results column: {column}")
@@ -409,12 +430,16 @@ def build_validation_summary(validation_dir: str | Path) -> pd.DataFrame:
 def information_geography(
     ed_state: pd.DataFrame,
     metrics: tuple[str, ...] = SIGNATURE_METRICS,
+    exclude_csoeds: set[str] | None = None,
 ) -> pd.DataFrame:
     """Return between-county share of ED variance for selected metrics."""
 
+    state = ed_state.copy()
+    if exclude_csoeds:
+        state = state.loc[~state["CSOED"].astype(str).isin(exclude_csoeds)].copy()
     rows = []
     for metric in metrics:
-        work = ed_state[["County", metric]].dropna().copy()
+        work = state[["County", metric]].dropna().copy()
         if len(work) < 2:
             continue
         overall = float(work[metric].mean())
@@ -438,12 +463,15 @@ def information_geography(
 def signature_ranges(
     states: dict[str, pd.DataFrame],
     year: int = 2020,
+    exclude_ed_csoeds: set[str] | None = None,
 ) -> pd.DataFrame:
     """Summarise comparable signature ranges across reporting geographies."""
 
     rows = []
     for geography, frame in states.items():
-        part = frame.loc[pd.to_numeric(frame["YEAR"], errors="raise").astype(int) == year]
+        part = frame.loc[pd.to_numeric(frame["YEAR"], errors="raise").astype(int) == year].copy()
+        if geography == "ED" and exclude_ed_csoeds:
+            part = part.loc[~part["CSOED"].astype(str).isin(exclude_ed_csoeds)].copy()
         for metric in SIGNATURE_METRICS:
             x = pd.to_numeric(part[metric], errors="coerce").dropna()
             if x.empty:
@@ -464,10 +492,16 @@ def signature_ranges(
     return pd.DataFrame(rows)
 
 
-def concentration_summary(ed_state: pd.DataFrame, year: int = 2020) -> pd.DataFrame:
+def concentration_summary(
+    ed_state: pd.DataFrame,
+    year: int = 2020,
+    exclude_csoeds: set[str] | None = None,
+) -> pd.DataFrame:
     """Land-normalised upper-decile concentration for central livestock groups."""
 
     part = ed_state.loc[pd.to_numeric(ed_state["YEAR"], errors="raise").astype(int) == year].copy()
+    if exclude_csoeds:
+        part = part.loc[~part["CSOED"].astype(str).isin(exclude_csoeds)].copy()
     part = part.loc[_num(part, "AREA_FARMED") > 0].copy()
     groups = {
         "TOTAL_CATTLE": _num(part, "TOTAL_CATTLE"),
@@ -504,10 +538,16 @@ def concentration_summary(ed_state: pd.DataFrame, year: int = 2020) -> pd.DataFr
     return pd.DataFrame(rows)
 
 
-def build_matched_pairs(ed_state: pd.DataFrame, year: int = 2020) -> pd.DataFrame:
+def build_matched_pairs(
+    ed_state: pd.DataFrame,
+    year: int = 2020,
+    exclude_csoeds: set[str] | None = None,
+) -> pd.DataFrame:
     """Find within-county pairs with near-identical cattle totals and contrasting signatures."""
 
     part = ed_state.loc[pd.to_numeric(ed_state["YEAR"], errors="raise").astype(int) == year].copy()
+    if exclude_csoeds:
+        part = part.loc[~part["CSOED"].astype(str).isin(exclude_csoeds)].copy()
     part = part.loc[
         (_num(part, "TOTAL_CATTLE") >= 500)
         & (_num(part, "ADULT_COWS") >= 200)
@@ -564,31 +604,58 @@ def build_matched_pairs(ed_state: pd.DataFrame, year: int = 2020) -> pd.DataFram
     return best.sort_values("SIGNATURE_DISTANCE", ascending=False, kind="stable").reset_index(drop=True)
 
 
-def stable_ed_sensitivity(ed_state: pd.DataFrame) -> pd.DataFrame:
-    """Summarise biological change inside alternative total-cattle stability bands."""
+def stable_ed_change_detail(ed_state: pd.DataFrame) -> pd.DataFrame:
+    """Return ED compositional change with county- and national-centred counterparts."""
 
-    cols = [
-        "CSOED", "YEAR", "TOTAL_CATTLE",
-        "DAIRY_SHARE_ADULT_PCT", "DXB_SHARE_FOLLOWERS_PCT",
-        "BXB_SHARE_FOLLOWERS_PCT", "SO_PER_FARMED_HA",
-    ]
+    metrics = (
+        "DAIRY_SHARE_ADULT_PCT",
+        "DXB_SHARE_FOLLOWERS_PCT",
+        "BXB_SHARE_FOLLOWERS_PCT",
+    )
+    cols = ["CSOED", "County", "YEAR", "TOTAL_CATTLE", *metrics, "SO_PER_FARMED_HA"]
     work = ed_state[cols].copy()
     a = work.loc[work["YEAR"] == 2015].set_index("CSOED")
     b = work.loc[work["YEAR"] == 2025].set_index("CSOED")
     both = a.add_suffix("_2015").join(b.add_suffix("_2025"), how="inner")
+    both["County"] = both["County_2025"].astype(str)
     both["CATTLE_CHANGE_PCT"] = 100.0 * (
         both["TOTAL_CATTLE_2025"] - both["TOTAL_CATTLE_2015"]
     ) / both["TOTAL_CATTLE_2015"].replace(0, np.nan)
 
-    for metric in ("DAIRY_SHARE_ADULT_PCT", "DXB_SHARE_FOLLOWERS_PCT", "BXB_SHARE_FOLLOWERS_PCT"):
-        both[f"ABS_{metric}_CHANGE_PP"] = (
-            both[f"{metric}_2025"] - both[f"{metric}_2015"]
-        ).abs()
+    county = aggregate_state(ed_state, ["YEAR", "County"])
+    national = aggregate_state(ed_state, ["YEAR"])
+    county_change: dict[str, pd.Series] = {}
+    national_change: dict[str, float] = {}
+    for metric in metrics:
+        c = county.loc[county["YEAR"].isin([2015, 2025]), ["YEAR", "County", metric]]
+        cw = c.pivot(index="County", columns="YEAR", values=metric)
+        county_change[metric] = cw[2025] - cw[2015]
+        n = national.loc[national["YEAR"].isin([2015, 2025]), ["YEAR", metric]].set_index("YEAR")[metric]
+        national_change[metric] = float(n.loc[2025] - n.loc[2015])
+
+        raw = both[f"{metric}_2025"] - both[f"{metric}_2015"]
+        both[f"{metric}_CHANGE_PP"] = raw
+        both[f"ABS_{metric}_CHANGE_PP"] = raw.abs()
+        ctrend = both["County"].map(county_change[metric])
+        both[f"{metric}_COUNTY_CENTRED_CHANGE_PP"] = raw - ctrend
+        both[f"ABS_{metric}_COUNTY_CENTRED_CHANGE_PP"] = (
+            both[f"{metric}_COUNTY_CENTRED_CHANGE_PP"].abs()
+        )
+        both[f"{metric}_NATIONAL_CENTRED_CHANGE_PP"] = raw - national_change[metric]
+        both[f"ABS_{metric}_NATIONAL_CENTRED_CHANGE_PP"] = (
+            both[f"{metric}_NATIONAL_CENTRED_CHANGE_PP"].abs()
+        )
 
     both["SO_INTENSITY_CHANGE_PCT"] = 100.0 * (
         both["SO_PER_FARMED_HA_2025"] - both["SO_PER_FARMED_HA_2015"]
     ) / both["SO_PER_FARMED_HA_2015"].replace(0, np.nan)
+    return both.reset_index()
 
+
+def stable_ed_sensitivity(ed_state: pd.DataFrame) -> pd.DataFrame:
+    """Summarise raw and net-of-trend change inside total-cattle stability bands."""
+
+    both = stable_ed_change_detail(ed_state)
     rows = []
     n_total = int(len(both))
     for band in (2.5, 5.0, 10.0):
@@ -603,12 +670,17 @@ def stable_ed_sensitivity(ed_state: pd.DataFrame) -> pd.DataFrame:
             ("DXB", "DXB_SHARE_FOLLOWERS_PCT"),
             ("BXB", "BXB_SHARE_FOLLOWERS_PCT"),
         ):
-            x = s[f"ABS_{metric}_CHANGE_PP"].dropna()
-            row[f"MEDIAN_ABS_{short}_CHANGE_PP"] = float(x.median()) if len(x) else np.nan
-            row[f"P90_ABS_{short}_CHANGE_PP"] = float(x.quantile(0.90)) if len(x) else np.nan
-            row[f"PCT_{short}_CHANGE_GE_10PP"] = (
-                100.0 * float((x >= 10.0).mean()) if len(x) else np.nan
-            )
+            for label, suffix in (
+                ("RAW", "ABS_" + metric + "_CHANGE_PP"),
+                ("COUNTY_CENTRED", "ABS_" + metric + "_COUNTY_CENTRED_CHANGE_PP"),
+                ("NATIONAL_CENTRED", "ABS_" + metric + "_NATIONAL_CENTRED_CHANGE_PP"),
+            ):
+                x = s[suffix].dropna()
+                row[f"MEDIAN_ABS_{short}_{label}_CHANGE_PP"] = float(x.median()) if len(x) else np.nan
+                row[f"P90_ABS_{short}_{label}_CHANGE_PP"] = float(x.quantile(0.90)) if len(x) else np.nan
+                row[f"PCT_{short}_{label}_CHANGE_GE_10PP"] = (
+                    100.0 * float((x >= 10.0).mean()) if len(x) else np.nan
+                )
         so = s["SO_INTENSITY_CHANGE_PCT"].abs().dropna()
         row["PCT_ABS_SO_INTENSITY_CHANGE_GE_10PCT"] = (
             100.0 * float((so >= 10.0).mean()) if len(so) else np.nan
@@ -736,6 +808,18 @@ def build_historical_result_tables(
         ed, county, catchment, crosswalk
     )
 
+    dairy_discontinuity = dairy_2020_discontinuity_eds(ed)
+    if len(dairy_discontinuity) != 931:
+        raise AssertionError(
+            f"expected 931 documented 2020-only dairy-zero EDs, found {len(dairy_discontinuity)}"
+        )
+    signature_states = {
+        "ED": ed,
+        "COUNTY": county,
+        "WFD_CATCHMENT": catchment,
+        "NATIONAL": national,
+    }
+
     tables = {
         "ed_year": ed,
         "county_year": county,
@@ -746,19 +830,48 @@ def build_historical_result_tables(
             ed_anchor_path, cattle_control_path
         ),
         "so_change_2015_2025": build_so_decomposition(master),
+        # Primary cross-sectional results use a common admissible ED set in
+        # 2020 and 2025, excluding the documented 2020-only dairy-zero EDs.
         "signature_ranges_2020": signature_ranges(
-            {
-                "ED": ed,
-                "COUNTY": county,
-                "WFD_CATCHMENT": catchment,
-                "NATIONAL": national,
-            }
+            signature_states, year=2020, exclude_ed_csoeds=dairy_discontinuity
         ),
+        "signature_ranges_2025": signature_ranges(
+            signature_states, year=2025, exclude_ed_csoeds=dairy_discontinuity
+        ),
+        "signature_ranges_2020_unrestricted": signature_ranges(signature_states, year=2020),
+        "signature_ranges_2025_unrestricted": signature_ranges(signature_states, year=2025),
         "information_geography_2020": information_geography(
+            ed.loc[ed["YEAR"] == 2020], exclude_csoeds=dairy_discontinuity
+        ),
+        "information_geography_2025": information_geography(
+            ed.loc[ed["YEAR"] == 2025], exclude_csoeds=dairy_discontinuity
+        ),
+        "information_geography_2020_unrestricted": information_geography(
             ed.loc[ed["YEAR"] == 2020]
         ),
-        "concentration_2020": concentration_summary(ed),
-        "matched_pairs_2020": build_matched_pairs(ed),
+        "information_geography_2025_unrestricted": information_geography(
+            ed.loc[ed["YEAR"] == 2025]
+        ),
+        "concentration_2020": concentration_summary(
+            ed, year=2020, exclude_csoeds=dairy_discontinuity
+        ),
+        "concentration_2025": concentration_summary(
+            ed, year=2025, exclude_csoeds=dairy_discontinuity
+        ),
+        "concentration_2020_unrestricted": concentration_summary(ed, year=2020),
+        "concentration_2025_unrestricted": concentration_summary(ed, year=2025),
+        "matched_pairs_2020": build_matched_pairs(
+            ed, year=2020, exclude_csoeds=dairy_discontinuity
+        ),
+        "matched_pairs_2025": build_matched_pairs(
+            ed, year=2025, exclude_csoeds=dairy_discontinuity
+        ),
+        "matched_pairs_2020_unrestricted": build_matched_pairs(ed, year=2020),
+        "matched_pairs_2025_unrestricted": build_matched_pairs(ed, year=2025),
+        "dairy_2020_discontinuity_eds": pd.DataFrame(
+            {"CSOED": sorted(dairy_discontinuity), "EXCLUSION_REASON": "2020_DAIRY_ZERO_POSITIVE_2019_2021"}
+        ),
+        "stable_ed_change_detail": stable_ed_change_detail(ed),
         "stable_ed_sensitivity": stable_ed_sensitivity(ed),
         "multiscale_example_2020": example,
         "multiscale_county_selection_scores_2020": county_scores,
