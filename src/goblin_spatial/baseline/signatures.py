@@ -212,3 +212,58 @@ def build_signatures(
         raise AssertionError("Stage 09 contains duplicate CSOED-cohort rows")
 
     return signatures.sort_values(["CSOED", "COHORT"], kind="stable").reset_index(drop=True)
+
+
+def cohort_origin(cohort: str) -> str:
+    """Parent population of a follower cohort: DAIRY, SUCKLER or ADULT_COWS."""
+
+    return _cohort_origin(cohort)
+
+
+def parent_follower_multiplier(
+    base_parents: np.ndarray,
+    new_parents: np.ndarray,
+    cohort_base: np.ndarray,
+    counties: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Proportional change of a follower cohort implied by a change in its parents.
+
+    Uses the frozen ED relationship class of each ED-cohort cell:
+
+    * LOCAL_ED: the ED's own parents, new / base;
+    * COUNTY_RECEIVER (followers, no parents in the ED): the county's parents,
+      new / base;
+    * NATIONAL_ORPHAN (no parents in the county either): national parents,
+      new / base.
+
+    Followers stay where the baseline places them; only their number scales.
+    This is the same rule as ``scenario.endpoint_multipliers.
+    parent_endpoint_multiplier`` (tested equal), kept here so that baseline
+    products never depend on scenario modules.
+    """
+
+    base_parents = np.asarray(base_parents, dtype=float)
+    new_parents = np.asarray(new_parents, dtype=float)
+    cohort_base = np.asarray(cohort_base, dtype=np.int64)
+    counties = np.asarray(counties, dtype=object)
+    if not (len(base_parents) == len(new_parents) == len(cohort_base) == len(counties)):
+        raise ValueError("parent, cohort and county arrays must have equal length")
+    if (base_parents < 0).any() or (new_parents < 0).any():
+        raise ValueError("parent counts must be non-negative")
+
+    source = np.asarray(
+        _relationship_components(np.rint(base_parents).astype(np.int64), cohort_base, counties)["source"],
+        dtype=object,
+    )
+    local = np.divide(new_parents, base_parents, out=np.zeros(len(base_parents)), where=base_parents > 0)
+    network = pd.DataFrame({"County": counties, "B": base_parents, "N": new_parents})
+    county_base = network.groupby("County", sort=False)["B"].transform("sum").to_numpy(dtype=float)
+    county_new = network.groupby("County", sort=False)["N"].transform("sum").to_numpy(dtype=float)
+    county = np.divide(county_new, county_base, out=np.zeros(len(county_base)), where=county_base > 0)
+    national = float(new_parents.sum() / base_parents.sum()) if base_parents.sum() > 0 else 0.0
+
+    multiplier = np.zeros(len(base_parents), dtype=float)
+    multiplier[source == "LOCAL_ED"] = local[source == "LOCAL_ED"]
+    multiplier[source == "COUNTY_RECEIVER"] = county[source == "COUNTY_RECEIVER"]
+    multiplier[source == "NATIONAL_ORPHAN"] = national
+    return multiplier, source
