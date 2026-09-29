@@ -113,9 +113,8 @@ def test_2020_source_discrepancy_is_written_to_log() -> None:
         actual = audit.set_index("County").loc[observed.index, f"DIFF_{column}"]
         assert np.array_equal(actual.to_numpy(), expected.to_numpy())
 
-    assert audit["REFERENCE_SEEDED_TOTAL"].sum() == pytest.approx(
-        log.attrs["seeded_head_2020_reference"]
-    )
+    assert audit["REFERENCE_SEEDED_TOTAL"].sum() == 0.0
+    assert log.attrs["seeded_head_2020_reference"] == 0.0
 
 
 def test_integerisation_keeps_structural_zeros() -> None:
@@ -128,10 +127,19 @@ def test_integerisation_keeps_structural_zeros() -> None:
     assert out[0, 1] == 0 and out[2, 0] == 0
 
 
-def test_reference_seeding_is_what_prevents_single_ed_absorption() -> None:
+def test_post_2020_published_component_zeros_remain_zero() -> None:
     cfg, panel, log = _built()
-    assert log.attrs["unseeded_head_2020_reference"] < 0.02 * log.attrs["cow_shortfall_2020"]
-    unseeded, _ = build_annual_ed_panel(cfg, seed_reference_mix=False)
-    wide = unseeded.pivot_table(index="CSOED", columns="YEAR", values="DAIRY_COW")
-    # without seeding, Leitrim's whole dairy herd returns to Carrigallen East
-    assert wide.loc["28060", 2021] > 5 * 201
+    published = panel.loc[panel["YEAR"] == KNOWN_YEAR].set_index("CSOED")
+    post = panel.loc[panel["YEAR"].between(2021, 2025)].copy()
+
+    for component in COMPONENTS:
+        zero_eds = set(published.index[published[component].eq(0)])
+        if not zero_eds:
+            continue
+        affected = post.loc[post["CSOED"].isin(zero_eds), component]
+        assert affected.eq(0).all(), f"{component}: a published 2020 zero was filled after 2020"
+
+    assert log.attrs["seeded_head_2020_reference"] == 0.0
+    assert log.attrs["unseeded_head_2020_reference"] == pytest.approx(
+        log.attrs["cow_shortfall_2020"]
+    )
