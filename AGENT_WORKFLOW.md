@@ -6,7 +6,7 @@ The purpose of this protocol is to make their work complementary, auditable and 
 
 ## 1. Core rules
 
-1. Read the current branch, current pull request, this file, `AGENT_HANDOVER.md`, and `AGENT_DECISIONS.md` before proposing or changing anything.
+1. Read the current branch, current pull request, this file, `AGENT_DECISIONS.md`, and task-relevant scientific documentation before proposing or changing anything.
 2. Do not trust another agent's summary without checking the repository state.
 3. Do not silently change scientific mathematics, calibration logic, controls, assumptions, denominators, validation definitions, or published outputs.
 4. Separate scientific changes from software/interface/refactoring changes.
@@ -14,102 +14,46 @@ The purpose of this protocol is to make their work complementary, auditable and 
 6. Never merge with failing required checks.
 7. Record unresolved uncertainty instead of guessing.
 8. Human approval is required before any scientific-method change is accepted.
-9. Repository files, commits, tests and CI results outrank prose summaries.
+9. Repository files, commits, tests, CI results and PR discussion outrank prose summaries outside GitHub.
 10. When a task is explicitly baseline-only, SC1, SC2 and SC3 are out of scope unless the human owner says otherwise.
 
-## 2. Roles
+## 2. Shared coordination surface
+
+The pull request is the live coordination surface.
+
+- The PR description holds the task frame and Agent A proposal.
+- Top-level PR comments hold Agent B review, questions, responses, implementation notes and verification.
+- Git commits provide the exact implementation history.
+- CI provides machine-verifiable checks.
+- `AGENT_DECISIONS.md` records durable project decisions only.
+
+Do not use a single repository-wide handover file for live task state. Multiple branches may be active at once and a shared handover file would become stale or conflict.
+
+Do not store a branch HEAD SHA in a committed coordination file. The PR and GitHub commit history already identify the current SHA.
+
+## 3. Roles
 
 The agents are peers, not a chain of command.
 
-### Agent A: proposer
+### Agent A: proposer or implementer
 The first agent working on a task:
 - inspects the current repository state;
-- states the problem;
-- proposes one or more approaches;
+- frames the problem and scope in the PR description;
 - identifies scientific and implementation risks;
-- recommends an approach;
-- records the proposal in `AGENT_HANDOVER.md`.
+- proposes an approach when the risk level requires it;
+- implements only within the accepted scope.
 
-### Agent B: reviewer/challenger
+### Agent B: independent reviewer/challenger
 The second agent:
-- independently inspects the same repository state;
-- checks Agent A's claims;
-- proposes its own approach before reading the recommendation as binding;
+- independently inspects the repository state and diff;
+- checks Agent A's claims rather than accepting the summary;
+- records a top-level PR comment with evidence;
 - identifies disagreements, missing cases and unintended consequences;
-- records its review in `AGENT_HANDOVER.md`.
+- verifies the implementation after changes.
 
 Either ChatGPT/Codex or Claude may be Agent A or Agent B.
 
-## 3. Decision protocol
-
-For non-trivial work, use the following sequence.
-
-### Step 1: Frame
-Record:
-- task;
-- branch and HEAD SHA;
-- scope;
-- explicit non-goals;
-- files likely involved;
-- scientific invariants that must remain true.
-
-### Step 2: Independent approaches
-Each agent writes a short proposal containing:
-- approach;
-- expected files changed;
-- advantages;
-- risks;
-- validation plan;
-- whether the change is scientific, implementation-only, documentation-only, or mixed.
-
-Do not overwrite the other agent's proposal.
-
-### Step 3: Compare
-The reviewing agent writes a comparison under these headings:
-- points of agreement;
-- points of disagreement;
-- evidence from the repository;
-- safest option;
-- strongest option;
-- recommended combined approach.
-
-### Step 4: Decide
-A decision may be marked `ACCEPTED` only when:
-- both agents agree; or
-- the human owner explicitly chooses between alternatives.
-
-If agents disagree on a scientific issue, mark it `HUMAN DECISION REQUIRED`. Do not implement the disputed scientific change.
-
-For implementation-only disagreements, prefer the option that:
-1. preserves scientific outputs;
-2. changes fewer surfaces;
-3. is easiest to test;
-4. is easiest to reverse;
-5. leaves the repository clearer.
-
-### Step 5: Implement
-The implementing agent:
-- works only on the accepted scope;
-- uses a dedicated branch for substantial changes;
-- keeps commits small and descriptive;
-- runs the agreed tests;
-- updates `AGENT_HANDOVER.md`.
-
-### Step 6: Verify
-The other agent independently checks:
-- diff;
-- tests;
-- CI;
-- expected outputs;
-- scientific invariants;
-- whether unrelated files changed.
-
-It records `PASS`, `PASS WITH NOTES`, or `BLOCK`.
-
-### Step 7: Human merge
-The human owner retains final merge authority for scientific or publication-facing changes.
-
-## 4. Scientific change classes
+## 4. Change classes and review depth
 
 Every task must be labelled with one of these:
 
@@ -119,9 +63,105 @@ Every task must be labelled with one of these:
 - `SCIENTIFIC_CHANGE`: changes model mathematics, controls, assumptions, calibration, allocation, denominators, cohort logic or interpretation.
 - `MIXED`: contains more than one class.
 
-A `SCIENTIFIC_CHANGE` or `MIXED` task cannot be treated as routine refactoring.
+Use one of two review modes.
 
-## 5. Baseline protection rules
+### Full two-agent cycle
+
+Required for:
+- `SCIENTIFIC_CHANGE`;
+- `MIXED`;
+- validation changes that alter statistical definitions, uncertainty methods, benchmark construction, acceptance criteria or scientific interpretation;
+- any change the human owner marks as high risk.
+
+Sequence:
+1. Agent A frames the task and posts its proposed approach.
+2. Agent B independently inspects the repository and posts its own assessment.
+3. The agents compare agreement, disagreement, evidence, risks and alternatives.
+4. A scientific disagreement is marked `HUMAN DECISION REQUIRED`.
+5. The accepted approach is implemented.
+6. The other agent independently verifies the diff, tests, CI and relevant outputs.
+7. The human owner approves scientific/publication-facing merge decisions.
+
+### Light cycle
+
+Appropriate for:
+- `DOCS_ONLY`;
+- routine `IMPLEMENTATION_ONLY` fixes intended not to change science;
+- straightforward test additions or maintenance.
+
+Sequence:
+1. One agent implements the scoped change.
+2. The other agent independently reviews the diff and evidence.
+3. Required tests/CI pass.
+4. Any discovered scientific implication escalates the task to the full cycle.
+
+This keeps routine work efficient without weakening scientific review.
+
+## 5. PR task frame
+
+The PR description should contain:
+
+- task;
+- change class;
+- scope;
+- explicit non-goals;
+- scientific invariants;
+- proposed approach, when required;
+- files expected to change;
+- validation plan;
+- human decisions already made.
+
+The repository template in `.github/pull_request_template.md` provides the standard structure.
+
+## 6. Questions between agents
+
+Agents cannot directly message each other. Use a top-level PR comment beginning with:
+
+`[QUESTION FOR OTHER AGENT]`
+
+Include:
+- exact file/function/data object;
+- what is uncertain;
+- why it matters;
+- evidence already checked;
+- the decision or opinion needed.
+
+The responding agent posts a new top-level comment beginning with:
+
+`[RESPONSE]`
+
+and includes:
+- answer;
+- repository evidence;
+- confidence;
+- remaining uncertainty.
+
+For a substantive review use:
+
+`[AGENT REVIEW]`
+
+For final verification use:
+
+`[AGENT VERIFICATION: PASS]`,
+`[AGENT VERIFICATION: PASS WITH NOTES]`, or
+`[AGENT VERIFICATION: BLOCK]`.
+
+## 7. Decision protocol
+
+A scientific decision may be treated as accepted only when:
+- both agents agree and the human owner has already authorised that class of change; or
+- the human owner explicitly chooses between alternatives.
+
+If agents disagree on a scientific issue, do not implement the disputed scientific change. Record the disagreement and request a human decision.
+
+For implementation-only disagreements, prefer the option that:
+1. preserves scientific outputs;
+2. changes fewer surfaces;
+3. is easiest to test;
+4. is easiest to reverse;
+5. leaves the repository clearer.
+
+## 8. Baseline protection rules
 
 For the historical 2015-2025 baseline:
 
@@ -135,27 +175,10 @@ For the historical 2015-2025 baseline:
 
 Any proposed change that may alter historical baseline values must be explicitly identified before implementation.
 
-## 6. Questions between agents
-
-Agents cannot directly message each other. Questions are written into `AGENT_HANDOVER.md` under `Open questions for the other agent`.
-
-Each question should include:
-- exact file/function/data object;
-- what is uncertain;
-- why it matters;
-- evidence already checked;
-- the decision needed.
-
-The responding agent writes directly below the question with:
-- answer;
-- evidence;
-- confidence;
-- any remaining uncertainty.
-
-## 7. Conflict handling
+## 9. Conflict and failure handling
 
 If both approaches are valid but different:
-- prefer combining them only if the combination is simpler than either alone;
+- combine them only if the combination is simpler and safer than either alone;
 - otherwise retain both options for human choice.
 
 If one proposal is contradicted by code, tests or authoritative project documentation, record that evidence and reject that proposal.
@@ -165,26 +188,9 @@ If CI fails:
 - determine whether the failure is caused by the current change;
 - fix only task-relevant failures unless the human owner authorises broader repair.
 
-## 8. Handover discipline
+## 10. Decision ledger
 
-Before stopping work, update `AGENT_HANDOVER.md` with:
-- timestamp;
-- agent;
-- branch;
-- HEAD SHA;
-- task status;
-- files changed;
-- tests run;
-- CI status;
-- outputs inspected;
-- unresolved questions;
-- exact next action.
-
-Never write "done" unless the repository state and required checks support it.
-
-## 9. Decision ledger
-
-Important decisions that should survive the current task belong in `AGENT_DECISIONS.md`.
+Important decisions that should survive the current PR belong in `AGENT_DECISIONS.md`.
 
 Examples:
 - scientific definitions;
@@ -193,9 +199,11 @@ Examples:
 - decisions to defer scenario work;
 - interface conventions affecting future agents.
 
-Do not use the decision ledger for temporary debugging notes.
+When a decision has a canonical scientific home such as `docs/SCIENTIFIC_ASSUMPTIONS.md`, the ledger should link to that source rather than duplicate or reinterpret it.
 
-## 10. Merge readiness checklist
+Do not use the ledger for temporary debugging notes or branch status.
+
+## 11. Merge readiness checklist
 
 A task is merge-ready only when all applicable items are true:
 
@@ -205,7 +213,6 @@ A task is merge-ready only when all applicable items are true:
 - [ ] required CI passes;
 - [ ] validation outputs inspected where relevant;
 - [ ] documentation matches implementation;
-- [ ] handover updated;
-- [ ] decision ledger updated if a durable decision was made;
-- [ ] reviewer agent records PASS or human owner explicitly overrides;
+- [ ] durable decisions recorded if needed;
+- [ ] reviewing agent records PASS or PASS WITH NOTES, or the human owner explicitly overrides;
 - [ ] scientific changes have explicit human approval.
