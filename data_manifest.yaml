@@ -115,7 +115,7 @@ datasets:
     module: [cartography, catchment]
     description: "Frozen Electoral Division geometry used for reproducible historical cartography and ED-to-catchment crosswalk construction."
     source: "git"
-    path: "data/inputs/spatial/SC2_ED_Boundaries_Frozen.gpkg"
+    path: "data/inputs/spatial/ED_Boundaries_Frozen.gpkg"
     sha256: "550b2ed967f5c5e7ecb9053586cf431df564d0a990f99f9f82eb8b8be44faca8"
     required: true
 
