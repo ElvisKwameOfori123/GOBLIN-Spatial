@@ -1,64 +1,30 @@
-# Frozen spatial presentation inputs
+# Frozen spatial reporting inputs
+
+These files support reproducible mapping and ED-to-catchment aggregation of the historical baseline. They do not alter livestock, land, farm-structure or Standard Output reconstruction.
 
 ## Electoral Division geometry
 
-`SC2_ED_Boundaries_Frozen.gpkg` is the frozen Electoral Division geometry source used only by the downstream GOBLIN-Spatial cartographic layer. It does **not** enter baseline, SC1, SC2 or SC3 calculations.
+`ED_Boundaries_Frozen.gpkg` is the frozen Electoral Division geometry used to match the model ED universe and construct the ED-to-WFD-catchment crosswalk.
 
-Expected file contract:
+File contract:
 
-- path: `data/inputs/spatial/SC2_ED_Boundaries_Frozen.gpkg`
+- path: `data/inputs/spatial/ED_Boundaries_Frozen.gpkg`
+- checksum sidecar: `data/inputs/spatial/ED_Boundaries_Frozen.gpkg.sha256`
 - source layer: `electoral_divisions`
 - source features: 3,409
 - geometry type: MultiPolygon
 - CRS: EPSG:29902 (TM65 / Irish Grid)
-- file size of the frozen source checked on 2026-08-30: 11,481,088 bytes
 - SHA-256: `550b2ed967f5c5e7ecb9053586cf431df564d0a990f99f9f82eb8b8be44faca8`
 
-The national geometry contains more ED features than the agricultural model universe. The cartographic renderer therefore treats the numerical results as authoritative, retains only model EDs and requires every model ED to match exactly one polygon.
+The national geometry contains more ED features than the 2,857-ED agricultural model universe. Spatial joins therefore retain only the model EDs and require each model ED to resolve to its corresponding geometry.
 
-### Cartographic ED key
-
-The scientific model keeps its source `CSOED` values unchanged. Mapping uses a separate, deterministic cartographic normalisation only at join time:
-
-- ordinary source code `01003` becomes cartographic key `1003`;
-- a composite source code such as `08045/08046` uses the first listed code and becomes cartographic key `8045`;
-- identifiers remain text, not measurements;
-- the original result identifier is retained as `CSOED_SOURCE`;
-- the original geometry identifier is retained as `CSOED_GEOMETRY_SOURCE`.
-
-This rule is implemented and validated in `src/goblin_spatial/map_reporting.py`. It avoids any QGIS-side identifier editing and keeps the numerical science independent of cartography.
-
-### Reproducible mapping
-
-Once a complete final-results directory contains `GOBLIN_Spatial_Map_Data.csv`, maps can be generated directly with:
-
-```bash
-pip install -e '.[geo]'
-goblin-spatial maps data/processed/final_results
-```
-
-The configured geometry path is already `files.ed_boundaries_frozen` in `configs/ireland_2015_2025.yaml`, so no `--geometry` argument is required when the frozen file is present at the path above.
-
-The mapping stage writes:
-
-- `GOBLIN_Spatial_Model_ED_Geometry.gpkg`, containing only the model ED universe;
-- `GOBLIN_Spatial_Map_Layer.gpkg`, containing geometry joined to ED × pathway × allocation-rule results;
-- high-resolution PNG and vector SVG reference maps;
-- `GOBLIN_Spatial_Map_Manifest.csv` recording the mapping choices and source geometry.
-
-QGIS can open the same output GeoPackage for visual inspection and publication polishing, but QGIS is not required to reproduce the numerical model or the Python reference maps.
+The numerical ED results remain authoritative. Geometry is a reporting and crosswalk resource, not a source of livestock quantities.
 
 ## WFD catchment geometry
 
-`WFD_Catchments_Frozen.gpkg` is the frozen downstream aggregation geometry used
-by the catchment bridge. It does **not** change the ED baseline, livestock
-reconstruction, Standard Output, SC1, SC2 or SC3 calculations.
+`WFD_Catchments_Frozen.gpkg` is the frozen hydrological reporting geography used by the catchment bridge.
 
-Authoritative source: Environmental Protection Agency Water Framework Directive
-Water Catchments, CC BY 4.0. The frozen copy was obtained through the public
-GSI mirror of the EPA WFD Catchments layer and is now repository-contained.
-
-Frozen file contract:
+File contract:
 
 - path: `data/inputs/spatial/WFD_Catchments_Frozen.gpkg`
 - checksum sidecar: `data/inputs/spatial/WFD_Catchments_Frozen.gpkg.sha256`
@@ -68,15 +34,12 @@ Frozen file contract:
 - CRS: EPSG:2157
 - SHA-256: `d9b00e1732f4f6a711c7edfb9d4d3348efe8150efd60280361f217d8a2602b65`
 
-The production catchment build is intentionally offline. It verifies the
-checksum before reading the geometry and fails if the file is missing or has
-changed. It no longer downloads a live catchment layer during a normal model
-run.
+The production catchment build is offline and checksum-controlled.
 
-The primary output preserves all 46 official WFD catchments. A secondary
-37-unit compatibility table is derived for integration with
-`GOBLIN-Proj/catchment_data_api`.
+## ED-to-catchment allocation
 
-Catchment weights are normalised within ED so additive livestock, land and
-Standard Output quantities preserve national totals exactly. See
-`docs/catchment_bridge.md`.
+Where an ED intersects more than one WFD catchment, additive quantities are allocated using the fraction of mapped ED area falling within each catchment. Weights are normalised within ED so that national additive totals are preserved.
+
+This provides a reproducible environmental reporting geography. It does not identify the exact location of farms or animals inside an ED and should not be interpreted as a parcel-level livestock allocation.
+
+See `docs/catchment_bridge.md` and `scripts/build_catchment_baseline.py`.
