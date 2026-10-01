@@ -1,8 +1,7 @@
 """Top-level orchestration for the GOBLIN-Spatial historical baseline.
 
 Scientific calculations live in the baseline modules. This file controls only
-stage order, validation and output persistence. Spatial soil and LPIS evidence
-enter only after the historical baseline when a scenario advances to SC2.
+stage order, validation and output persistence for the historical model.
 """
 
 from __future__ import annotations
