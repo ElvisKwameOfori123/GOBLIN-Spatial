@@ -72,7 +72,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--ed-geometry",
-        default="data/inputs/spatial/SC2_ED_Boundaries_Frozen.gpkg",
+        default="data/inputs/spatial/ED_Boundaries_Frozen.gpkg",
     )
     parser.add_argument(
         "--catchment-geometry",

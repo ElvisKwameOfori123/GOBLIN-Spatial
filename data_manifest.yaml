@@ -33,7 +33,7 @@ datasets:
   dafm_aim_ed_cattle_profile_2020:
     stage: "02"
     module: [baseline, cattle]
-    description: "DAFM AIM-derived 2020 Electoral Division cattle profile: June/December-average cattle totals, beef/dairy composition and seven age bands; used as Step 3 age-profile and Step 4 cattle-type spatial evidence, never as a replacement for CSO/AAA10 hard controls."
+    description: "DAFM AIM-derived 2020 Electoral Division cattle profile used as age-profile and cattle-type spatial evidence, never as a replacement for CSO/AAA10 hard controls."
     source: "git"
     path: "data/inputs/baseline/02_DAFM_AIM_ED_Cattle_Profile_2020.csv"
     sha256: "33c985cb01e06c79ab2ba8d68b7b3fa57679c853697ea05cf5b5074e02fb1913"
@@ -51,7 +51,7 @@ datasets:
   dafm_sheep_county_totals_2015_2020_2022_2025:
     stage: "03B"
     module: [baseline, sheep, validation]
-    description: "DAFM county sheep/ewe totals used as the relative county-weighting prior within fixed AAA09 regions and also reported in pattern-fidelity diagnostics."
+    description: "DAFM county sheep/ewe totals used as the relative county-weighting prior within fixed AAA09 regions and reported in pattern-fidelity diagnostics."
     source: "git"
     path: "data/inputs/baseline/03_0_DAFM_Sheep_County_Totals_2015_2020_2022_2025.csv"
     sha256: "6d3ce31092328f18587530561ab440d91fa65e94c629ac5ca25e15bb4b042de2"
@@ -104,54 +104,20 @@ datasets:
 
   standard_output_coefficients:
     stage: "08"
-    module: [baseline, standard_output, scenario]
+    module: [baseline, standard_output]
     description: "Fixed 2020 Irish Standard Output coefficient control."
     source: "git"
     path: "data/controls/standard_output/IFS_SOC2020_IE_model_controls.csv"
     required: true
 
-  goblin_scenario_controls:
-    stage: "SC1/SC3"
-    module: [scenario, sc1, sc3]
-    description: "National GOBLIN livestock-land endpoints and alternative land-use targets."
-    source: "git"
-    path: "data/controls/scenario/GOBLIN_Scenario_Controls.csv"
-    sha256: "3b099872352b66af9dc6b7f307b694ab65a53e26c12dbc846dcc82e30c43f9e4"
-    required: true
-
-  pasture_dm_controls:
-    stage: "SC1"
-    module: [scenario, sc1, land_release]
-    description: "Fixed 2020 GOBLIN 31-cohort pasture dry-matter control."
-    source: "git"
-    path: "data/controls/pasture/GOBLIN_pasture_dm_2020_fixed.csv"
-    required: true
-
-  ed_land_context_2020:
-    stage: "SC2/SC3"
-    module: [sc2, sc3]
-    description: "Frozen 2,857-ED 2020 Colm physical-soil and LPIS agricultural context."
-    source: "git"
-    path: "data/controls/land/ED_Land_Context_2020"
-    required: true
-    expected_rows: 2857
-    expected_columns: 26
-    component_files:
-      COLM_PHYSICAL_2020:
-        path: "data/controls/land/ED_Land_Context_2020/ED_Colm_Physical_Soil_2020.csv"
-        sha256: "9892059c3f67c92d04427ad48220aa7565325df0251be6d53090388046b6bae4"
-      LPIS_2020:
-        path: "data/controls/land/ED_Land_Context_2020/ED_LPIS_Context_2020.csv"
-        sha256: "c8a6b66c9166ea3da0121def6225698037951d3022af02e5b42f2b54f4f13b2b"
-
   ed_boundaries_frozen:
     stage: "REPORTING"
-    module: [cartography]
-    description: "Frozen Electoral Division geometry reserved for downstream reproducible cartography."
+    module: [cartography, catchment]
+    description: "Frozen Electoral Division geometry used for reproducible historical cartography and ED-to-catchment crosswalk construction."
     source: "git"
-    path: "data/inputs/spatial/SC2_ED_Boundaries_Frozen.gpkg"
+    path: "data/inputs/spatial/ED_Boundaries_Frozen.gpkg"
     sha256: "550b2ed967f5c5e7ecb9053586cf431df564d0a990f99f9f82eb8b8be44faca8"
-    required: false
+    required: true
 
   wfd_catchments_frozen:
     stage: "REPORTING"

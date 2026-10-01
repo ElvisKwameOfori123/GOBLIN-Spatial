@@ -1,0 +1,14 @@
+# Repository data files are checksum-controlled scientific inputs.
+# Disable Git line-ending conversion for tabular data so SHA-256 verification
+# is identical on Windows, macOS and Linux.
+data/**/*.csv -text
+data/**/*.xlsx binary
+data/**/*.gpkg binary
+data/**/*.parquet binary
+
+# Keep source/configuration text normalized.
+*.py text eol=lf
+*.md text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.json text eol=lf

@@ -1,92 +1,54 @@
 # GOBLIN-Spatial Scientific Assumptions Register
 
-This register records the principal scientific assumptions, exogenous controls, normative spatial experiments, feasibility rules and interpretation boundaries used by GOBLIN-Spatial v1.
+This register records the principal assumptions and interpretation boundaries for the active GOBLIN-Spatial historical baseline and illustrative perturbation.
 
-The guiding distinction is:
+The controlling distinction is:
 
 ```text
 Observed evidence
       !=
+Statistical control
+      !=
 Reconstruction assumption
       !=
-Exogenous national control
+Derived indicator
       !=
-Normative spatial experiment
+Illustrative perturbation
       !=
-Feasibility rule
-      !=
-Interpretation
-```
-
-## Historical reconstruction evidence hierarchy
-
-The 2015-2025 baseline is not a simple projection from 2020. For cattle, the 2010 and 2020 CSO Census of Agriculture ED distributions jointly inform the within-county geography of 2015-2019 through time-weighted interpolation. The 2020 ED distribution is held for 2021-2025 because no later ED census is available. Annual official higher-level livestock and land controls constrain surrounding years.
-
-```text
-2010 + 2020 CSO ED cattle structure
-        ↓
-time-weighted within-county cattle geography, 2015-2019
-        ↓
-2020 ED cattle structure held, 2020-2025
-
-annual county cattle controls
-        ↓
-annual regional/county sheep controls
-        ↓
-annual land and farm-structure controls
-        ↓
-reconciled 2015-2025 ED panel
+Observed behaviour or impact
 ```
 
 ## Current assumptions and modelling choices
 
 | ID | Component | Status | Current treatment | Scientific meaning |
 |---|---|---|---|---|
-| **A01** | National pathway authority | **Core** | GOBLIN supplies authoritative national livestock endpoints, target livestock-land area and future land-use requirements. | GOBLIN-Spatial resolves geography and feasibility; it does not redefine the national pathway. |
-| **A02** | Full spatial baseline | **Core** | The complete Baseline → SC1 → SC2 → SC3 workflow uses the validated 2020 spatial land context. | 2020 is the principal full spatial scenario anchor. |
-| **A03** | 2025 scenario use | **Temporary boundary** | The reconstructed 2025 livestock state may be used for SC1 sensitivity only. | The model does not silently apply 2020 soil/LPIS evidence to a 2025 SC2/SC3 run. |
-| **A04** | Adult livestock endpoints | **Core** | Dairy and suckler endpoints anchor the principal cattle transition. | Adult controls determine the national direction of structural change. |
-| **A05** | Follower cattle cohorts | **Assumption** | Remaining cattle cohorts respond through the validated biological cohort structure and are reconciled to any explicit national controls. | Local livestock structure is preserved without inventing a second national authority. |
-| **A06** | Spatial support | **Assumption** | Livestock categories are not artificially seeded into EDs without baseline support, except for the validated receiver/rearing logic where required for cohort closure. | The scenario respects observed local livestock structure while allowing known rearing/finishing geography. |
-| **A07** | Sheep | **Replaceable assumption** | Sheep remain fixed in the principal cattle-transition workflow unless an explicit national sheep control is supplied. | Current pathway runs are not sheep-destocking scenarios. |
-| **A08** | Spatial incidence rules | **Normative** | `PRORATA`, `DAIRY_PROTECTION`, `ECONOMIC_CAPACITY_PROTECTION` and `SOCIAL_VULNERABILITY_PROTECTION` redistribute where the same national adjustment falls. | These are policy-incidence experiments, not estimated behavioural responses. |
-| **A09** | Protection strength | **Sensitivity parameter** | The principal protection strength is `0.50`. | It is a modelling choice and should be sensitivity-tested rather than interpreted as an observed coefficient. |
-| **A10** | National released land | **Core** | Gross livestock-land release is derived from the selected baseline `ALL_GRASSLAND` and the pathway `TARGET_LIVESTOCK_LAND_HA`, then frozen as the authoritative national release quantity for that run. | Local pasture-DM calculations do not create a competing national release total. |
-| **A11** | Released-land geography | **Allocation rule** | SC1 spatialises the authoritative release using the solved livestock/pasture-DM transition signal, bounded only by ED `ALL_GRASSLAND`. | Soil, LPIS and future-use suitability do not determine SC1 release geography. |
-| **A12** | Pasture-DM land balance | **Diagnostic** | `POTENTIAL_SPARED_GRASSLAND_HA`, `SIGNED_GRASSLAND_BALANCE_HA` and `ADDITIONAL_GRASSLAND_REQUIRED_HA` remain independent diagnostics and are not rescaled to the parent release. | The diagnostic can disagree with the authoritative GOBLIN release without creating a second land authority. |
-| **A13** | Physical soil evidence | **Core SC2 evidence** | Seven mapped physical-soil/drainage categories characterise the frozen ED released-land resource proportionally. | This is physical resource evidence, not a land-use decision. |
-| **A14** | Soil attribution | **Assumption** | Within each ED, frozen release is proportionally distributed across the ED mapped physical-soil shares. | The model does not claim to observe the exact parcels released from livestock use. |
-| **A15** | LPIS | **Core SC2 evidence** | LPIS supplies current agricultural-use and management context after SC1 is frozen. | LPIS does not change livestock, national release or the physical-soil partition. |
-| **A16** | Soil × LPIS relationship | **Interpretation boundary** | The compact runtime does not contain an observed parcel-level soil × LPIS joint overlay and does not manufacture one through an independence assumption. | ED-level soil and LPIS evidence remain distinct unless a validated joint overlay is supplied in future. |
-| **A17** | Eligibility | **Core feasibility rule** | Stage-A land-use eligibility must be explicit, complete, versioned and evidence-backed across the seven physical-soil categories. | No hidden default suitability coefficients are permitted. |
-| **A18** | Fractional eligibility | **Sensitivity rule** | Coefficients in `(0,1)` are allowed only when they have a defensible quantitative interpretation. | Intermediate values are not used merely to express uncertainty or improve target closure. |
-| **A19** | Opportunity | **Interpretation** | Opportunity remains separate from eligibility. No arbitrary weighted composite is applied by default. | SC2 currently measures biophysical/agricultural response potential, not complete socioeconomic adaptive capacity. |
-| **A20** | SC3 land competition | **Core feasibility rule** | AD grass, biorefinery grass, willow, additional tillage and forest compete jointly for finite released-resource cells. | The same hectare cannot be allocated twice. |
-| **A21** | SC3 infeasibility | **Core feasibility rule** | Infeasible hectares are reported as unmet rather than forced into allocation. | For every use, `Target = Realised + Unmet`. |
-| **A22** | Rewetting | **Separate environmental requirement** | A positive rewetting target requires an independently validated drained agricultural organic-soil capacity control. Mapped peat alone is insufficient. | Rewetting is not automatically interpreted as productive diversification or alternative-income opportunity. |
-| **A23** | Standard Output | **Interpretation** | Fixed-2020 Standard Output is a production-value exposure indicator. | It is not profit, household income, welfare, compensation need or land value. |
-| **A24** | Scenario time | **Interpretation** | Current pathway runs primarily spatialise specified endpoints rather than predicting annual ED transitions to 2050. | Results are endpoint spatial stress tests unless intermediate controls are explicitly supplied. |
-| **A25** | Post-SC3 flexibility | **Core foresight analysis** | The model may hold realised national hectares of each use fixed and search alternative feasible geographies. | One solver map is not automatically treated as the uniquely necessary geography. |
-| **A26** | Behaviour and adoption | **Interpretation boundary** | GOBLIN-Spatial is deterministic and assumption-explicit. | It does not predict individual farmer behaviour, parcel conversion, willingness to adopt or exact realised future geography. |
-| **A27** | Historical cattle ED weights | **Reconstruction assumption** | For 2015-2019, within-county ED shares of dairy cows, other cows and other cattle are a temporal-proximity-weighted combination of the 2010 and 2020 census shares. Annual AAA10 county totals are imposed exactly. Published 2010 zeroes remain zeroes; a blank 2010 component retains its reconciled 2020 share. From 2021-2025 the 2020 within-county shares are held while AAA10 continues to provide annual county totals. | The two censuses inform the geography but do not observe the exact ED path between them. Post-2020 within-county change is not extrapolated in the main model; trend continuation is a sensitivity only. |
-| **A28** | Cattle age-sex spatial prior | **Evidence-informed reconstruction assumption** | AAA10 county age-sex margins remain authoritative. The production prior uses the 2020 DAFM/AIM ED profile only as a log-odds shift for under-one versus one-to-two-year cattle; bulls and 2+ cattle remain on the county prior and sex ratios remain county-controlled. The DAFM/AIM quantities are the arithmetic mean of the June and December 2020 stock observations and are interpreted as an approximate resident standing-stock composition signal, not as a competing census control or a continuous annual mean. Unmatched EDs receive a neutral county DAFM ratio. IPF plus exact integerisation restores every ED `OTHER_CATTLE` row and county age-sex column. | DAFM supplies fine-scale age-profile evidence without becoming a competing population control. The flat county A0 remains the null sensitivity. |
-| **A29** | Cattle genetic spatial prior | **Evidence-informed reconstruction assumption** | The six fixed CSO age-sex containers are subdivided into DxD, DxB and BxB only after Step 3 is frozen. GOBLIN/COHORTS supplies the exact national genetic margins. DAFM/AIM 2020 broad dairy/beef composition supplies the ED cattle-type prior after being expressed relative to the fixed CSO total and dairy-cow count; incoherent or unmatched local signals fall back to the county composition signal. Adult dairy and suckler cows provide soft biological evidence for the DxB versus BxB split, pooled with a national mixing component. No adult-cow category is a support gate; only a zero fixed age-sex cell is a structural zero. IPF plus exact integerisation restores all ED age-sex rows and national genetic columns exactly. | AIM informs where cattle types are plausibly resident without replacing CSO cattle counts. The approach allows rearing/finishing EDs to hold cattle whose breeding cows are elsewhere. The legacy cow-support allocator remains G0 sensitivity rather than the production rule. |
-
-## Core scientific sequence
-
-```text
-Release
-    !=
-Physical resource
-    !=
-Eligibility
-    !=
-Opportunity
-    !=
-Allocation
-    !=
-Adoption
-```
+| **A01** | 2010 and 2020 cattle geography | **Core reconstruction assumption** | For 2015-2019, within-county ED shares of dairy cows, other cows and other cattle move linearly from the 2010 to the published 2020 census distribution. | The two censuses inform small-area geography; the exact annual ED path is reconstructed rather than observed. |
+| **A02** | Published 2020 cattle | **Protected observation** | Published 2020 ED cattle values are retained unchanged. | Higher-level source differences are recorded rather than spatially reassigned. |
+| **A03** | Post-2020 cattle geography | **Reconstruction assumption** | From 2021-2025, published 2020 component support and within-county shares are held while annual AAA10 county controls change. | No unobserved post-2020 within-county redistribution is invented. |
+| **A04** | Cattle age-sex prior | **Evidence-informed reconstruction** | AAA10 county age-sex margins remain authoritative. DAFM/AIM ED evidence shifts only the under-one versus one-to-two-year odds; bulls, 2+ cattle and sex structure remain county-controlled. | DAFM/AIM adds fine-scale composition without replacing statistical population controls. |
+| **A05** | Cattle parental-origin prior | **Evidence-informed reconstruction** | Fixed age-sex groups are subdivided into DxD, DxB and BxB using exact national GOBLIN/COHORTS margins and local AIM composition signals with county fallback. | Biological detail is added without moving cattle between EDs or changing fixed age-sex totals. |
+| **A06** | Adult-cow absence | **Interpretation boundary** | Absence of adult dairy or suckler cows is not a structural gate on follower cohorts. | Adult-parent and follower geographies can differ; this is not direct evidence of movement or trade. |
+| **A07** | Sheep 2020 state | **Protected observation** | Published 2020 ED sheep totals, including zeros, are retained unchanged. | Source differences with higher-level controls are not spatially filled. |
+| **A08** | Sheep annual geography | **Reconstruction assumption** | Pre-2020 ED shares move from the 2010 to the published 2020 pattern. DAFM breeding-ewe information modifies relative county weighting inside fixed AAA09 regions. Post-2020 support follows the published 2020 pattern. | DAFM informs pattern; AAA09 remains the controlling regional quantity. |
+| **A09** | Sheep breed/system composition | **Evidence-informed reconstruction** | County breed anchors inform lowland-type and mountain-type composition. | The mountain-type indicator is a breed/system proxy, not an independently observed ED hill-farm classification. |
+| **A10** | Land reconstruction | **Core reconstruction assumption** | Published 2020 ED land is retained and surrounding years follow AQA06 regional change while ED land accounting closes. | Annual small-area land is reconstructed under explicit higher-level controls. |
+| **A11** | Farm structure | **Core reconstruction assumption** | Holdings and holder-age variables follow their documented official higher-level trajectories around the ED anchor. | Non-census ED values are reconstructed, not annual local observations. |
+| **A12** | Standard Output | **Derived indicator** | Fixed 2020 coefficients are applied to reconstructed activities for every year. | Standard Output is production-value exposure, not income, profit, welfare, compensation need or land value. |
+| **A13** | WFD catchment reporting | **Reporting transformation** | ED quantities are distributed using a frozen ED-to-WFD-catchment area crosswalk. | The catchment view does not locate individual farms or animals within ED fragments and is not a water-quality impact model. |
+| **A14** | Ratio aggregation | **Accounting rule** | Numerators and denominators are aggregated separately and ratios are recalculated at the target geography. | ED percentages are never averaged to produce higher-scale signatures. |
+| **A15** | Parent-follower support | **Derived classification** | Relationships are labelled local ED, county-supported or national fallback according to where the corresponding adult-parent population exists. | These are support classes, not animal-movement, purchase, sale or origin classes. |
+| **A16** | Livestock signatures | **Derived indicators** | Signatures quantify breeding orientation, follower composition, follower intensity, livestock density, production-value intensity and sheep production type. | They describe livestock-system organisation in addition to abundance. |
+| **A17** | Descriptive matched/stable analyses | **Descriptive diagnostics** | Concentration, matched-ED and stable-abundance analyses compare reconstructed structures under explicit thresholds. | They reveal information content but do not estimate causal effects. |
+| **A18** | Information geography | **Diagnostic** | Between-county variation is used to distinguish fine ED differentiation from attributes largely inherited from coarser evidence. | ED reporting resolution is not assumed to equal empirical evidence resolution for every variable. |
+| **A19** | DAFM/AIM evaluation | **Interpretation boundary** | Sources used in reconstruction are evaluated as pattern fidelity or coherence, not independent validation. | Model-input agreement is not overstated as predictive validation. |
+| **A20** | 2020 livestock-unit screen | **Model-selection diagnostic** | Published 2020 ED LSU is used as a prespecified plausibility screen for age-prior selection. | It is not held-out validation. |
+| **A21** | 2022 sheep comparison | **Holdout evaluation** | The 2022 sheep breed-composition observation is withheld from the interpolation used for the evaluation comparison. | This is the strongest holdout comparison in the current historical evaluation set. |
+| **A22** | Coherence audit | **Verification** | A separate audit recomputes accounting, closure and aggregation identities from released outputs and raw inputs. | Passing the audit verifies internal consistency; it is not external validation. |
+| **A23** | Illustrative dairy/suckler perturbation | **Controlled experiment** | Adult dairy or suckler cows are reduced by 30% in the frozen 2020 and 2025 baselines. | This is an illustrative static endpoint perturbation, not a forecast or behavioural response. |
+| **A24** | Signature-preserving representation | **Perturbation rule** | Linked follower change remains in reconstructed follower geography and follows the finest valid frozen parent relationship. | The representation preserves biological spatial structure. |
+| **A25** | Headcount benchmark | **Attribution benchmark** | National follower-per-parent coefficients are applied to adult-parent change geography. | It is an unconstrained attribution benchmark, not a feasible alternative ED herd state. |
+| **A26** | Perturbation interpretation | **Boundary** | Both representations impose the same national adult-parent and linked-follower changes; only spatial attribution differs. | Displacement measures information lost when follower geography is inferred from adult headcount. |
+| **A27** | Behaviour and impacts | **Boundary** | The historical model does not predict individual farmer behaviour, farm-to-farm movement, exact parcel conversion, market equilibrium, water-quality impact or future scenario outcomes. | Additional models and evidence are required for those questions. |
 
 ## Required record for a scientific change
 
@@ -96,10 +58,10 @@ A scientifically meaningful change should state:
 What changed?
 Why did it change?
 What evidence supports the change?
-Was the evidence an input, calibration target or independent validation check?
-Which stages or outputs can change?
-Which stages or outputs must remain unchanged?
-What tests or reconciliation checks were run?
+Was the evidence an input, model-selection target or independent evaluation source?
+Which outputs can change?
+Which outputs must remain unchanged?
+What reconciliation and audit checks were run?
 ```
 
-Git history is the authoritative development record. The live scientific documentation should describe the current model rather than preserve superseded architectures.
+Git history is the authoritative development record. Live documentation describes the current historical-baseline model rather than preserving superseded scenario architectures.

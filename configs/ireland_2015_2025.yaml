@@ -8,17 +8,14 @@ study:
   expected_eds: 2857
 
 cattle:
-  # Preferred historical reconstruction; use fixed_2020 to reproduce frozen v1 weights.
+  # Preferred historical reconstruction; use fixed_2020 only for the documented null sensitivity.
   spatial_weights: two_anchor_2010_2020
-  # Step 3: DAFM/AIM shifts only under-1 vs 1-2 odds; CSO/AAA10 margins stay exact.
-  # Use flat_county for the A0 null sensitivity.
+  # DAFM/AIM shifts only under-1 vs 1-2 odds; CSO/AAA10 margins stay exact.
   age_sex_prior: dafm_log_odds
   dafm_logit_epsilon: 1.0e-6
-  # Step 4 production prior: AIM ED type signal -> county fallback -> GOBLIN margins.
-  # Use cow_support only to reproduce the G0 genetics sensitivity.
+  # AIM ED type signal -> county fallback -> GOBLIN biological margins.
   genetics_prior: aim_hierarchical
-  # National DxD/DxB/BxB expectations use AAA10 June cows in every year, 2020 included.
-  # Use panel to reproduce v1.1 (published 2020 Census cows as the 2020 denominator).
+  # National DxD/DxB/BxB expectations use AAA10 June cows in every year, including 2020.
   genetic_cow_denominator: aaa10
 
 paths:
@@ -41,22 +38,14 @@ files:
   se_controls: data/inputs/baseline/06_Farm_Structure_Demographic_Controls.csv
   standard_output_mapping: data/inputs/baseline/08_IFS2020_Standard_Output_Mapping.xlsx
   standard_output_coefficients: data/controls/standard_output/IFS_SOC2020_IE_model_controls.csv
-
-  land_context_2020: data/controls/land/ED_Land_Context_2020
-  scenario_controls: data/controls/scenario/GOBLIN_Scenario_Controls.csv
-  pasture_dm_controls: data/controls/pasture/GOBLIN_pasture_dm_2020_fixed.csv
-
-  # Reserved for the downstream reporting phase. It does not enter model science.
-  ed_boundaries_frozen: data/inputs/spatial/SC2_ED_Boundaries_Frozen.gpkg
+  # Reporting geometry only; it does not enter baseline reconstruction science.
+  ed_boundaries_frozen: data/inputs/spatial/ED_Boundaries_Frozen.gpkg
 
 outputs:
   cattle_panel: data/interim/cattle_ed_2015_2025.csv
   sheep_panel: data/interim/sheep_ed_2015_2025.csv
-  # Canonical merged livestock products.
   cso_13_cohort_panel: data/interim/CSO_13_Cohort_Annual_Panel_2015_2025.csv
   goblin_31_cohort_panel: data/interim/GOBLIN_31_Cohort_Annual_Panel_2015_2025.csv
-  # Reserved for the later national GOBLIN/Daniel calibration stage.
-  goblin_31_cohort_calibrated_panel: data/interim/GOBLIN_31_Cohort_Calibrated_Annual_Panel_2015_2025.csv
   enriched_master: data/processed/goblin_spatial_master_2015_2025.csv
   clean_workbook: data/processed/GOBLIN_Spatial_Final_Clean_Data_2015_2025.xlsx
   standard_output_master: data/processed/08_GOBLIN_Spatial_Standard_Output_2015_2025.csv

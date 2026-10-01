@@ -1,4 +1,4 @@
-"""Data-contract tests for the canonical Ireland 2015-2025 package inputs."""
+"""Data-contract tests for the canonical Ireland 2015-2025 historical inputs."""
 
 from pathlib import Path
 
@@ -30,10 +30,15 @@ def test_config_uses_only_canonical_baseline_package() -> None:
         "cso_land": "data/inputs/baseline/06_CSO_AQA06_Agricultural_Land_Use.xlsx",
         "se_controls": "data/inputs/baseline/06_Farm_Structure_Demographic_Controls.csv",
         "standard_output_mapping": "data/inputs/baseline/08_IFS2020_Standard_Output_Mapping.xlsx",
+        "standard_output_coefficients": "data/controls/standard_output/IFS_SOC2020_IE_model_controls.csv",
     }
     for key, relative in expected.items():
         assert cfg.files[key] == ROOT / relative
         assert cfg.files[key].exists(), key
+
+    assert "scenario_controls" not in cfg.files
+    assert "pasture_dm_controls" not in cfg.files
+    assert "land_context_2020" not in cfg.files
 
 
 def test_cso_ed_2010_contract_and_2020_frame_mapping() -> None:
@@ -128,7 +133,6 @@ def test_cattle_county_control_contract() -> None:
     assert (frame["UNIT"] == "000 Head").all()
 
 
-
 def test_dafm_aim_ed_cattle_profile_2020_contract() -> None:
     frame = pd.read_csv(_config().files["dafm_aim_ed_cattle_profile_2020"])
     assert len(frame) == 2826
@@ -176,11 +180,6 @@ def test_dafm_breed_anchor_contract() -> None:
     assert set(frame["CATEGORY"].unique()) == {"EWES", "RAMS", "OTHER"}
 
 
-def test_required_small_runtime_controls_exist() -> None:
+def test_required_runtime_controls_exist() -> None:
     cfg = _config()
-    for key in (
-        "standard_output_coefficients",
-        "scenario_controls",
-        "pasture_dm_controls",
-    ):
-        assert cfg.files[key].exists(), key
+    assert cfg.files["standard_output_coefficients"].exists()

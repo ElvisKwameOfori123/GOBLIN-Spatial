@@ -5,13 +5,14 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "goblin-spatial"
 version = "1.0.0"
-description = "Constraint-preserving spatial foresight for national GOBLIN livestock and land-use pathways at Electoral Division level."
+description = "Constraint-preserving small-area historical agricultural baseline and livestock-signature framework for Ireland."
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{name = "Elvis Kwame Ofori"}]
 dependencies = [
   "numpy>=1.24",
   "pandas>=2.0",
+  "scipy>=1.10",
   "openpyxl>=3.1",
   "xlsxwriter>=3.1",
   "PyYAML>=6.0"
@@ -19,7 +20,6 @@ dependencies = [
 
 [project.optional-dependencies]
 geo = ["geopandas>=0.14", "shapely>=2.0", "pyogrio>=0.7", "pyarrow>=14"]
-scenario = ["scipy>=1.10"]
 reporting = [
   "pyarrow>=14",
   "geopandas>=0.14",
@@ -38,8 +38,6 @@ goblin = [
 
 [project.scripts]
 goblin-spatial = "goblin_spatial.cli:main"
-goblin-spatial-principal = "goblin_spatial.principal_cli:main"
-goblin-spatial-report-data = "goblin_spatial.reporting.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

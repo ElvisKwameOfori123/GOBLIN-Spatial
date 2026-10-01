@@ -1,20 +1,19 @@
 # GOBLIN-Spatial documentation
 
-The public repository README is the entry point. These documents provide the deeper scientific and operational detail for the frozen v1 engine and its downstream reporting layer.
+The repository README is the entry point. These documents provide the deeper scientific and operational detail for the active historical-baseline model and its illustrative perturbation.
 
 | Document | Purpose |
 |---|---|
-| `methodology.md` | Baseline, SC1, SC2, SC3 and post-SC3 methodology |
-| `historical_outputs.md` | Using the historical baseline outputs: which table, keys, SQLite/DuckDB, interpretation |
-| `running.md` | Guided and scripted execution |
-| `goblin_pathway_authority.md` | National-to-spatial authority and land-accounting boundary |
+| `methodology.md` | Historical reconstruction, biological cohorts, multiscale reporting, signatures and illustrative perturbation |
+| `historical_outputs.md` | Using the released historical tables, CSV/Parquet and SQLite/DuckDB copies |
+| `historical_results_bundle.md` | Historical manuscript/query bundle |
+| `running.md` | Installation, verification and execution |
 | `SCIENTIFIC_ASSUMPTIONS.md` | Scientific assumptions and interpretation limits |
-| `soil_eligibility_evidence_register.md` | Evidence gate for Stage-A soil/drainage eligibility rules |
-| `sc3_feasible_geographies.md` | Same-end-use spatial-flexibility analysis |
-| `reporting_architecture.md` | Frozen-results synthesis, report-data, figures, GIS and future explorer architecture |
-| `validation.md` | Accounting, invariance and CI validation rules |
+| `validation.md` | Accounting verification, evaluation evidence and reproducibility checks |
 | `data_dictionary.md` | Interpretation-safe output variables |
-| `ENGINE_FREEZE.md` | v1 scientific-engine completion boundary |
+| `catchment_bridge.md` | ED-to-WFD catchment reporting logic |
 | `data/standard_output.md` | Standard Output data treatment |
 
-Development history is preserved by Git rather than duplicated in the live scientific documentation.
+Deferred SC1/SC2/SC3 development is preserved separately in `ElvisKwameOfori123/GOBLIN-Spatial-SC` and is not part of this repository's active scientific runtime.
+
+Development history remains available through Git rather than being duplicated in the live documentation.
