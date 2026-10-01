@@ -139,10 +139,10 @@ A prior ED-by-age-sex matrix is built from these probabilities. Iterative propor
 
 ## 5. GOBLIN supplies the national biological relationships
 
-The six pre-adult age-sex containers are subsequently subdivided into three biological origins:
+The six follower age-sex containers are subsequently subdivided into three biological origins:
 
-- **DxD**: dairy-sired or dairy-origin followers associated with dairy breeding,
-- **DxB**: beef-sired followers from dairy cows,
+- **DxD**: dairy-origin followers from dairy breeding,
+- **DxB**: dairy-origin beef-cross followers from dairy cows, and
 - **BxB**: beef-origin followers associated with suckler or beef breeding.
 
 For each age-sex container \(a\), GOBLIN provides national cohort quantities together with national dairy- and suckler-cow populations. These are converted into per-cow biological coefficients:
@@ -330,7 +330,7 @@ The reconstructed cattle population contains:
 - DxB heifers and steers aged one to two years,
 - BxB heifers and steers aged one to two years,
 - DxD heifers and steers aged over two years,
-- DxB heifers and steers aged over two years, and
+- DxB heifers and steers aged over two years,
 - BxB heifers and steers aged over two years.
 
 For every ED and year,
