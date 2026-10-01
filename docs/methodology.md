@@ -1,263 +1,215 @@
 # GOBLIN-Spatial methodology
 
-## Overview
+## 1. Scope
 
-GOBLIN-Spatial is a constraint-preserving spatial foresight framework that connects nationally coherent GOBLIN AFOLU pathways to Electoral Division (ED) agricultural geography.
+GOBLIN-Spatial is a constraint-preserving small-area representation of Irish agriculture. The active implementation reconstructs the agricultural system annually from 2015 to 2025 across 2,857 Electoral Divisions (EDs), adds biological livestock structure, derives county and Water Framework Directive (WFD) catchment views from the same ED foundation, and produces livestock signatures and an illustrative spatial-attribution perturbation.
 
-The framework does not create a second national future. National livestock endpoints, target livestock-land area and future land-use requirements remain controlled by the selected GOBLIN pathway. GOBLIN-Spatial resolves where transition incidence falls, what physical response resource is created, whether future land-use requirements can fit within that finite resource and whether the same national outcome has one necessary geography or several feasible geographies.
-
-The analytical sequence is:
+The model distinguishes four kinds of information:
 
 ```text
-National GOBLIN pathway
+observed evidence
         ↓
-Baseline
+statistical controls
         ↓
-SC1 transition incidence
+reconstructed small-area structure
         ↓
-freeze livestock + released-land geography
-        ↓
-SC2 spatial response potential
-        ↓
-freeze physical resource + eligibility
-        ↓
-SC3 spatial transformability
-        ↓
-realised + unmet + residual
-        ↓
-post-SC3 spatial flexibility
+derived indicators and reporting views
 ```
 
-## Historical spatial baseline
+An ED-level result does not imply that every underlying quantity was independently observed at ED level in every year. The model therefore distinguishes reporting geography from the geographical resolution of the evidence used to support a variable.
 
-The Irish implementation reconstructs agriculture from 2015 to 2025 across 2,857 EDs represented in the harmonised agricultural dataset.
+## 2. Historical spatial baseline
 
-For cattle, the 2010 and published 2020 CSO Census of Agriculture ED distributions provide two fine-scale spatial anchors. Dairy cows, other/suckler cows and other cattle are reconstructed separately. For 2015-2019, each component's within-county ED share moves linearly from its 2010 share to its published 2020 share; the corresponding annual AAA10 county component control is then imposed exactly using pro-rata Hamilton allocation. The published 2020 ED values are retained unchanged. For 2021-2025, each component holds its published 2020 ED share while the annual AAA10 county control changes. A component published as zero in an ED in 2020 therefore remains zero there after 2020. Total cattle is derived as dairy cows + other cows + other cattle. Differences between the published 2020 ED sums and AAA10 are recorded as source differences only and are not spatially allocated. The intervening ED path is a reconstruction assumption, not an independently observed annual ED series.
+### 2.1 Cattle populations
 
-For sheep, the published 2020 ED total is likewise retained unchanged, including every published zero. For 2015-2019, each ED's within-county sheep share moves linearly from its 2010 share toward its published 2020 share. County weights within each AAA09 region are adjusted by the DAFM breeding-ewe share index and renormalised before the AAA09 regional total is imposed exactly. For 2021-2025, the published 2020 ED support pattern is held while the same DAFM county-direction index and AAA09 regional controls provide annual higher-level change. A sheep value published as zero in 2020 therefore remains zero after 2020. The 2020 difference between the published ED sum and AAA09 is recorded as a source difference only and is not seeded into EDs.
+Dairy cows, other/suckler cows and other cattle are reconstructed separately.
 
-The undivided ED \`OTHER_CATTLE\` total is then separated into the seven CSO age-sex groups under exact accounting constraints. AAA10 supplies the authoritative county age-sex composition. The A0 null applies that county composition uniformly across EDs. The production A1 prior uses the 2020 DAFM/AIM ED age profile only to shift the odds of under-one versus one-to-two-year cattle. The DAFM/AIM values are the arithmetic mean of the June and December 2020 stock observations, so they are interpreted as a two-snapshot approximation to the resident standing herd rather than as an exact point-in-time census or a continuous annual mean. DAFM under-one combines 0-3, 3-6 and 6-12 months; one-to-two combines 12-18 and 18-24 months. For ED \(e\) in county \(c\),
+For 2015-2019, the within-county ED share of each cattle component moves linearly from its 2010 census share to its published 2020 census share:
+
+\[
+s_{i,k,t}=(1-\lambda_t)s_{i,k,2010}+\lambda_t s_{i,k,2020},
+\qquad
+\lambda_t=\frac{t-2010}{10}.
+\]
+
+The corresponding annual AAA10 county component total is then imposed exactly using proportional allocation with Hamilton largest-remainder integerisation.
+
+The published 2020 ED values are retained unchanged. Differences between published 2020 ED sums and the annual higher-level control series are recorded as source differences and are not spatially reassigned.
+
+For 2021-2025, the published 2020 ED support and within-county share pattern are retained while the annual AAA10 county total changes. A cattle component published as zero in an ED in 2020 therefore remains zero there after 2020.
+
+Total cattle is derived as:
+
+\[
+T_{i,t}=D_{i,t}+S_{i,t}+O_{i,t}.
+\]
+
+The surrounding-year ED values are census-anchored reconstructions rather than independently observed annual ED populations.
+
+### 2.2 Cattle age-sex structure
+
+The fixed ED `OTHER_CATTLE` population is divided into breeding bulls and six male/female age groups covering under one year, one-to-two years and two years or older.
+
+AAA10 provides the authoritative county age-sex margins. The production prior uses the 2020 DAFM/AIM ED age profile only to shift the local odds of under-one versus one-to-two-year cattle relative to the county. Bulls, cattle aged two years or older and sex composition remain controlled by the county structure.
+
+For ED \(e\) in county \(c\):
 
 \[
 \operatorname{logit}(p_e)
 =
 \operatorname{logit}(p_c)
 +
-\left[\operatorname{logit}(q_e)-\operatorname{logit}(q_c)\right],
+[\operatorname{logit}(q_e)-\operatorname{logit}(q_c)].
 \]
 
-where \(p_c\) is the AAA10 under-one share of the combined under-one plus one-to-two county pool, and \(q_e\) and \(q_c\) are the corresponding DAFM ED and county shares. Probabilities are bounded by a fixed \(10^{-6}\) epsilon only to make logits finite. Bulls and cattle aged two years and over retain the county prior, and sex composition within the two adjusted young-age groups comes from the county AAA10 ratios. The prior is reconciled by iterative proportional fitting and exact integerisation so every ED \`OTHER_CATTLE\` row and every rescaled AAA10 county age-sex column closes exactly. DAFM rows aggregated as \`DED < 5 HERDS\` contribute to the county reference but are not assigned to individual EDs; unmatched EDs receive the county DAFM ratio, making their log-odds adjustment neutral.
+Iterative proportional fitting followed by exact integerisation reconciles the prior so that every ED age-sex row reproduces its fixed `OTHER_CATTLE` total and every county age-sex column reproduces its controlled margin.
 
-The resulting age-sex table is frozen before genetic disaggregation. Step 4 then separates each fixed age-sex container into DxD, DxB and BxB without moving cattle between EDs or changing any age-sex control. GOBLIN/COHORTS supplies the exact national age-sex-specific genetic margins. DAFM/AIM broad dairy/beef composition supplies a 2020 spatial prior. For a matched ED, the AIM dairy share is first placed on the fixed CSO total and the fixed CSO dairy-cow count is removed,
+### 2.3 Cattle biological cohorts
+
+GOBLIN-Spatial represents 21 cattle cohorts: adult dairy cows, suckler cows and breeding bulls plus 18 follower cohorts.
+
+Follower cohorts are defined by parental origin:
+
+- DxD: dairy dam × dairy sire;
+- DxB: dairy dam × beef sire;
+- BxB: beef dam × beef sire;
+
+and each origin is separated by sex and age class.
+
+The age-sex table is fixed before parental-origin subdivision. GOBLIN/COHORTS provides the national age-sex-specific DxD, DxB and BxB margins. DAFM/AIM dairy-versus-beef composition provides a local spatial signal, with county fallback where a usable ED signal is unavailable. Adult dairy and suckler populations provide soft biological evidence for the DxB/BxB split, but adult-cow absence is not used as a structural gate on follower cohorts.
+
+IPF and exact integerisation preserve both the fixed ED age-sex population and the national parental-origin margins. The resulting 21 cohorts therefore sum exactly to total cattle in every ED-year.
+
+A follower population may occur in an ED where the corresponding adult-parent population is absent locally. This represents spatial separation between adult-parent and follower geography; it is not interpreted as an observed animal movement, purchase or farm-to-farm origin.
+
+### 2.4 Sheep
+
+The published 2020 ED sheep population is retained unchanged, including published zeros.
+
+For 2015-2019, within-county ED shares move from the 2010 distribution toward the published 2020 distribution. DAFM breeding-ewe information modifies relative county weighting within each of the seven AAA09 regions, after which the official regional sheep total is imposed exactly.
+
+For 2021-2025, the published 2020 ED support pattern is retained while the DAFM county-direction index and AAA09 regional controls determine higher-level annual change. An ED published with zero sheep in 2020 remains zero after 2020.
+
+Sheep are subsequently divided into the 10 cohorts required by GOBLIN. DAFM county breed evidence informs broad lowland-type and mountain-type composition. All 10 cohorts reproduce total sheep exactly.
+
+## 3. Land, farm structure and Standard Output
+
+Livestock populations are combined with agricultural land and selected farm-structure variables on the same ED-year backbone.
+
+The land identity is:
 
 \[
-q_e = \frac{T_e\,(AIM\_DAIRY_e/AIM\_TOTAL_e)-D_e}{O_e},
-\]
-
-where \(T_e\), \(D_e\) and \(O_e\) are the fixed CSO total cattle, dairy cows and other cattle. This is a composition signal, not a new cattle count. If the local cross-source residual falls outside \((0,1)\), if the ED is unmatched, or if no usable denominator exists, the corresponding county signal is used instead. No value is forced to zero because of the absence of local adult cows.
-
-For age-sex container \(j\), the national GOBLIN DxD share remains the biological centre of the prior and the AIM signal supplies only the spatial log-odds shift,
-
-\[
-\operatorname{logit}(p^{DxD}_{e,j})
+AREA\_FARMED
 =
-\operatorname{logit}(p^{DxD}_{N,j})
+ALL\_GRASSLAND
 +
-\left[\operatorname{logit}(q_e)-\operatorname{logit}(q_N)\right].
+TOTAL\_CEREALS
++
+OTHER\_CROPS\_HA.
 \]
 
-The residual beef-type pool is divided between DxB and BxB using a soft combination of local biological production evidence and the national residual mix. Expected local DxB contribution is proportional to dairy cows and the relevant GOBLIN DxB coefficient; expected local BxB contribution is proportional to suckler cows and the relevant GOBLIN BxB coefficient. A national mixing component is added to both so that suckler-only, dairy-only and no-adult-cow EDs can all contain followers even where the corresponding adult cows are absent locally. This supplies biological composition support only; it does not assign movement or origin. Adult-cow absence is therefore never a structural genetics gate. Only an already-fixed zero age-sex cell is a structural zero. IPF and exact integerisation then restore every ED age-sex row and every national DxD/DxB/BxB margin exactly. The 2020 AIM spatial signature is held as the fine-scale type prior across 2015-2025, while reconstructed annual cow populations and the year-specific GOBLIN relationships supply the annual biological context.
+The 2020 ED state is retained and surrounding years follow the documented higher-level statistical controls. Reconciliation prevents negative components and preserves the land accounting identity.
 
-Other livestock, land and farm-structure variables continue to use their documented official higher-level controls and spatial anchors. The framework combines these sources through hierarchical reconciliation rather than treating every non-census ED value as independently observed.
+Standard Output is calculated only after livestock and land quantities are fixed. Fixed 2020 Integrated Farm Statistics coefficients are applied throughout 2015-2025. Standard Output is therefore a fixed-coefficient production-value exposure indicator, not farm income, profit, welfare or an economic-impact estimate.
 
-The baseline contains:
+## 4. Multiscale reporting
 
-- 21 biologically linked cattle cohorts;
-- 10 sheep cohorts;
-- grassland, cereals and other agricultural land;
-- selected farm-structure variables;
-- fixed-2020 Standard Output as a production-value exposure indicator.
+The ED is the base modelling geography. County, WFD catchment, GOBLIN-compatible catchment and national views are derived from the same ED state rather than reconstructed independently.
 
-For every ED-year:
+For an additive quantity \(X\):
 
-```text
-sum(21 cattle cohorts) = TOTAL_CATTLE
-sum(10 sheep cohorts) = TOTAL_SHEEP
-AREA_FARMED = ALL_GRASSLAND + TOTAL_CEREALS + OTHER_CROPS_HA
-```
+\[
+X_g=\sum_i w_{ig}X_i,
+\]
 
-## National pathway authority
+where \(w_{ig}\) is the ED-to-reporting-area weight. Complete EDs have unit weights for county aggregation. WFD catchment weights are derived from the frozen ED-catchment area intersection.
 
-For each selected scenario, GOBLIN remains authoritative for the quantities supplied in the scenario-control table. Scenario IDs are never mixed.
+Ratios are never averaged across EDs. Numerators and denominators are aggregated separately and the ratio is recalculated at the target geography.
 
-For a selected baseline, gross livestock-land release is:
+The WFD view is an environmental reporting geography. It does not imply exact within-ED locations of farms or livestock and it is not a water-quality impact model.
 
-```text
-Gross release
-    = baseline ALL_GRASSLAND
-      - pathway TARGET_LIVESTOCK_LAND_HA
-```
+## 5. Livestock signatures and parent-follower geography
 
-This national quantity is frozen before spatialisation.
+Livestock signatures describe agricultural organisation rather than livestock abundance alone. Implemented signature indicators include:
 
-The parent GOBLIN `Available` residual is not used as gross livestock-land release.
+- dairy share of adult cows;
+- DxD, DxB and BxB shares of followers;
+- followers per adult cow;
+- cattle per farmed hectare;
+- covered Standard Output per farmed hectare;
+- mountain-type share of sheep.
 
-## SC1: transition incidence
+Each ratio is retained with its underlying numerator and denominator so that higher-scale signatures can be recomputed correctly.
 
-SC1 answers:
+For each follower cohort, the model records the finest spatial scale at which the corresponding adult-parent relationship is supported:
 
-> Where does the nationally specified livestock transition fall, and where is the authoritative livestock-land release represented?
+- `LOCAL_ED`: corresponding parent cows are present in the same ED;
+- `COUNTY_RECEIVER`: followers are present locally, corresponding parent cows are absent locally, but occur elsewhere in the county;
+- `NATIONAL_ORPHAN`: final fallback where the corresponding parent population is absent from the county.
 
-The principal sequence is:
+These are relationship-support classes, not movement or trade classes.
 
-```text
-national adult livestock endpoint
-        ↓
-spatial incidence rule
-        ↓
-ED adult dairy/suckler state
-        ↓
-21-cohort cattle response + fixed sheep unless controlled otherwise
-        ↓
-production-value exposure
-        ↓
-pasture-DM transition signal
-        ↓
-authoritative national release spatialised to EDs
-```
+## 6. Descriptive information tests
 
-The principal incidence rules are `PRORATA`, `DAIRY_PROTECTION`, `ECONOMIC_CAPACITY_PROTECTION` and `SOCIAL_VULNERABILITY_PROTECTION`. They change the geography of adjustment but not the national pathway.
+The released historical baseline supports four descriptive analyses of the information added by biological structure.
 
-### SC1 land boundary
+1. **Spatial concentration:** livestock populations are compared with the agricultural-land share of the most livestock-dense EDs.
+2. **Matched ED contrasts:** within-county ED pairs with similar total cattle populations are compared on livestock signatures.
+3. **Stable-abundance restructuring:** changes in signatures are examined among EDs whose total cattle population changes comparatively little between 2015 and 2025.
+4. **Effective information geography:** a between-county variance measure identifies whether a signature varies mainly between counties or substantially among EDs within the same county.
 
-SC1 is deliberately independent of spatial soil, LPIS and future-use suitability evidence.
+These are descriptive diagnostics, not causal inference.
 
-The ED release vector is driven by the solved livestock/pasture-DM transition signal and bounded only by `ALL_GRASSLAND`:
+## 7. Evaluation and verification
 
-```text
-0 <= released_land[e] <= ALL_GRASSLAND[e]
-```
+Evaluation is separated according to the role of the evidence.
 
-and nationally:
+An independent coherence-audit module recomputes accounting, closure and aggregation identities from released outputs and raw inputs. This is verification rather than external validation.
 
-```text
-sum_e released_land[e] = authoritative GOBLIN gross release
-```
+DAFM sheep patterns and AIM cattle composition contribute to reconstruction, so comparisons back to those sources are treated as pattern-fidelity or information-retention diagnostics.
 
-If the primary livestock-pressure signal saturates local grassland capacity, remaining hectares are redistributed transparently across still-available livestock-bearing grassland. Fallback hectares are reported.
+Published 2020 ED livestock-unit information is used as a prespecified plausibility/model-selection screen for the cattle age prior and is not treated as held-out validation.
 
-### Independent pasture-DM diagnostic
+The withheld 2022 sheep-composition observation provides the strongest holdout comparison in the historical evaluation set, while the Achill North benchmark provides an applied external comparison of livestock, land and ED-to-catchment representation.
 
-The pasture-DM land balance is retained separately:
+## 8. Illustrative 30% spatial-attribution perturbation
 
-- `SIGNED_GRASSLAND_BALANCE_HA`;
-- `POTENTIAL_SPARED_GRASSLAND_HA`;
-- `ADDITIONAL_GRASSLAND_REQUIRED_HA`.
+The perturbation is applied to the frozen 2020 and 2025 baselines. It is an illustrative static endpoint experiment, not a forecast, scenario pathway, behavioural response, equilibrium model or MACC.
 
-These diagnostics are not rescaled to become the authoritative parent release.
+Two independent arms reduce adult dairy cows or adult suckler cows by 30%:
 
-## SC2: spatial response potential
+\[
+P'_i=0.7P_i.
+\]
 
-SC2 starts only after the SC1 livestock solution and released-land vector are frozen.
+Under the **signature-preserving representation**, linked followers remain in their reconstructed EDs and scale with the finest valid frozen parent relationship. Dairy changes are linked to DxD and DxB followers, and suckler changes to BxB followers.
 
-It uses two separate 2020 ED evidence layers:
+The **headcount attribution benchmark** instead applies the national follower-per-parent coefficient to the geography of adult-parent change:
 
-1. mapped physical soil and drainage classes;
-2. LPIS agricultural-use and management context.
+\[
+\Delta n^{H}_{i,k}=\bar r_k\Delta P_i.
+\]
 
-The seven physical categories are deep well drained, shallow well drained, poorly drained, poorly drained peaty, alluvium, peat and miscellaneous.
+Both representations impose the same national adult-parent reduction and the same national linked-follower reduction. They differ only in where that change is represented.
 
-Frozen release is proportionally characterised within each ED:
+For ED \(i\):
 
-```text
-released_soil[e,s]
-    = released_land[e] × mapped_soil_share[e,s]
-```
+\[
+d_i=\Delta_i^{S}-\Delta_i^{H},
+\]
 
-with the closure condition:
+and for nationally conserved quantities spatial displacement is:
 
-```text
-sum_s released_soil[e,s] = released_land[e]
-```
+\[
+D=\frac{1}{2}\sum_i|d_i|.
+\]
 
-This is a proportional ED-level resource characterisation. It is not a claim that the exact released parcels or their exact soil provenance are observed.
+Displacement is calculated at ED, county and WFD catchment scales. Additional diagnostics distinguish the component associated with follower populations located in EDs without corresponding local adult parents from heterogeneity in follower-per-parent ratios.
 
-LPIS remains separate context. The compact runtime does not contain a validated parcel-level soil × LPIS joint overlay and does not manufacture one through an independence assumption.
+The perturbation demonstrates the spatial information contributed by retaining biological livestock structure; it does not estimate realised behavioural or policy outcomes.
 
-### Eligibility and opportunity
+## 9. Interpretation boundary
 
-Future-use eligibility must be explicit, complete, versioned and evidence-backed. No default coefficients are inferred by the model.
+The historical model does not directly observe or predict individual animal movements, farm-to-farm trade, exact parcel-level livestock location, water-quality impacts, farmer behaviour, adoption, market equilibrium, household welfare or future scenario outcomes.
 
-Eligibility is distinct from opportunity. Opportunity may later rank eligible locations using defensible evidence, but no arbitrary composite opportunity score is applied by default.
-
-The controlling distinction is:
-
-```text
-Release
-    != Physical resource
-    != Eligibility
-    != Opportunity
-    != Allocation
-    != Adoption
-```
-
-## SC3: spatial transformability
-
-SC3 tests whether the future land-use requirements from the same GOBLIN pathway can jointly fit within finite eligible released land.
-
-The principal competing Stage-A uses are:
-
-- AD grass;
-- biorefinery grass;
-- willow;
-- additional tillage;
-- forest.
-
-For ED `e`, physical soil class `s` and use `u`:
-
-```text
-sum_u allocation[e,s,u] <= released_soil[e,s]
-```
-
-A hectare eligible for several uses remains one hectare.
-
-For every national use target:
-
-```text
-Realised_u + Unmet_u = Target_u
-```
-
-Unmet hectares are therefore a substantive spatial-feasibility result rather than software failure.
-
-The optimiser first minimises total unmet target. A secondary opportunity objective is used only when an explicit evidence-backed opportunity mapping is supplied.
-
-## Rewetting
-
-Rewetting is treated as a separate environmental/restoration requirement.
-
-```text
-Mapped peat
-    != drained agricultural organic soil
-    != rewettable capacity
-```
-
-A positive rewetting target therefore requires independently validated capacity evidence. Rewetting does not automatically increase productive diversification or alternative-income opportunity.
-
-## Post-SC3 spatial flexibility
-
-A single feasible linear-program solution is not interpreted as a uniquely necessary geography.
-
-The optional post-SC3 analysis holds the realised national hectares of each individual end use fixed and searches for alternative feasible spatial allocations under the same frozen resource and eligibility constraints.
-
-This can distinguish:
-
-- spatially necessary or persistent locations;
-- flexible or interchangeable locations.
-
-For selected ED-use questions, exact minimum and maximum feasible allocations can be calculated while preserving the same national outcome.
-
-## Interpretation
-
-GOBLIN-Spatial is a spatial foresight and transition-incidence framework. It does not predict individual farmer behaviour, parcel conversion, willingness to adopt, market prices, household welfare or the exact realised 2050 geography.
-
-Its principal use is to reveal where nationally coherent pathways generate robust exposure, constrained response space, feasible transformation and spatial flexibility before the future is known.
+Its purpose is to provide a transparent, constraint-preserving representation of agricultural abundance, biological composition and spatial organisation from which those questions can be investigated with additional models or evidence.
