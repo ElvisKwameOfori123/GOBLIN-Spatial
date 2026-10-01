@@ -1,174 +1,75 @@
 # Running GOBLIN-Spatial
 
-> **Current release: the 2015-2025 historical baseline.** Scenario modules (SC1-SC3) remain in the repository but are dormant and not part of the historical baseline release. `goblin-spatial study` defaults to `--through baseline`, and the guided runner offers the baseline only; scenario stages run only when requested explicitly (`--through sc1|sc2|sc3`, or `GOBLIN_SPATIAL_SCENARIOS=1` for the guided menu). The sections below document those stages for later use.
+GOBLIN-Spatial now has one active scientific scope in this repository: the **2015-2025 historical baseline, multiscale reporting/signatures, evaluation and illustrative perturbation**.
 
-GOBLIN-Spatial supports four explicit stopping points:
+Scenario-development code is preserved separately in `ElvisKwameOfori123/GOBLIN-Spatial-SC` and is not part of this runtime.
 
-```text
-Baseline
-SC1
-SC2
-SC3
-```
+## Install
 
-The staged interface is deliberate. A user can inspect or validate each scientific boundary before continuing downstream.
-
-## Guided interface
-
-Run:
+Python 3.10 or newer is required.
 
 ```bash
-goblin-spatial
+pip install -e ".[geo,reporting,query]"
 ```
 
-The interactive runner offers:
-
-```text
-1. Baseline only
-2. Through SC1
-3. Through SC2
-4. Full study through SC3
-```
-
-For scenario stages it then asks for an active national GOBLIN pathway and a spatial incidence rule. SC1 may use the 2020 or reconstructed 2025 livestock baseline. SC2 and SC3 use the validated 2020 spatial soil + LPIS context only.
-
-## Reproducible staged execution
-
-### Baseline only
-
-```bash
-goblin-spatial study --through baseline
-```
-
-### Through SC1
-
-```bash
-goblin-spatial study \
-  --through sc1 \
-  --scenario BE_SG \
-  --baseline-year 2020 \
-  --allocation-rule PRORATA
-```
-
-### Through SC2
-
-SC2 can be run as physical-resource + LPIS context without applying future-use eligibility:
-
-```bash
-goblin-spatial study \
-  --through sc2 \
-  --scenario BE_SG \
-  --baseline-year 2020 \
-  --allocation-rule PRORATA
-```
-
-An explicit eligibility-control file may also be supplied where a scientifically approved rule set exists.
-
-### Through SC3
-
-SC3 requires a complete, versioned, evidence-backed eligibility-control file. There is no default land-use suitability matrix.
-
-```bash
-goblin-spatial study \
-  --through sc3 \
-  --scenario BE_SG \
-  --baseline-year 2020 \
-  --allocation-rule PRORATA \
-  --colm-eligibility-rules path/to/validated_soil_eligibility.csv \
-  --rewetting-capacity path/to/validated_rewetting_capacity.csv
-```
-
-`--rewetting-capacity` is required only when the selected pathway has a positive rewetting target. Mapped peat is not accepted as a substitute for validated drained agricultural organic-soil capacity.
-
-The `--colm-eligibility-rules` flag retains the source-preparation name used by the internal control loader. The scientific object supplied by the file is a **soil/drainage-class eligibility rule set**.
-
-## Active pathways
-
-Active scenario IDs are read from:
-
-```text
-data/controls/scenario/GOBLIN_Scenario_Controls.csv
-```
-
-The current active pathways are:
-
-```text
-SI_SG
-BE_SG
-ALL_GAS_NZ
-```
-
-All quantities used in one run must come from the same scenario ID.
-
-## Spatial incidence rules
-
-The validated principal SC1 incidence rules are:
-
-```text
-PRORATA
-DAIRY_PROTECTION
-ECONOMIC_CAPACITY_PROTECTION
-SOCIAL_VULNERABILITY_PROTECTION
-```
-
-The default protection strength is `0.50`. It can be changed explicitly for sensitivity analysis with `--protection-strength`.
-
-## Repository verification
-
-Verify repository-contained inputs and checksums with:
+## Verify repository inputs
 
 ```bash
 goblin-spatial fetch-data --verify-only
 ```
 
-## Historical baseline build
+The command checks the repository-contained scientific inputs against `data_manifest.yaml` and downloads nothing.
 
-The historical baseline can also be built directly:
-
-```bash
-goblin-spatial build \
-  --config configs/ireland_2015_2025.yaml
-```
-
-This reconstructs the validated 2015-2025 panel and writes the Standard Output-enriched baseline used by SC1.
-
-## Low-level principal runner
-
-Advanced users who already have a validated baseline can call the principal runner directly:
+## Build only the core historical baseline
 
 ```bash
-goblin-spatial-principal BE_SG \
-  --baseline-year 2020 \
-  --allocation-rule PRORATA \
-  --stage SC2
+goblin-spatial build --config configs/ireland_2015_2025.yaml
 ```
 
-The high-level `goblin-spatial study` command is preferred for ordinary use because it rebuilds the validated baseline before continuing to the selected stage.
+This reconstructs the 2015-2025 ED panel through livestock cohorts, land/farm structure, fixed-2020 Standard Output and ED cohort signatures.
 
-## Output directories
+## Build the complete historical release
 
-By default, scenario results are written beneath:
+For the manuscript and query-ready release, use:
+
+```bash
+python scripts/build_historical_release.py
+```
+
+The script runs, in order:
+
+1. core historical baseline build;
+2. historical evaluation and cattle diagnostics;
+3. county, WFD catchment, GOBLIN-compatible catchment and national views;
+4. the independent coherence audit;
+5. the historical release bundle, including livestock signatures, parent-follower relationships and the illustrative perturbation.
+
+If any step fails, the build stops.
+
+The final release is written to:
 
 ```text
-data/processed/principal/<SCENARIO>_<BASELINE_YEAR>_<ALLOCATION_RULE>/
+reporting/report_data/historical/
 ```
 
-Typical stage outputs include:
+The directory contains CSV and Parquet tables plus `historical_results.sqlite` and `historical_results.duckdb`. See `docs/historical_outputs.md` for the table guide.
 
-```text
-sc1_ed_results.csv
-sc1_national_livestock_summary.csv
-sc1_national_metrics.csv
-sc1_county_summary.csv
-sc1_control_summary.csv
-sc1_goblin_reconciliation.csv
-sc2_ed_context.csv
-sc3_ed_results.csv
-sc3_national_summary.csv
+## Individual build steps
+
+These remain available for development and diagnosis:
+
+```bash
+python scripts/build_cattle_annual_panel.py
+python scripts/build_sheep_annual_panel.py
+python scripts/build_livestock_panels.py
+python scripts/run_historical_validation.py
+python scripts/run_cattle_code2_two_anchor_diagnostics.py
+python scripts/run_cattle_genetics_diagnostics.py
+python scripts/build_catchment_baseline.py
+python scripts/audit_historical_baseline.py
+python scripts/build_historical_results_bundle.py
 ```
-
-A custom output directory can be supplied with `--output-dir`.
 
 ## Reporting boundary
 
-The scientific engine stops at validated frozen outputs. Maps, charts, tables and publication figures are downstream reporting products and should read these files without recalculating SC1, SC2 or SC3 science.
+The historical ED baseline is the scientific authority. County, catchment and national views are derived from that common ED state. Livestock signatures and the illustrative perturbation are derived analytical products and do not rebuild or alter the baseline.
