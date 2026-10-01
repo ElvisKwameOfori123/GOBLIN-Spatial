@@ -18,8 +18,8 @@ Both come from the finished chains, unchanged:
 2020 ED totals are the published Census of Agriculture values; other years
 sum exactly to AAA10 county cattle and AAA09 regional sheep.
 
-The national GOBLIN/COHORTS calibration is a later, separate product
-(GOBLIN_31_Cohort_Calibrated_Annual_Panel_2015_2025, reserved in config).
+A separate national GOBLIN/COHORTS calibration derivative is not part of the
+historical baseline release.
 """
 
 from __future__ import annotations
@@ -260,7 +260,7 @@ README = [
     ("Upland / lowland", "Upland = mountain + mountain-cross breed type (DAFM): a breed/system proxy, not observed land location."),
     ("Provenance", "CATTLE_PROVENANCE and SHEEP_PROVENANCE say whether a row is the published 2020 census or a reconstructed year."),
     ("Historical context", "Production-pipeline exports also carry AREA_FARMED, ALL_GRASSLAND, TOTAL_CEREALS, OTHER_CROPS_HA, AGRICULTURAL_HOLDINGS, AVERAGE_SIZE_OF_HOLDINGS, AVERAGE_AGE_OF_HOLDER and MEDIAN_AGE_OF_HOLDER. No historical forestry variable is included."),
-    ("Not included", "National GOBLIN/COHORTS calibration (GOBLIN_31_Cohort_Calibrated_Annual_Panel_2015_2025, reserved) and Standard Output remain later, separate steps on the same YEAR x CSOED backbone."),
+    ("Not included", "A separate national GOBLIN/COHORTS calibration derivative is not part of the historical baseline release. Standard Output is added later on the same YEAR x CSOED backbone."),
     ("Checks", "Accounting checks run when the file was built. All must be TRUE."),
     ("Units", "Head of livestock (integers)."),
 ]
