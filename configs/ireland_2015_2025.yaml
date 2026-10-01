@@ -39,7 +39,7 @@ files:
   standard_output_mapping: data/inputs/baseline/08_IFS2020_Standard_Output_Mapping.xlsx
   standard_output_coefficients: data/controls/standard_output/IFS_SOC2020_IE_model_controls.csv
   # Reporting geometry only; it does not enter baseline reconstruction science.
-  ed_boundaries_frozen: data/inputs/spatial/SC2_ED_Boundaries_Frozen.gpkg
+  ed_boundaries_frozen: data/inputs/spatial/ED_Boundaries_Frozen.gpkg
 
 outputs:
   cattle_panel: data/interim/cattle_ed_2015_2025.csv
