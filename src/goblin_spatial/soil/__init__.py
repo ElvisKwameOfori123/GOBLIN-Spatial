@@ -1,9 +1,6 @@
-"""Neutral source-level spatial utilities.
+"""Legacy compatibility exports for historical ED geometry helpers.
 
-Production SC2 reads the frozen physical-soil control through
-``goblin_spatial.land.colm_lpis_context``. This package only exposes the shared
-Electoral Division key and geometry selection helpers used by optional spatial
-preprocessing utilities.
+New code should import from ``goblin_spatial.aggregation.spatial_keys``.
 """
 
 from .overlay import canonical_csoed, select_baseline_ed_geometries
