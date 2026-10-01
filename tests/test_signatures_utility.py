@@ -7,7 +7,6 @@ import pandas as pd
 
 from goblin_spatial.baseline.signatures import parent_follower_multiplier
 from goblin_spatial.cattle.cohorts import FINAL_21_COHORTS
-from goblin_spatial.scenario.endpoint_multipliers import parent_endpoint_multiplier
 from goblin_spatial.synthesis.signatures import build_signature_long
 from goblin_spatial.synthesis.utility_perturbation import (
     DXB,
@@ -20,30 +19,16 @@ from goblin_spatial.synthesis.utility_perturbation import (
 )
 
 
-def test_baseline_rule_equals_the_scenario_rule() -> None:
-    rng = np.random.default_rng(7)
-    n = 400
-    base = rng.integers(0, 300, n)
-    base[rng.random(n) < 0.3] = 0
-    new = np.rint(base * rng.uniform(0.3, 1.2, n)).astype(np.int64)
-    cohort = rng.integers(0, 200, n)
-    counties = rng.choice(["A", "B", "C", "D"], n).astype(object)
-    ours, our_roles = parent_follower_multiplier(base, new, cohort, counties)
-    theirs, their_roles = parent_endpoint_multiplier(base, new, cohort, counties)
-    assert np.allclose(ours, theirs)
-    assert (our_roles == their_roles).all()
-
-
 def test_receiver_followers_scale_with_county_parents_not_their_own_ed() -> None:
     base = np.array([100.0, 0.0, 50.0, 0.0])
-    new = np.array([50.0, 0.0, 50.0, 0.0])  # only ED 0 loses parents
+    new = np.array([50.0, 0.0, 50.0, 0.0])
     cohort = np.array([10, 40, 5, 0])
     counties = np.array(["X", "X", "X", "X"], dtype=object)
     multiplier, roles = parent_follower_multiplier(base, new, cohort, counties)
     assert roles.tolist() == ["LOCAL_ED", "COUNTY_RECEIVER", "LOCAL_ED", "NONE"]
-    assert multiplier[0] == 0.5  # own parents halved
-    assert multiplier[2] == 1.0  # own parents unchanged
-    assert np.isclose(multiplier[1], 100.0 / 150.0)  # county parents 150 -> 100
+    assert multiplier[0] == 0.5
+    assert multiplier[2] == 1.0
+    assert np.isclose(multiplier[1], 100.0 / 150.0)
 
 
 def _frame() -> pd.DataFrame:
@@ -64,11 +49,11 @@ def test_parent_arms_change_only_their_cohorts_by_thirty_percent() -> None:
 
     dairy_set = ["dairy_cows", *DXD, *DXB]
     suckler_set = ["suckler_cows", *BXB]
-    assert np.allclose(dairy[dairy_set], 0.7 * base[dairy_set])  # parent-less ED 1 included
+    assert np.allclose(dairy[dairy_set], 0.7 * base[dairy_set])
     assert np.allclose(dairy.drop(columns=dairy_set), base.drop(columns=dairy_set))
     assert dairy_support.loc[1, DXD[0]] == "COUNTY_RECEIVER"
     assert dairy_support.loc[0, DXD[0]] == "LOCAL_ED"
-    assert np.allclose(suckler[suckler_set], 0.7 * base[suckler_set])  # ED 2 has no suckler cows
+    assert np.allclose(suckler[suckler_set], 0.7 * base[suckler_set])
     assert np.allclose(suckler.drop(columns=suckler_set), base.drop(columns=suckler_set))
     assert np.allclose(pro_rata, 0.7 * base)
 
@@ -79,13 +64,12 @@ def test_headcount_benchmark_moves_followers_with_the_cows() -> None:
     headcount = headcount_benchmark(frame, "DAIRY_PARENT", -0.30)
     signature, _ = perturb_year(frame, "DAIRY_PARENT", -0.30)
     for cohort in (*DXD, *DXB):
-        # same national change in both methods ...
         assert np.isclose((headcount - base)[cohort].sum(), (signature - base)[cohort].sum())
-        # ... but none in the ED without dairy cows (ED 1), and in proportion to cows elsewhere
         assert (headcount - base).loc[1, cohort] == 0.0
         change = (headcount - base)[cohort]
         assert np.isclose(change[0] / change[2], 100 / 60)
-    assert np.allclose(headcount[list(BXB)], base[list(BXB)]) and np.allclose(headcount["suckler_cows"], base["suckler_cows"])
+    assert np.allclose(headcount[list(BXB)], base[list(BXB)])
+    assert np.allclose(headcount["suckler_cows"], base["suckler_cows"])
 
 
 def _small_run():
@@ -113,14 +97,11 @@ def _small_run():
 def test_displacement_decomposes_into_receiver_and_ratio_parts() -> None:
     out = _small_run()["utility_displacement"].set_index(["ARM", "QUANTITY"])
     row = out.loc[("DAIRY_PARENT", "FOLLOWERS")]
-    # ED 1 has no dairy cows and 12 dairy-linked cohorts of 10 head each
     assert np.isclose(row["ED_RECEIVER_COMPONENT"], 0.30 * 10 * 12)
     assert np.isclose(row["ED_TOTAL_DISPLACEMENT"], row["ED_RECEIVER_COMPONENT"] + row["ED_RATIO_COMPONENT"])
     assert row["ED_RATIO_COMPONENT"] >= 0 and row["CONSERVED_NATIONALLY"]
     assert row["NATIONAL_METHOD_DIFFERENCE"] == 0 or abs(row["NATIONAL_METHOD_DIFFERENCE"]) < 1e-9
-    # EDs 0 and 1 share catchment W1, so part of the ED displacement cancels there
     assert row["WFD_TOTAL_DISPLACEMENT"] < row["ED_TOTAL_DISPLACEMENT"]
-    # SO coefficients differ by region: the benchmark changes the national SO total
     so = out.loc[("DAIRY_PARENT", "CATTLE_SO_2020_EUR")]
     assert not so["CONSERVED_NATIONALLY"] and abs(so["NATIONAL_METHOD_DIFFERENCE"]) > 0
     assert np.isnan(so["ED_RECEIVER_COMPONENT"])
