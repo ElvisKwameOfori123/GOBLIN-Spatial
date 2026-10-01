@@ -1,15 +1,29 @@
 # GOBLIN-Spatial data dictionary
 
-This document describes the principal variables exposed by the historical baseline and the final SC1-SC3 scientific engine. It focuses on interpretation-safe quantities rather than every internal diagnostic column. A complete column-by-column dictionary (unit and meaning of every column in every public table) ships with the release bundle as the `_columns` table and `_columns.csv`; see `historical_outputs.md`.
+This document describes the principal variables exposed by the historical baseline, livestock signatures and illustrative perturbation. A complete column-by-column dictionary ships with the historical release bundle as `_columns` and `_columns.csv`.
 
 ## Core identifiers
 
 | Variable | Meaning |
 |---|---|
-| `YEAR` | Calendar year in the historical 2015-2025 panel |
-| `CSOED` | Harmonised Electoral Division identifier used by the model |
+| `YEAR` | Calendar year in the 2015-2025 historical panel |
+| `CSOED` | Harmonised Electoral Division identifier |
 | `ED` / `EDNAME` | Electoral Division source code/name fields where available |
 | `County` | County |
+
+## Historical livestock
+
+| Variable | Meaning |
+|---|---|
+| `DAIRY_COW` | Published/reconstructed dairy cows |
+| `OTHER_COW` | Published/reconstructed other cows, represented biologically as suckler cows |
+| `OTHER_CATTLE` | Other cattle before biological subdivision |
+| `TOTAL_CATTLE` | Total cattle |
+| `TOTAL_SHEEP` | Total sheep |
+
+The GOBLIN livestock representation contains 21 cattle cohorts and 10 sheep cohorts. These sum exactly to `TOTAL_CATTLE` and `TOTAL_SHEEP` respectively for every ED-year.
+
+The 21 cattle cohorts comprise adult dairy cows, suckler cows and bulls plus 18 follower cohorts defined by parental origin (DxD, DxB, BxB), sex and age.
 
 ## Farm structure
 
@@ -18,9 +32,9 @@ This document describes the principal variables exposed by the historical baseli
 | `AGRICULTURAL_HOLDINGS` | Number of agricultural holdings represented in the ED-year |
 | `AVERAGE_SIZE_OF_HOLDINGS` | Average holding size, hectares |
 | `AVERAGE_AGE_OF_HOLDER` | Mean holder age where reconstructed |
-| `MEDIAN_AGE_OF_HOLDER` | Median holder age |
+| `MEDIAN_AGE_OF_HOLDER` | Median holder age at ED scale |
 
-The 2020 ED values are the fixed local spatial anchor. Non-2020 values are reconstructed using official higher-level temporal controls.
+The 2020 ED values are the local spatial anchor. Non-2020 values are reconstructed using documented higher-level temporal controls.
 
 ## Historical land
 
@@ -37,159 +51,86 @@ Accounting identity:
 AREA_FARMED = ALL_GRASSLAND + TOTAL_CEREALS + OTHER_CROPS_HA
 ```
 
-## Historical livestock
-
-| Variable | Meaning |
-|---|---|
-| `DAIRY_COW` | Dairy cows |
-| `OTHER_COW` | Other/suckler cows |
-| `OTHER_CATTLE` | Other cattle |
-| `TOTAL_CATTLE` | Total cattle |
-| `TOTAL_SHEEP` | Total sheep |
-
-The GOBLIN livestock baseline contains 21 cattle cohorts and 10 sheep cohorts. These sum exactly to `TOTAL_CATTLE` and `TOTAL_SHEEP` respectively for every ED-year.
-
 ## Standard Output
 
-| Variable | Meaning |
-|---|---|
-| `SO_LIVESTOCK_2020_EUR` | Fixed-2020 livestock Standard Output associated with the represented ED livestock structure |
+The release contains livestock, crop and covered-total Standard Output components derived from fixed 2020 coefficients.
 
-Standard Output is used as a production-value exposure indicator. It is not profit, household income, welfare, compensation need or land value.
+Standard Output is interpreted as a **production-value exposure indicator**. It is not profit, household income, welfare, compensation need or land value.
 
-## SC1: transition incidence
+## Reporting geographies
 
-Important SC1 fields include:
+Principal geography identifiers include:
 
 | Variable | Meaning |
 |---|---|
-| `PATHWAY_NAME` | Selected GOBLIN scenario identifier |
-| `PATHWAY_BASELINE_YEAR` | Scenario starting baseline year |
-| `MILESTONE_YEAR` | Scenario endpoint/milestone year |
-| `PATHWAY_ALLOCATION_RULE` | Spatial incidence rule used for the run |
-| `SCENARIO_DAIRY_COW` | Scenario dairy cows allocated to the ED |
-| `SCENARIO_OTHER_COW` | Scenario other/suckler cows allocated to the ED |
-| `SCENARIO_TOTAL_CATTLE` | Scenario total cattle after cohort propagation |
-| `GOBLIN_RELEASED_GRASSLAND_HA` | Authoritative GOBLIN gross livestock-land release spatialised to the ED |
-| `GOBLIN_RELEASE_FALLBACK_HA` | Portion of ED release placed through the explicit capacity fallback, if any |
-| `SIGNED_GRASSLAND_BALANCE_HA` | Independent pasture-DM land-balance diagnostic |
-| `POTENTIAL_SPARED_GRASSLAND_HA` | Positive component of the independent pasture-DM diagnostic |
-| `ADDITIONAL_GRASSLAND_REQUIRED_HA` | Local additional grassland requirement from the independent diagnostic |
+| `WFD_CATCHMENT_ID` | Official WFD catchment identifier |
+| `WFD_CATCHMENT` | Official WFD catchment name |
+| `COLM_CATCHMENT` | 37-unit GOBLIN-compatible catchment name |
+| `GEOGRAPHY_TYPE` | Geography represented in signature tables, e.g. ED, county, WFD catchment or Ireland |
+| `GEOGRAPHY_ID` | Identifier for the represented geography |
+| `GEOGRAPHY_NAME` | Display name for the represented geography |
 
-`GOBLIN_RELEASED_GRASSLAND_HA` is the authoritative release quantity used downstream. The pasture-DM diagnostics are not rescaled to it.
+Additive quantities are summed. Ratios are recomputed from aggregated numerators and denominators.
 
-SC1 does not use mapped soil, LPIS or future-use suitability to determine the livestock solution or the ED released-land vector.
+## Livestock signatures
 
-## SC2: physical resource and eligibility
+Principal signature fields include:
 
-The frozen 2020 runtime contains seven mapped physical-soil/drainage categories:
+| Variable | Meaning |
+|---|---|
+| `DAIRY_SHARE_ADULT_PCT` | Dairy cows as a percentage of adult cows |
+| `DXD_SHARE_FOLLOWERS_PCT` | DxD followers as a percentage of all followers |
+| `DXB_SHARE_FOLLOWERS_PCT` | DxB followers as a percentage of all followers |
+| `BXB_SHARE_FOLLOWERS_PCT` | BxB followers as a percentage of all followers |
+| `FOLLOWER_TO_ADULT_RATIO` | Followers per adult cow |
+| `CATTLE_PER_FARMED_HA` | Total cattle per farmed hectare |
+| `SO_PER_FARMED_HA` | Covered fixed-2020 Standard Output per farmed hectare |
+| `UPLAND_SHARE_SHEEP_PCT` | Mountain/upland-type sheep share |
 
-```text
-DEEP_WELL_DRAINED
-SHALLOW_WELL_DRAINED
-POORLY_DRAINED
-POORLY_DRAINED_PEATY
-ALLUVIUM
-PEAT
-MISCELLANEOUS
-```
+The long signature table retains each ratio together with its numerator and denominator.
 
-Internal source-provenance fields may retain the `COLM_` prefix. Scientific interpretation should use the neutral concept **mapped physical soil/drainage class**.
+## Parent-follower relationship tables
 
-For every category, SC2 creates a released-resource quantity of the form:
+| Variable | Meaning |
+|---|---|
+| `COHORT` | Follower or linked cattle cohort |
+| `PARENT_POPULATION` | Biologically relevant adult-parent population |
+| `FOLLOWER_PER_PARENT` | Follower-to-parent relationship where defined |
+| `COHORT_SPATIAL_ROLE` | Finest spatial support class for the relationship |
 
-```text
-COLM_RELEASED_<CATEGORY>_HA
-```
+Support classes are:
 
-These sum to the frozen ED release:
+- `LOCAL_ED`: corresponding adult parents are present in the ED;
+- `COUNTY_RECEIVER`: followers occur locally but the corresponding adult-parent population is supported at county scale;
+- `NATIONAL_ORPHAN`: final national fallback.
 
-```text
-sum_s COLM_RELEASED_<s>_HA = GOBLIN_RELEASED_GRASSLAND_HA
-```
+These are biological relationship-support classes, not movement, trade or origin observations.
 
-Eligibility fields follow the internal form:
+## Illustrative perturbation
 
-```text
-COLM_DIRECT_<USE>_ELIGIBLE_HA
-```
+The 30% perturbation tables distinguish:
 
-for explicitly supplied future-use rules. These are eligible capacities, not realised conversions.
+- `ARM`: dairy-parent, suckler-parent or supplementary proportional reference;
+- `METHOD`: signature-preserving, headcount benchmark or uniform reference;
+- changes in cattle, followers, livestock units and cattle Standard Output;
+- signature-minus-headcount differences at ED and WFD catchment scales;
+- spatial displacement summaries.
 
-LPIS-derived SC2 fields are context descriptors, for example:
+Important displacement fields include:
 
-- grass coverage;
-- low-input grass share;
-- peat-grass context;
-- commonage context;
-- organic grass context;
-- other agricultural-use/management descriptors available in the frozen profile.
+| Variable | Meaning |
+|---|---|
+| `ED_TOTAL_DISPLACEMENT` | Half-sum spatial difference between signature and headcount representations at ED scale |
+| `WFD_TOTAL_DISPLACEMENT` | Corresponding WFD catchment displacement |
+| `ED_RECEIVER_COMPONENT` | Additive displacement associated with EDs without the corresponding local adult-parent population |
+| `ED_RATIO_COMPONENT` | Remaining additive ED displacement |
+| `ED_PURE_RATIO_DISPLACEMENT` | Separate diagnostic isolating heterogeneity among parent-bearing EDs |
+| `NATIONAL_METHOD_DIFFERENCE` | National difference between methods for quantities that are not nationally conserved, notably region-weighted Standard Output |
 
-LPIS does not change frozen SC1 release or the physical-soil partition.
+The additive ratio component and the pure-ratio diagnostic are not the same quantity.
 
-## SC3: spatial transformability
+The headcount method is an **attribution benchmark**, not a feasible alternative local herd state.
 
-SC3 allocates five principal competing Stage-A uses:
+## Interpretation boundary
 
-```text
-AD_GRASS
-BIOREFINERY_GRASS
-WILLOW
-ADDITIONAL_TILLAGE
-FOREST
-```
-
-The exact internal allocation-column names are generated by the SC3 allocator, but every run must preserve the following meanings:
-
-- allocated/realised hectares by use;
-- unmet national hectares by use;
-- residual released land;
-- finite shared-resource closure.
-
-For each national use:
-
-```text
-Realised_u + Unmet_u = Target_u
-```
-
-For each ED × physical-resource cell:
-
-```text
-sum_u Allocated[e,s,u] <= ReleasedResource[e,s]
-```
-
-A hectare can therefore be assigned to at most one competing use.
-
-## Rewetting
-
-Rewetting is a separate environmental/restoration requirement. Any SC3 rewetting allocation is constrained by an independently validated drained agricultural organic-soil capacity control.
-
-Mapped peat, LPIS peat context and rewettable capacity are not interchangeable quantities.
-
-Rewetting should not be interpreted automatically as productive diversification or alternative-income opportunity.
-
-## Post-SC3 spatial flexibility
-
-The flexibility module can hold realised national hectares of every use fixed while searching alternative feasible geographies.
-
-Its outputs can include:
-
-- reference ED-use allocation;
-- sampled minimum/maximum allocation;
-- sampled range and frequency;
-- exact minimum and maximum feasible allocation for selected ED-use pairs.
-
-A wide feasible range indicates spatial interchangeability. A positive lower bound indicates a more spatially necessary allocation under the same national outcome.
-
-## Interpretation sequence
-
-```text
-Release
-    != Physical resource
-    != Eligibility
-    != Opportunity
-    != Allocation
-    != Adoption
-```
-
-These terms must not be used interchangeably in analysis, figures or manuscript text.
+Historical outputs describe reconstructed agricultural populations, biological structure and spatial attribution. They do not directly observe animal movements, farm-to-farm trade, individual behaviour, exact within-ED livestock location, water-quality impacts or future scenario outcomes.
