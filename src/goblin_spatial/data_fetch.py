@@ -1,4 +1,4 @@
-"""Verify repository-contained GOBLIN-Spatial datasets."""
+"""Verify repository-contained GOBLIN-Spatial historical-baseline datasets."""
 
 from __future__ import annotations
 
@@ -63,7 +63,7 @@ def _verify_one(name: str, path: Path, expected_hash, *, git_tracked: bool):
     if not path.exists():
         return False, f"MISSING  {name}: {path}"
     if path.is_dir():
-        return (True, f"OK       {name}: {path} [Git-tracked directory]") if git_tracked and expected_hash is None else (False, f"NO FILE HASH {name}: directory requires its dedicated validator")
+        return (True, f"OK       {name}: {path} [Git-tracked directory]") if git_tracked and expected_hash is None else (False, f"NO FILE HASH {name}: directory entries must be declared individually")
     if expected_hash is None:
         return (True, f"OK       {name}: {path} [Git-tracked]") if git_tracked else (False, f"NO HASH  {name}: manifest has no checksum")
     algorithm, expected = expected_hash
@@ -73,32 +73,13 @@ def _verify_one(name: str, path: Path, expected_hash, *, git_tracked: bool):
     return True, f"OK       {name}: {path} [{algorithm}]"
 
 
-def _verify_runtime_context(name: str, path: Path, info: dict[str, Any]):
-    if name != "ed_land_context_2020":
-        return None
-    if not path.is_dir():
-        return False, f"INVALID  {name}: expected runtime context directory at {path}"
-    try:
-        from goblin_spatial.land.colm_lpis_context import read_colm_lpis_context
-        frame = read_colm_lpis_context(path, verify_sha256=True)
-    except Exception as exc:
-        return False, f"INVALID  {name}: {exc}"
-    expected_rows = int(info.get("expected_rows", len(frame)))
-    expected_columns = int(info.get("expected_columns", len(frame.columns)))
-    if len(frame) != expected_rows:
-        return False, f"BAD ROW COUNT {name}: expected {expected_rows}, got {len(frame)}"
-    if len(frame.columns) != expected_columns:
-        return False, f"BAD COLUMN COUNT {name}: expected {expected_columns}, got {len(frame.columns)}"
-    return True, f"OK       {name}: {path} [rows={len(frame):,}; columns={len(frame.columns)}]"
-
-
 def fetch_data(
     manifest_path: str | Path = "data_manifest.yaml",
     *,
     verify_only: bool = True,
     tracked_only: bool = True,
 ) -> dict[str, Path]:
-    """Verify all declared repository/local model inputs; never download data."""
+    """Verify all declared repository/local historical-baseline inputs; never download data."""
     del verify_only, tracked_only
     project_root, manifest = load_manifest(manifest_path)
     resolved: dict[str, Path] = {}
@@ -111,10 +92,7 @@ def fetch_data(
         path = _resolved_path(project_root, info)
         required = bool(info.get("required", True))
         git_tracked = bool(info.get("git_tracked", source == "git"))
-        result = _verify_runtime_context(name, path, info)
-        if result is None:
-            result = _verify_one(name, path, _known_hash(info), git_tracked=git_tracked)
-        ok, message = result
+        ok, message = _verify_one(name, path, _known_hash(info), git_tracked=git_tracked)
         print(message)
         if not ok:
             if required:
