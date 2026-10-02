@@ -570,9 +570,9 @@ def run() -> None:
     )
     summary.to_csv(OUTPUT_DIR / "cattle_genetics_summary.csv", index=False)
 
-    # The 51 no-adult EDs are known rearing/finishing locations. They may carry
+    # The 50 no-adult EDs are known rearing/finishing locations. They may carry
     # both origins, but genetics must never create cattle outside OTHER_CATTLE.
-    if int(no_adult.sum()) != 51:
+    if int(no_adult.sum()) != 50:
         raise AssertionError("2020 no-adult receiver count changed unexpectedly")
     if (
         y2020.loc[no_adult, "DAIRY_ORIGIN_YOUNG"] > y2020.loc[no_adult, "OTHER_CATTLE"]

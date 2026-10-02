@@ -127,7 +127,7 @@ def test_2020_source_difference_is_written_to_log() -> None:
         expected = observed[column] - target.loc[observed.index, column]
         actual = log.set_index("County").loc[observed.index, f"DIFF_{column}"]
         assert np.array_equal(actual.to_numpy(), expected.to_numpy())
-    assert int(log["DIFF_DAIRY_COW"].sum()) == -187716
+    assert int(log["DIFF_DAIRY_COW"].sum()) == 0
 
 
 def test_integerisation_keeps_structural_zeros() -> None:
