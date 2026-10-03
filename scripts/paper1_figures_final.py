@@ -65,14 +65,12 @@ def _canonical_ed(value: object) -> str:
 def _follower_cmap_norm():
     import matplotlib.colors as mcolors
 
-    # Six bounded classes plus one open-ended 4+ class.
     cmap = base.classed_cmap(base.C["follower"], len(FOLLOWER_COEF_BREAKS))
     norm = mcolors.BoundaryNorm(FOLLOWER_COEF_BREAKS, cmap.N, extend="max")
     return cmap, norm
 
 
 def select_case_pair(data: dict, restructuring: pd.DataFrame, derived: dict) -> dict:
-    """Choose a recurring pair using census-grounded contrasts only."""
     r = restructuring.set_index("KEY")
     e20 = derived["e20"].copy()
     e20["_KEY"] = e20["CSOED"].map(_canonical_ed)
@@ -176,7 +174,6 @@ def f3_signatures(derived, geo, pair, out, written):
     base.colorbar(fig, ax_a, cmap, norm, "Followers per adult cow",
                   extend="max", ticks=FOLLOWER_COEF_BREAKS)
 
-    # Mark the recurring case pair on the national map.
     case_geom = edgeo.loc[edgeo["_KEY"].isin([pair["KEY_A"], pair["KEY_B"]])].copy()
     for tag, key in (("A", pair["KEY_A"]), ("B", pair["KEY_B"])):
         g = case_geom.loc[case_geom["_KEY"] == key]
@@ -291,7 +288,6 @@ def catchment_spread(derived, geo):
 
 
 def _fill_polygon_holes(geom):
-    """Fill internal holes for display only; does not change model/catchment statistics."""
     from shapely.geometry import MultiPolygon, Polygon
 
     if geom is None or geom.is_empty:
@@ -537,7 +533,7 @@ def main() -> int:
         ),
         "case_catchment": CASE_CATCHMENT,
         "blackwater_spread": bw,
-        "follower_coefficient_classes": FOLLOWER_COEF_BREAKS + ["4+"],
+        "follower_coefficient_classes": "0-1, 1-1.5, 1.5-2, 2-2.5, 2.5-3, 3-4, 4+",
         "architecture": [
             "3.1 Table 2 validation",
             "3.2 F2+F4 history",
