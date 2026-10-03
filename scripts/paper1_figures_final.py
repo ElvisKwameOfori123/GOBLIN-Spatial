@@ -364,7 +364,8 @@ def main() -> int:
     data = base.load(root)
     geo = base.geometry(root, data["ed_year"])
     derived = base.derive(data)
-    model_keys = set(data["ed_year"]["CSOED"].map(_canonical_ed))
+    from goblin_spatial.preparation.census_suppression import canonical_key
+    model_keys = set(data["ed_year"]["CSOED"].map(canonical_key))
     p = base.observed_restructuring(root, data, model_keys)
     pair = select_case_pair(data, p, derived)
     written = []
