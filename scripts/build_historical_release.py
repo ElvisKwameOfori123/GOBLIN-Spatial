@@ -5,6 +5,9 @@
 
 Runs the same sequence as CI:
 
+0. Stage 00 census input check: the prepared 2010 and 2020 ED census inputs
+   must regenerate exactly from the raw AVA42 table
+   (scripts/prepare_census_inputs.py --check)
 1. core build: livestock (CSO 13, GOBLIN 31), land, farm structure,
    Standard Output, 2020 ED signatures
 2. historical validation and cattle diagnostics
@@ -30,10 +33,16 @@ ROOT = Path(__file__).resolve().parents[1]
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="configs/ireland_2015_2025.yaml")
+    parser.add_argument(
+        "--skip-stage00-check",
+        action="store_true",
+        help="build from census inputs that differ from Stage 00 (robustness variants only)",
+    )
     args = parser.parse_args()
     config = ["--config", args.config]
 
     steps = [
+        ("Stage 00 census input check", [sys.executable, "scripts/prepare_census_inputs.py", "--check"]),
         ("Core baseline build", [sys.executable, "-m", "goblin_spatial.cli", "build", *config]),
         ("Historical validation", [sys.executable, "scripts/run_historical_validation.py"]),
         ("Cattle two-anchor diagnostics", [sys.executable, "scripts/run_cattle_code2_two_anchor_diagnostics.py"]),
@@ -42,6 +51,8 @@ def main() -> int:
         ("Coherence audit", [sys.executable, "scripts/audit_historical_baseline.py", *config]),
         ("Release bundle", [sys.executable, "scripts/build_historical_results_bundle.py", *config]),
     ]
+    if args.skip_stage00_check:
+        steps = steps[1:]
     for number, (label, command) in enumerate(steps, start=1):
         print(f"\n[{number}/{len(steps)}] {label}", flush=True)
         start = time.time()

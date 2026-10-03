@@ -38,6 +38,7 @@ python scripts/build_historical_release.py
 
 The script runs, in order:
 
+0. Stage 00 check: the committed 2010 and 2020 census inputs must regenerate exactly from the raw AVA42 table (`scripts/prepare_census_inputs.py --check`);
 1. core historical baseline build;
 2. historical evaluation and cattle diagnostics;
 3. county, WFD catchment, GOBLIN-compatible catchment and national views;
@@ -59,6 +60,8 @@ The directory contains CSV and Parquet tables plus `historical_results.sqlite` a
 These remain available for development and diagnosis:
 
 ```bash
+python scripts/prepare_census_inputs.py
+python scripts/run_census_reconciliation_robustness.py
 python scripts/build_cattle_annual_panel.py
 python scripts/build_sheep_annual_panel.py
 python scripts/build_livestock_panels.py

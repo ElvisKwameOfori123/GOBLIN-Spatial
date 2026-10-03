@@ -98,9 +98,9 @@ Both remove the same national number of each follower cohort. Their difference i
 
 ## Reading the numbers correctly
 
-**2020 is the observed year.** 2020 ED values for cattle (dairy cows, other cows, other cattle, total), sheep, land and holdings are the published CSO Census of Agriculture 2020 values, unchanged. Every other year is reconstructed and sums exactly to an annual CSO control: AAA10 county cattle, AAA09 regional sheep, AQA06 regional land (all June). `PROVENANCE` (cattle) and `SHEEP_DATA_STATUS` (sheep) label every ED row; in the two livestock panels they are `CATTLE_PROVENANCE` and `SHEEP_PROVENANCE`.
+**2020 is the observed year.** 2020 ED values for cattle (dairy cows, other cows, other cattle, total), sheep, land and holdings are the CSO Census of Agriculture 2020 values. Published cells are unchanged; livestock cells withheld for confidentiality were filled before the model ran (Stage 00, `docs/methodology.md` section 2.0), and `data/inputs/baseline/census_reconciliation/filled_cells.csv` lists each with its prior source and measured error. Every other year is reconstructed and sums exactly to an annual CSO control: AAA10 county cattle, AAA09 regional sheep, AQA06 regional land (all June). `PROVENANCE` (cattle) and `SHEEP_DATA_STATUS` (sheep) label every ED row; in the two livestock panels they are `CATTLE_PROVENANCE` and `SHEEP_PROVENANCE`.
 
-**Treat 2020 as a source boundary.** The published 2020 ED sums differ from the annual higher-level controls: dairy cows are 187,716 head below AAA10 and sheep are 259,807 head below AAA09. The model records these as source differences without assigning a cause or spatially reallocating the gaps. Mark 2020 in time-series figures rather than smoothing it.
+**2020 and the annual controls.** Model-universe 2020 ED sums sit slightly below the annual controls: census animals in the 552 EDs outside the model universe are reported, not moved in (7,666 cattle, 1,293 dairy cows, 7,198 sheep), and AAA10 and AAA09 are rounded to 100 head. The remaining 2020 step in ED time series is therefore under 0.15% nationally. Before Stage 00 (release v1.1) suppressed cells were stored as zero and 2020 dairy cows sat 187,716 head below AAA10 and sheep 259,807 head below AAA09.
 
 **The 2021-2022 land dip is in the CSO data.** Area farmed falls about 3.9% in 2021-2022 and recovers in 2023 because the AQA06 June series does; the model follows each AQA06 regional index exactly.
 
@@ -161,7 +161,7 @@ county <- dbGetQuery(con, "SELECT * FROM county_year WHERE YEAR = 2025")
 `baseline_coherence_audit` re-derives, from the output files and the public inputs, that:
 
 - every ED product shares one YEAR x CSOED backbone (2,857 EDs x 11 years);
-- the 13 CSO groups add up, 2020 equals the published values, and other years equal AAA10 and AAA09;
+- the 13 CSO groups add up, 2020 equals the prepared census input and keeps every published AVA42 cell, and other years equal AAA10 and AAA09;
 - the 31 cohorts reproduce the CSO groups exactly;
 - later products change no earlier value;
 - land accounts close and follow AQA06;

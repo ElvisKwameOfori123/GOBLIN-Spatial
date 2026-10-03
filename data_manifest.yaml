@@ -1,24 +1,33 @@
 manifest_version: "2.0.0"
-release: "goblin-spatial-v1.1"
+release: "goblin-spatial-v1.2"
 status: "verified"
 
 datasets:
+  cso_ava42_ed_livestock_2000_2010_2020:
+    stage: "00"
+    module: [preparation]
+    description: "Raw CSO AVA42 Electoral Division livestock table (2000, 2010, 2020) as downloaded, with blank (suppressed) cells and State totals. Stage 00 input only; the model reads the prepared census files."
+    source: "git"
+    path: "data/inputs/baseline/00_CSO_AVA42_Livestock_ED_2000_2010_2020.csv"
+    sha256: "7a9dfc662d75eae39e430e16572b9468613c62298ba0894bf05a97589878a50e"
+    required: true
+
   cso_ed_agricultural_baseline_2010:
     stage: "01"
     module: [baseline, cattle]
-    description: "Model-ready rearrangement of CSO AVA42 2010 Electoral Division livestock geography; published blanks preserved; used as the earlier cattle spatial anchor."
+    description: "CSO 2010 Electoral Division livestock census prepared by Stage 00 (scripts/prepare_census_inputs.py): published AVA42 cells unchanged, suppressed cells filled to the exact 2010 State totals; used as the earlier cattle and sheep spatial anchor."
     source: "git"
     path: "data/inputs/baseline/CSO_ED2010.csv"
-    sha256: "973adba516b84c115563049e3de2be73f7fbc15efafcee56b08b311034c15661"
+    sha256: "52b871a38ae474ad21d8977a9a3f6667af1c255e98e996c51e22f269d6d4cb5a"
     required: true
 
   cso_ed_agricultural_baseline_2020:
     stage: "01"
     module: [baseline, cattle, sheep, land_farm_structure]
-    description: "2020 CSO Electoral Division agricultural baseline and spatial anchor."
+    description: "2020 CSO Electoral Division agricultural baseline and spatial anchor. Livestock columns prepared by Stage 00 (published AVA42 cells unchanged, suppressed cells filled to the exact 2020 State totals within AAA10/AAA09 rounding); all other columns as published."
     source: "git"
     path: "data/inputs/baseline/01_CSO_ED_Agricultural_Baseline_2020.csv"
-    sha256: "64f309b683ca2e574124b49135079d72bede544286e3477e9c3ae6dee17e791c"
+    sha256: "28bd40e0143fdf00ff83a61e5af9d566fc76fea2d59118dfd671c48256dbb426"
     required: true
 
   cso_aaa10_cattle_county_2015_2025:

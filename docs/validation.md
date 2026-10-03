@@ -18,7 +18,7 @@ sum(10 GOBLIN sheep cohorts) = TOTAL_SHEEP
 AREA_FARMED = ALL_GRASSLAND + TOTAL_CEREALS + OTHER_CROPS_HA
 ```
 
-Reconstructed cattle years must reproduce their annual county controls by component. Reconstructed sheep years must reproduce the corresponding seven-region controls. Published 2020 ED livestock values remain unchanged. County, WFD catchment, GOBLIN-compatible catchment and national views must reconcile to the common ED baseline for additive quantities.
+Reconstructed cattle years must reproduce their annual county controls by component. Reconstructed sheep years must reproduce the corresponding seven-region controls. Prepared 2020 ED livestock values (published AVA42 cells plus Stage 00 fills of suppressed cells) remain unchanged. County, WFD catchment, GOBLIN-compatible catchment and national views must reconcile to the common ED baseline for additive quantities.
 
 A separate coherence-audit module recomputes the accounting, closure and aggregation identities from released outputs and raw inputs. This is **verification**, not external validation.
 
@@ -50,7 +50,7 @@ data/processed/validation/historical/
 
 ### Cattle two-anchor reconstruction
 
-The 2010 and 2020 ED census distributions jointly inform 2015-2019 within-county shares, with annual AAA10 county totals imposed exactly. The published 2020 ED state is retained, and its support pattern is held for 2021-2025 while annual county totals change.
+The 2010 and 2020 ED census distributions jointly inform 2015-2019 within-county shares, with annual AAA10 county totals imposed exactly. The prepared 2020 ED state is retained, and its support pattern is held for 2021-2025 while annual county totals change.
 
 Protected checks include exact county closure, non-negativity, component accounting, valid within-county shares, bounded interpolation and preservation of the published 2020 support pattern after 2020.
 
