@@ -42,7 +42,7 @@ where
 - \(O_{it}\) is other cattle, and
 - \(T_{it}\) is total cattle.
 
-The 2020 Census of Agriculture provides the published ED anchor. Published ED values are retained as the spatial state for that year.
+The 2020 Census of Agriculture provides the ED anchor. Published ED values are retained as the spatial state for that year; cells withheld for confidentiality are filled beforehand to the exact census county totals (Stage 00, see `methodology.md` section 2.0).
 
 For 2015-2019, each cattle component is reconstructed separately. Within each county, the ED share of dairy cows, other cows and other cattle moves from its 2010 census distribution towards its published 2020 distribution:
 

@@ -134,15 +134,16 @@ def test_cattle_aim_hierarchical_genetic_prior() -> None:
         & y2020["OTHER_CATTLE"].gt(0)
     )
 
-    assert int(zero_dairy.sum()) == 523
-    assert int(no_adult_receiver.sum()) == 50
+    # Stage 00 fills suppressed census cells, so the only zero-dairy EDs are
+    # published CSO zeros, and no ED has other cattle without adult cows (the
+    # 50 such EDs of v1.1 were suppressed cells stored as zero).
+    assert int(zero_dairy.sum()) == 479
+    assert int(no_adult_receiver.sum()) == 0
 
     # No adult-cow category is a structural genetics gate.
+    assert int(y2020.loc[zero_dairy, dxd_columns].to_numpy().sum()) > 0
     assert int(y2020.loc[suckler_only, dxb_columns].to_numpy().sum()) > 0
     assert int(y2020.loc[dairy_only, bxb_columns].to_numpy().sum()) > 0
-    assert int(y2020.loc[no_adult_receiver, dxd_columns].to_numpy().sum()) > 0
-    assert int(y2020.loc[no_adult_receiver, dxb_columns].to_numpy().sum()) > 0
-    assert int(y2020.loc[no_adult_receiver, bxb_columns].to_numpy().sum()) > 0
 
     # The only hard support rule is the already-fixed age-sex row itself.
     for container, mapping in CONTAINERS.items():

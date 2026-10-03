@@ -4,7 +4,8 @@ Reads the finished output files and re-derives every accounting identity that
 links them, independently of the checks each stage runs on itself:
 
 A  one YEAR x CSOED backbone across every ED-year product
-B  CSO 13-group panel: identities, published 2020 values, AAA10 and AAA09 closure
+B  CSO 13-group panel: identities, prepared 2020 census values (every published
+   AVA42 cell kept, State totals exact), AAA10 and AAA09 closure
 C  GOBLIN 31-cohort panel: carries the CSO controls, closes to them exactly
 D  later products (master, Standard Output) add columns and change none
 E  land and holdings identities; regional land indices follow AQA06
@@ -27,6 +28,13 @@ from goblin_spatial.cattle.cohorts import CONTAINERS, FINAL_21_COHORTS
 from goblin_spatial.cattle.panel import _load_aaa10
 from goblin_spatial.config import SpatialConfig
 from goblin_spatial.export.livestock_panels import CSO_CATTLE_9, CSO_SHEEP_4
+from goblin_spatial.preparation.census_suppression import (
+    MODEL_COLUMNS,
+    canonical_key,
+    load_ava42,
+    load_census_county,
+    normalise_county,
+)
 from goblin_spatial.sheep.annual_panel import _load_workbook
 from goblin_spatial.sheep.cohorts import GOBLIN_SHEEP_10
 
@@ -122,7 +130,28 @@ def audit_historical_outputs(cfg: SpatialConfig) -> pd.DataFrame:
     y2020 = c13.loc[c13["YEAR"] == KNOWN_YEAR].set_index("CSOED")
     for column in PUBLISHED_2020:
         diff = float((y2020.loc[published.index, column].astype(float) - published[column].astype(float)).abs().max())
-        check("B", f"2020 {column} equals the published CSO ED value", diff == 0.0, f"max abs diff {diff:g}")
+        check("B", f"2020 {column} equals the prepared CSO 2020 ED input", diff == 0.0, f"max abs diff {diff:g}")
+    if "cso_ava42_ed_livestock" in cfg.files:
+        census, state = load_ava42(cfg.files["cso_ava42_ed_livestock"])
+        raw = census[KNOWN_YEAR]
+        keyed = published.copy()
+        keyed.index = [canonical_key(k) for k in keyed.index]
+        changed, closure = 0, []
+        for v, column in MODEL_COLUMNS.items():
+            cells = raw.loc[raw.index.isin(keyed.index) & raw[v].notna(), v]
+            changed += int((keyed.loc[cells.index, column].astype(float) != cells.astype(float)).sum())
+            outside = int(round(float(state.loc[KNOWN_YEAR, v]))) - int(keyed[column].sum())
+            closure.append(f"{column} outside model {outside:,}")
+        check("B", "2020 inputs keep every published AVA42 ED cell (Stage 00)", changed == 0,
+              f"{changed} published cells changed; " + "; ".join(closure))
+    if "cso_census_county_livestock" in cfg.files:
+        county_totals = load_census_county(cfg.files["cso_census_county_livestock"])[KNOWN_YEAR]
+        inside = y2020.groupby("County")[list(MODEL_COLUMNS.values())].sum()
+        inside.index = inside.index.map(normalise_county)
+        residual = county_totals.rename(columns=MODEL_COLUMNS) - inside.reindex(county_totals.index)
+        check("B", "2020 model-universe county sums do not exceed the census county totals (Stage 00)",
+              bool((residual >= 0).all().all()),
+              f"outside-model residual by variable: {residual.sum().astype(int).to_dict()}")
 
     aaa10 = _load_aaa10(cfg.files["cso_cattle_county"]).set_index(["Year", "County"])
     cattle = c13.groupby(["YEAR", "County"])[["DAIRY_COW", "OTHER_COW", "TOTAL_CATTLE"]].sum()
@@ -149,7 +178,8 @@ def audit_historical_outputs(cfg: SpatialConfig) -> pd.DataFrame:
         else:
             mismatches += int(int(value) != control)
     check("B", "non-2020 regional sheep equal AAA09", mismatches == 0,
-          f"{mismatches} region-year mismatches; 2020 AAA09 minus published ED sum {gap_2020:,} (recorded, not reconciled)")
+          f"{mismatches} region-year mismatches; 2020 AAA09 minus model-universe ED sum {gap_2020:,} "
+          "(suppressed-cell sheep outside the model universe and AAA09 rounding)")
 
     # C. GOBLIN 31 cohorts
     merged = g31.merge(c13, on=["YEAR", "CSOED"], suffixes=("", "__c13"))

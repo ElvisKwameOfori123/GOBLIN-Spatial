@@ -20,6 +20,35 @@ An ED-level result does not imply that every underlying quantity was independent
 
 ## 2. Historical spatial baseline
 
+### 2.0 Census input preparation (Stage 00)
+
+The CSO Census of Agriculture ED livestock table (AVA42; 2000, 2010, 2020) contains published values, published zeros and blank cells withheld for confidentiality. A blank cell is not a zero: zeros are published separately, and a blank cell holds a small number of holdings. The census also publishes exact county totals (2010 Final Results Tables 8A and 8B; 2020 Results Tables 4.2 and 4.4) that sum to the AVA42 State totals, so the number of animals in the blank cells of every county is known for each livestock type and census year:
+
+\[
+H_{c,v}=C_{c,v}-\sum_{i\in c,\ \mathrm{published}} y_{i,v}.
+\]
+
+Before the model runs, `scripts/prepare_census_inputs.py` fills the blank cells of the 2010 and 2020 censuses under fixed rules.
+
+1. Published values and published zeros are never changed.
+2. Census county totals, and therefore State totals, are reproduced exactly for total cattle, dairy cows, other cows and sheep in both years. No suppressed animal crosses a county boundary. The county table is checked before use: counties sum to the AVA42 State total, \(H_{c,v}\ge 0\), and \(H_{c,v}>0\) exactly where the county has blank cells; the 2020 county totals also lie within the 100-head rounding of AAA10 (cattle) and AAA09 (sheep regions).
+3. Fill order is total cattle, dairy cows, other cows, sheep. Other cattle is the residual \(O=T-D-S\) and is never negative. A filled total is never below the ED's published cows. Filled cows are capped at the 99th percentile of the cow share of cattle among published EDs with at least 200 cattle (0.540 in 2020, 0.497 in 2010); published cells are never capped. Where a county's exact hidden total cannot fit under the cap, the cap is relaxed in that county only, up to the ED's cattle, and the excess is recorded (other cows: 92 head in five counties in 2010 and Monaghan in 2020).
+4. Where a county has a single blank cell for a variable, that cell equals \(H_{c,v}\): it is identified exactly by the county margin, and no prior or shrinkage is involved (22 cells across both years, labelled `COUNTY_RESIDUAL`). Priors matter only where a county has two or more blank cells. There, the \(n\) blank cells share \(H_{c,v}\) in proportion to
+
+\[
+w_i=\lambda\frac{p_i}{\sum_j p_j}+(1-\lambda)\frac{1}{n},
+\]
+
+integerised by Hamilton largest remainder, where \(p_i\) is the ED prior: a count for total cattle and sheep, a share of the ED's total cattle for dairy and other cows.
+
+Priors come from fixed chains, using the first source available for each ED. For 2020: total cattle from the 2010 census, then the DAFM/AIM cattle count, then 2000; dairy cows from the 2010 share, then the AIM dairy-type share, the 2000 share and the AIM county share; other cows from an equal blend of the 2010 share and the AIM beef by 36+ month proxy (blend weights of 30-70% give practically identical test error), then 2010, AIM, 2000 and AIM county; sheep from 2010, then 2000. For 2010 the chains are the 2000 census, then the 2020 census, then the national share. AIM rows are matched to census EDs by county and name only where the match is one-to-one; an AIM name without a qualifier is not matched to census EDs that differ only by one ("Kilbarry" and "Kilbarry (Part Rural)"), so ambiguous names are discarded rather than guessed.
+
+The shrinkage weight \(\lambda\) is selected per variable and census year by a hidden-cell test. In every county, as many small published positive cells are hidden as the county has blank cells (at least two), drawn from the smallest third, sixth and tenth of published cells (40 draws each, fixed seed). Their known total is reallocated and scored by `DISPLACED_PCT`, the share of hidden animals placed in the wrong ED, \(\tfrac12\sum|\hat{y}-y|/\sum y\). Hiding at least two cells per county mirrors the only situation in which allocation is uncertain. \(\lambda\) is the grid value in \(\{0, 0.25, 0.5, 0.75, 1\}\) with the lowest mean error. Selected values are 0.5 (total cattle), 0.25 (dairy cows), 0.5 (other cows) and 0 (sheep) for 2020, and 0.5, 0.25, 0.5 and 0.25 for 2010. Shrinkage lowers the 2020 test error from 15.8% to 8.8% for dairy cows, 13.9% to 10.8% for other cows, 11.0% to 9.4% for total cattle and 29.8% to 13.5% for sheep; rank agreement with the hidden values rises for all three cattle variables. Blank cells lie below the publication threshold, so their values fall in a narrow range: ED evidence carries rank information but overstates their spread.
+
+Each filled cell records its prior source, \(\lambda\), `TEST_ERROR_PCT` and whether it exceeds the cow cap. `TEST_ERROR_PCT` is the weighted absolute error \(\sum|\hat{y}-y|/\sum y\) of hidden test cells that used the same source at the selected \(\lambda\). It is not halved, so it is not a misplaced share and is not comparable with `DISPLACED_PCT`. `CONFIDENCE_CLASS` only summarises it (EXACT for identified cells, HIGH up to 25%, MODERATE up to 50%, LOW above).
+
+All 3,409 census EDs are reconciled. Animals in the 552 EDs outside the 2,857-ED model universe are reported by county and WFD catchment and are not moved into model EDs (2020: 8,744 cattle including 1,723 dairy and 791 other cows, 0.12% of the State; 4,518 sheep, 0.08%). The audit tables are in `data/inputs/baseline/census_reconciliation/`.
+
 ### 2.1 Cattle populations
 
 Dairy cows, other/suckler cows and other cattle are reconstructed separately.
@@ -34,7 +63,7 @@ s_{i,k,t}=(1-\lambda_t)s_{i,k,2010}+\lambda_t s_{i,k,2020},
 
 The corresponding annual AAA10 county component total is then imposed exactly using proportional allocation with Hamilton largest-remainder integerisation.
 
-The published 2020 ED values are retained unchanged. Differences between published 2020 ED sums and the annual higher-level control series are recorded as source differences and are not spatially reassigned.
+The prepared 2020 ED values (Section 2.0) are retained unchanged. Model-universe 2020 ED sums sit slightly below the AAA10 county controls because census animals in EDs outside the model universe are not moved into it and AAA10 is the census rounded to 100 head; these differences are recorded and not spatially reassigned.
 
 For 2021-2025, the published 2020 ED support and within-county share pattern are retained while the annual AAA10 county total changes. A cattle component published as zero in an ED in 2020 therefore remains zero there after 2020.
 
@@ -84,7 +113,7 @@ A follower population may occur in an ED where the corresponding adult-parent po
 
 ### 2.4 Sheep
 
-The published 2020 ED sheep population is retained unchanged, including published zeros.
+The prepared 2020 ED sheep population (published values and zeros, plus filled suppressed cells; Section 2.0) is retained unchanged.
 
 For 2015-2019, within-county ED shares move from the 2010 distribution toward the published 2020 distribution. DAFM breeding-ewe information modifies relative county weighting within each of the seven AAA09 regions, after which the official regional sheep total is imposed exactly.
 

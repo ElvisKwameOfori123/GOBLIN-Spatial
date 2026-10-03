@@ -56,7 +56,7 @@ livestock signatures and evaluation
 illustrative perturbation
 ```
 
-Published 2020 ED livestock values are retained as published. Surrounding years are census-anchored reconstructions under the authoritative annual controls. Supporting administrative data inform composition without replacing those controlling quantities.
+Published 2020 ED livestock values are retained as published; cells the CSO withheld for confidentiality are filled before the model runs (Stage 00, `scripts/prepare_census_inputs.py`) so that the census county and State totals hold exactly. Surrounding years are census-anchored reconstructions under the authoritative annual controls. Supporting administrative data inform composition without replacing those controlling quantities.
 
 All biological subdivisions preserve the population from which they are derived.
 
@@ -111,6 +111,13 @@ Verify the repository-contained inputs:
 
 ```bash
 goblin-spatial fetch-data --verify-only
+```
+
+The prepared 2010 and 2020 census inputs are committed. To regenerate them from the raw CSO AVA42 table (Stage 00), or to confirm they regenerate exactly:
+
+```bash
+python scripts/prepare_census_inputs.py          # rewrite prepared census inputs and audit tables
+python scripts/prepare_census_inputs.py --check  # verify only (first step of the release build)
 ```
 
 Build the complete historical release:

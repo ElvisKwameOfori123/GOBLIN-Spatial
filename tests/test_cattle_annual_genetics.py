@@ -114,6 +114,8 @@ def test_g1_receiver_movement_is_retained_on_new_chain() -> None:
 
     # Regression anchors from the revised annual + age-sex chain, with the 2020
     # national genetic margins on the AAA10 cow denominator (v1.1 panel
-    # denominator gave 0.261 and 0.249).
-    assert np.isclose(dxd_zero_dairy_share, 0.0305, atol=0.003)
-    assert np.isclose(dxb_suckler_only_share, 0.0441, atol=0.003)
+    # denominator gave 0.261 and 0.249). Stage 00 census preparation lowered
+    # the zero-dairy DxD share from 0.0305 because suppressed dairy cells are
+    # no longer stored as zero.
+    assert np.isclose(dxd_zero_dairy_share, 0.0197, atol=0.003)
+    assert np.isclose(dxb_suckler_only_share, 0.0443, atol=0.003)

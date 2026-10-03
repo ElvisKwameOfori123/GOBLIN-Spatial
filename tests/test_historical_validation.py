@@ -57,7 +57,18 @@ def test_achill_benchmark_matches_repository_2020_anchor():
 
     # Both sources ultimately use the 2020 Census of Agriculture, so this is
     # a reproducibility/application check rather than independent validation.
-    assert float(diagnostics.loc[diagnostics["VARIABLE"].ne("DAIRY_COW"), "ERROR"].abs().max()) == 0.0
+    # Every published census cell matches exactly; the only differences are
+    # suppressed cells, which the report records as zero and Stage 00 fills.
+    filled = pd.read_csv("data/inputs/baseline/census_reconciliation/filled_cells.csv", dtype={"KEY": str})
+    filled = filled.loc[filled["YEAR"].eq(2020)]
+    reconstructed = set(zip(filled["KEY"], filled["VARIABLE"]))
+    names = pd.read_csv("data/validation/external/achill_north/ED_Name_Crosswalk.csv", dtype=str)
+    code = dict(zip(names.iloc[:, 0], names.iloc[:, 2]))
+    differs = diagnostics.loc[diagnostics["ERROR"].ne(0)]
+    assert len(differs) > 0
+    for _, row in differs.iterrows():
+        assert (str(int(code[row["Electoral Division"]])), row["VARIABLE"]) in reconstructed
+        assert row["BENCHMARK_VALUE"] == 0
 
     explicit = spatial.dropna(subset=["Overlap fraction"]).copy()
     assert len(explicit) >= 15

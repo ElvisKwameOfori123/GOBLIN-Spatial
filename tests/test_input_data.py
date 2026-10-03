@@ -19,6 +19,8 @@ def _config():
 def test_config_uses_only_canonical_baseline_package() -> None:
     cfg = _config()
     expected = {
+        "cso_ava42_ed_livestock": "data/inputs/baseline/00_CSO_AVA42_Livestock_ED_2000_2010_2020.csv",
+        "cso_census_county_livestock": "data/inputs/baseline/00_CSO_Census_County_Livestock_2010_2020.csv",
         "cso_ed_2010": "data/inputs/baseline/CSO_ED2010.csv",
         "cso_ed_2020": "data/inputs/baseline/01_CSO_ED_Agricultural_Baseline_2020.csv",
         "cso_cattle_county": "data/inputs/baseline/01_CSO_AAA10_Cattle_County_2015_2025.csv",
@@ -80,11 +82,16 @@ def test_cso_ed_2010_contract_and_2020_frame_mapping() -> None:
     assert len(matched) == 2857
     assert matched["CSOED"].notna().all()
 
+    # Prepared by Stage 00 (scripts/prepare_census_inputs.py): the raw AVA42
+    # model-universe cells were blank/zero/positive = 956/487/1414 (dairy),
+    # 50/4/2803 (other cows) and 29/2/2826 (total cattle). Blank cells are now
+    # filled; six other-cow cells are filled with zero (the county's exact
+    # hidden total is placed in its other blank cells under the cow cap).
     expected_counts = {
-        "DAIRY_COW": {"blank": 956, "zero": 487, "positive": 1414},
-        "OTHER_COW": {"blank": 50, "zero": 4, "positive": 2803},
-        "OTHER_CATTLE": {"blank": 980, "zero": 2, "positive": 1875},
-        "TOTAL_CATTLE": {"blank": 29, "zero": 2, "positive": 2826},
+        "DAIRY_COW": {"blank": 0, "zero": 487, "positive": 2370},
+        "OTHER_COW": {"blank": 0, "zero": 10, "positive": 2847},
+        "OTHER_CATTLE": {"blank": 0, "zero": 2, "positive": 2855},
+        "TOTAL_CATTLE": {"blank": 0, "zero": 2, "positive": 2855},
     }
     for column, expected in expected_counts.items():
         values = matched[column].astype(str).str.strip()

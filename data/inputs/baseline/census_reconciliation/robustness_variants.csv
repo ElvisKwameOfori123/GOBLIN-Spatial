@@ -1,0 +1,37 @@
+GROUP,METRIC,A_DAIRY_ONLY,B_JOINT,C_AIM_FIRST,RANGE_MIN,RANGE_MAX,MAX_ABS_DIFF_FROM_B
+coherence audit,failed checks,1.0,0.0,0.0,0.0,1.0,1.0
+utility displacement,DAIRY_PARENT 2020 ED displacement % of national change,19.3457,19.485,19.4245,19.3457,19.485,0.1394
+utility displacement,DAIRY_PARENT 2020 WFD displacement % of national change,12.1953,12.2788,12.2748,12.1953,12.2788,0.0835
+utility displacement,DAIRY_PARENT 2020 receiver share of ED displacement %,21.052,16.736,16.7802,16.736,21.052,4.316
+utility displacement,DAIRY_PARENT 2020 parentless EDs with followers,503.0,478.0,478.0,478.0,503.0,25.0
+utility displacement,SUCKLER_PARENT 2020 ED displacement % of national change,16.0234,16.0111,16.0331,16.0111,16.0331,0.022
+utility displacement,SUCKLER_PARENT 2020 WFD displacement % of national change,9.4232,9.7282,9.7205,9.4232,9.7282,0.3049
+utility displacement,SUCKLER_PARENT 2020 receiver share of ED displacement %,4.3687,0.1256,0.1319,0.1256,4.3687,4.2431
+utility displacement,SUCKLER_PARENT 2020 parentless EDs with followers,62.0,11.0,12.0,11.0,62.0,51.0
+utility displacement,DAIRY_PARENT 2025 ED displacement % of national change,20.232,20.3145,20.2593,20.232,20.3145,0.0825
+utility displacement,DAIRY_PARENT 2025 WFD displacement % of national change,13.1626,13.1714,13.1772,13.1626,13.1772,0.0088
+utility displacement,DAIRY_PARENT 2025 receiver share of ED displacement %,21.6029,17.6165,17.6494,17.6165,21.6029,3.9864
+utility displacement,DAIRY_PARENT 2025 parentless EDs with followers,503.0,478.0,478.0,478.0,503.0,25.0
+utility displacement,SUCKLER_PARENT 2025 ED displacement % of national change,15.9601,15.9362,15.9626,15.9362,15.9626,0.0264
+utility displacement,SUCKLER_PARENT 2025 WFD displacement % of national change,9.441,9.8348,9.8247,9.441,9.8348,0.3937
+utility displacement,SUCKLER_PARENT 2025 receiver share of ED displacement %,4.1454,0.1135,0.1173,0.1135,4.1454,4.0319
+utility displacement,SUCKLER_PARENT 2025 parentless EDs with followers,62.0,11.0,12.0,11.0,62.0,51.0
+concentration 2020,top-decile ED share of TOTAL_CATTLE %,16.7515,16.7433,16.7437,16.7433,16.7515,0.0082
+concentration 2020,top-decile ED share of DAIRY_COWS %,29.9853,29.7623,29.7955,29.7623,29.9853,0.223
+concentration 2020,top-decile ED share of SUCKLER_COWS %,17.4505,17.3251,17.326,17.3251,17.4505,0.1254
+concentration 2020,top-decile ED share of FOLLOWERS %,16.2494,16.6224,16.6207,16.2494,16.6224,0.373
+concentration 2020,top-decile ED share of TOTAL_SHEEP %,36.5484,34.8101,34.8101,34.8101,36.5484,1.7384
+matched pairs 2020,number of pairs,26.0,26.0,26.0,26.0,26.0,0.0
+matched pairs 2020,median dairy-share gap pp,42.2738,36.4097,36.236,36.236,42.2738,5.8641
+between-county share R_B 2020,DAIRY_SHARE_ADULT_PCT,0.5856,0.5929,0.593,0.5856,0.593,0.0073
+between-county share R_B 2020,DXD_SHARE_FOLLOWERS_PCT,0.46,0.4616,0.4627,0.46,0.4627,0.0017
+between-county share R_B 2020,DXB_SHARE_FOLLOWERS_PCT,0.219,0.2188,0.2183,0.2183,0.219,0.0005
+between-county share R_B 2020,BXB_SHARE_FOLLOWERS_PCT,0.6113,0.6311,0.6315,0.6113,0.6315,0.0198
+between-county share R_B 2020,FOLLOWER_TO_ADULT_RATIO,0.2337,0.1765,0.1722,0.1722,0.2337,0.0572
+between-county share R_B 2020,CATTLE_PER_FARMED_HA,0.4499,0.4586,0.4592,0.4499,0.4592,0.0087
+between-county share R_B 2020,SO_PER_FARMED_HA,0.4993,0.5273,0.5275,0.4993,0.5275,0.0279
+between-county share R_B 2020,UPLAND_SHARE_SHEEP_PCT,1.0,0.9999,0.9999,0.9999,1.0,0.0001
+parent-follower 2020,BxB local-ED share %,99.3,99.9799,99.9788,99.3,99.9799,0.6799
+parent-follower 2020,DxB local-ED share %,94.9995,95.5661,95.572,94.9995,95.572,0.5667
+parent-follower 2020,DxD local-ED share %,96.9474,98.0283,98.0251,96.9474,98.0283,1.0809
+parent-follower 2020,bulls local-ED share %,99.3812,100.0,100.0,99.3812,100.0,0.6188
