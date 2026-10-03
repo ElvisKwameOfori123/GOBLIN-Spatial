@@ -94,11 +94,11 @@ def test_2020_source_difference_is_logged_only() -> None:
     assert len(audit) == 7
     observed = panel.loc[panel["YEAR"] == KNOWN_YEAR].groupby("Region")["TOTAL_SHEEP"].sum()
     assert (audit.loc[observed.index, "ED_PUBLISHED_TOTAL"] == observed).all()
-    # Model-universe sheep (census State total 5,520,208 less 7,198 sheep
+    # Model-universe sheep (census State total 5,520,208 less 4,518 sheep
     # filled into suppressed cells outside the model universe) minus the
     # AAA09 rounded regional sum (5,520,200). Before Stage 00 the gap was
     # -259,807 because suppressed sheep cells were stored as zero.
-    assert int(audit["DIFFERENCE"].sum()) == -7190
+    assert int(audit["DIFFERENCE"].sum()) == -4510
     assert "REFERENCE_SEED" not in log.columns
     assert "SEED_REFERENCE" not in log.columns
 

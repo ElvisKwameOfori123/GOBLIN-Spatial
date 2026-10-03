@@ -87,14 +87,36 @@ def test_every_filled_cell_carries_source_and_measured_error() -> None:
     assert set(cells["SHRINKAGE_LAMBDA"]) <= set(cs.SHRINKAGE_GRID)
 
 
-def test_county_controls_hold_within_rounding_except_recorded_cap_spill() -> None:
-    units = pd.read_csv(AUDIT / "unit_closure.csv")
-    y2020 = units.loc[units["YEAR"].eq(2020)]
-    over = y2020.loc[y2020["DEVIATION_FROM_CONTROL"].abs() > cs.ROUNDING_TOLERANCE_HEAD]
-    # A unit may leave its rounding window only by passing animals it cannot
-    # hold under the cow cap to other units.
-    assert (over["PASSED_OUT_UNDER_CAP"] > 0).all()
-    assert int(y2020["PASSED_OUT_UNDER_CAP"].sum()) == int(y2020["RECEIVED_UNDER_CAP"].sum())
+def test_census_county_totals_are_exact_in_both_years() -> None:
+    counties = cs.load_census_county(PATHS.census_county)
+    census, _ = _raw()
+    # 2010 file holds the full census universe: county sums equal the census.
+    prepared = _prepared(2010)
+    county = census[2010]["COUNTY"].reindex(prepared.index)
+    for v, column in cs.MODEL_COLUMNS.items():
+        sums = pd.to_numeric(prepared[column]).groupby(county).sum()
+        assert sums.reindex(counties[2010].index).eq(counties[2010][v]).all(), column
+    # Both years, including EDs outside the model universe, via the audit.
+    closure = pd.read_csv(AUDIT / "county_closure.csv")
+    assert (closure["PUBLISHED_SUM"] + closure["FILLED"]).eq(closure["CENSUS_COUNTY_TOTAL"]).all()
+    assert closure["FILLED"].eq(closure["HIDDEN_TOTAL"]).all()
+
+
+def test_census_county_table_agrees_with_annual_controls() -> None:
+    checks = pd.read_csv(AUDIT / "county_control_checks.csv")
+    gaps = checks["CENSUS_MINUS_CONTROL"].dropna().abs()
+    assert len(gaps) == 3 * 26 + 7
+    assert gaps.max() <= 50
+
+
+def test_cow_cap_is_exceeded_only_where_recorded() -> None:
+    closure = pd.read_csv(AUDIT / "county_closure.csv")
+    cells = pd.read_csv(AUDIT / "filled_cells.csv")
+    assert int(closure["FILLED_ABOVE_COW_CAP"].sum()) > 0
+    flagged = cells.loc[cells["ABOVE_COW_CAP"]]
+    assert set(flagged["VARIABLE"]) <= {"DAIRY_COW", "OTHER_COW"}
+    over = closure.loc[closure["FILLED_ABOVE_COW_CAP"] > 0, ["YEAR", "COUNTY"]]
+    assert set(zip(flagged["YEAR"], flagged["COUNTY"])) <= set(zip(over["YEAR"], over["COUNTY"]))
 
 
 def test_shrinkage_is_selected_by_the_hidden_cell_test() -> None:
@@ -117,14 +139,15 @@ def test_capped_hamilton_respects_capacity_and_total() -> None:
     assert left == 3 and alloc.tolist() == [2, 2]
 
 
-def test_unit_targets_close_national_total_within_tolerance() -> None:
-    published = pd.Series({"A": 1000, "B": 2000})
-    controls = pd.Series({"A": 1100, "B": 2100})
-    plan = cs.unit_targets(published, {"A", "B"}, controls, hidden_national=230)
-    assert int(plan["TARGET"].sum()) == 230
-    assert (plan["TARGET"] - plan["ROUNDED_GAP"]).abs().max() <= cs.ROUNDING_TOLERANCE_HEAD
-    with pytest.raises(AssertionError):
-        cs.unit_targets(published, {"A", "B"}, controls, hidden_national=400)
+def test_aim_matching_discards_ambiguous_names() -> None:
+    census, _ = _raw()
+    local, _ = cs.load_aim(PATHS.aim)
+    matched = cs.match_aim(census[2020], local)
+    # 'Kilbarry' and 'Kilbarry (Part Rural)' share an unqualified AIM name;
+    # 'Cootehill Rural' and 'Cootehill Urban' likewise.
+    for key in ("24020", "25074", "32050", "32051"):
+        assert matched.at[key, "AIM_MATCH"] == "NONE"
+    assert not matched.index.duplicated().any()
 
 
 def test_shrunk_weights() -> None:

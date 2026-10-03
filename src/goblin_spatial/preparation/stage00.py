@@ -1,15 +1,17 @@
 """Stage 00 orchestration: raw CSO census tables -> prepared model inputs.
 
-Reads the raw AVA42 ED livestock table and the 2020 controls, reconciles the
-2010 and 2020 census years with ``census_suppression``, and writes
+Reads the raw AVA42 ED livestock table and the exact Census of Agriculture
+county totals, reconciles the 2010 and 2020 census years with
+``census_suppression``, and writes
 
 * the prepared 2020 ED baseline (model universe, 2,857 EDs) and
 * the prepared 2010 ED census (all 3,409 EDs),
 
-changing only the livestock columns. Every other column, the row order, the
-encoding, the quoting and the line endings of both files are carried over
-byte for byte from the existing files, which act as templates. The audit
-tables of the reconciliation are written next to them.
+changing only the livestock columns. All non-livestock fields are preserved
+exactly, and the row order, encoding, quoting and line endings of the existing
+files (which act as templates) round-trip unchanged. The audit tables of the
+reconciliation are written next to them. AAA10 and AAA09 are read only to
+check the census county totals against them.
 """
 
 from __future__ import annotations
@@ -25,14 +27,14 @@ import pandas as pd
 from . import census_suppression as cs
 
 LIVESTOCK_COLUMNS = ("DAIRY_COW", "OTHER_COW", "TOTAL_CATTLE", "OTHER_CATTLE", "TOTAL_SHEEP")
-UNIT_COLUMNS_2020 = {"T": "COUNTY", "D": "COUNTY", "S": "COUNTY", "SH": "REGION"}
-UNIT_COLUMNS_2010: dict[str, str | None] = {}
+UNIT_COLUMNS = {v: "COUNTY" for v in cs.VARIABLES}
 YEARS = (2010, 2020)
 
 
 @dataclass(frozen=True)
 class Stage00Paths:
     ava42: Path
+    census_county: Path
     aim: Path
     aaa10: Path
     aaa09: Path
@@ -49,6 +51,7 @@ class Stage00Paths:
         spatial = root / "data" / "inputs" / "spatial"
         return cls(
             ava42=base / "00_CSO_AVA42_Livestock_ED_2000_2010_2020.csv",
+            census_county=base / "00_CSO_Census_County_Livestock_2010_2020.csv",
             aim=base / "02_DAFM_AIM_ED_Cattle_Profile_2020.csv",
             aaa10=base / "01_CSO_AAA10_Cattle_County_2015_2025.csv",
             aaa09=base / "03_CSO_AAA09_Sheep_County_Region_2015_2025.xlsx",
@@ -222,6 +225,75 @@ def state_closure(frames: dict[int, cs.CensusFrame], results: dict[int, cs.Recon
     return pd.DataFrame(rows)
 
 
+# ------------------------------------------------------------------ county controls
+
+
+def county_control_checks(
+    census: dict[int, pd.DataFrame],
+    state: pd.DataFrame,
+    county_totals: dict[int, pd.DataFrame],
+    paths: Stage00Paths,
+) -> pd.DataFrame:
+    """Validate the census county totals before they are used as controls.
+
+    Each year: counties sum to the AVA42 State total; every county total is at
+    least its published ED sum; the hidden amount is positive exactly where the
+    county has blank cells. 2020: the census county totals lie within the 100-head
+    rounding of AAA10 (cattle) and AAA09 (sheep regions), an independent check
+    of the transcription.
+    """
+
+    rows = []
+    aaa10 = cs.load_aaa10_2020(paths.aaa10)
+    aaa09, county_region = cs.load_aaa09_2020(paths.aaa09)
+    for year in YEARS:
+        eds = census[year]
+        table = county_totals[year]
+        for v in cs.VARIABLES:
+            if int(table[v].sum()) != int(state.loc[year, v]):
+                raise AssertionError(f"{year} {v}: census county totals do not sum to the State total")
+            published = eds.groupby("COUNTY")[v].sum()
+            blanks = eds.groupby("COUNTY")[v].apply(lambda x: int(x.isna().sum()))
+            for county in table.index:
+                hidden = int(table.at[county, v] - published.get(county, 0))
+                n_blank = int(blanks.get(county, 0))
+                if hidden < 0 or (hidden > 0) != (n_blank > 0):
+                    raise AssertionError(f"{year} {v} {county}: county total inconsistent with AVA42 blanks")
+                row = {
+                    "YEAR": year,
+                    "VARIABLE": cs.MODEL_COLUMNS[v],
+                    "UNIT": county,
+                    "CENSUS_TOTAL": int(table.at[county, v]),
+                    "PUBLISHED_ED_SUM": int(published.get(county, 0)),
+                    "BLANK_CELLS": n_blank,
+                    "HIDDEN_TOTAL": hidden,
+                    "ANNUAL_CONTROL": None,
+                    "CENSUS_MINUS_CONTROL": None,
+                }
+                if year == 2020 and v in ("T", "D", "S"):
+                    row["ANNUAL_CONTROL"] = "AAA10"
+                    row["CENSUS_MINUS_CONTROL"] = int(table.at[county, v] - aaa10.at[county, v])
+                rows.append(row)
+        if year == 2020:
+            regional = table["SH"].groupby(county_region.reindex(table.index)).sum()
+            for region, value in regional.items():
+                rows.append(
+                    {
+                        "YEAR": year,
+                        "VARIABLE": "TOTAL_SHEEP",
+                        "UNIT": f"REGION {region}",
+                        "CENSUS_TOTAL": int(value),
+                        "ANNUAL_CONTROL": "AAA09",
+                        "CENSUS_MINUS_CONTROL": int(value - aaa09[region]),
+                    }
+                )
+    checks = pd.DataFrame(rows)
+    gaps = pd.to_numeric(checks["CENSUS_MINUS_CONTROL"]).abs()
+    if (gaps > 50).any():
+        raise AssertionError("census county totals depart from AAA10/AAA09 beyond their rounding")
+    return checks
+
+
 # ------------------------------------------------------------------ main entry
 
 
@@ -241,8 +313,8 @@ def prepare(paths: Stage00Paths, variant: str = "joint", repetitions: int = cs.T
 
     census, state = cs.load_ava42(paths.ava42)
     aim_local, aim_county = cs.load_aim(paths.aim)
-    cattle_controls = cs.load_aaa10_2020(paths.aaa10)
-    sheep_controls, county_region = cs.load_aaa09_2020(paths.aaa09)
+    county_totals = cs.load_census_county(paths.census_county)
+    checks = county_control_checks(census, state, county_totals, paths)
 
     template_2020 = CsvTemplate.read(paths.ed_2020)
     template_2010 = CsvTemplate.read(paths.ed_2010)
@@ -256,18 +328,18 @@ def prepare(paths: Stage00Paths, variant: str = "joint", repetitions: int = cs.T
         raise AssertionError("model EDs missing from AVA42")
 
     frames = {
-        2020: cs.build_frame(2020, census, state, aim_local, aim_county, model_keys, county_region),
+        2020: cs.build_frame(2020, census, state, aim_local, aim_county, model_keys),
         2010: cs.build_frame(2010, census, state, aim_local, aim_county, model_keys),
     }
-    units = {2020: UNIT_COLUMNS_2020, 2010: UNIT_COLUMNS_2010}
-    controls = {2020: (cattle_controls, sheep_controls), 2010: (None, None)}
 
     scores, by_source, fallback, results, cells = [], [], [], {}, []
     for year in YEARS:
         cf = frames[year]
         chains = cs.PRIOR_SPECS[variant][year]
-        sc, src = cs.hidden_cell_test(cf, units[year], chains, repetitions=repetitions)
-        fb, _ = cs.hidden_cell_test(cf, units[year], chains, repetitions=repetitions, fallback_only=True)
+        sc, src = cs.hidden_cell_test(cf, UNIT_COLUMNS, chains, repetitions=repetitions)
+        fb, _ = cs.hidden_cell_test(
+            cf, UNIT_COLUMNS, chains, repetitions=repetitions, fallback_only=True
+        )
         scores.append(sc)
         by_source.append(src)
         fallback.append(fb)
@@ -278,8 +350,7 @@ def prepare(paths: Stage00Paths, variant: str = "joint", repetitions: int = cs.T
 
     for year in YEARS:
         lam = {v: float(shrinkage.loc[(year, cs.MODEL_COLUMNS[v])]) for v in cs.VARIABLES}
-        cattle, sheep = controls[year]
-        results[year] = cs.reconcile(frames[year], variant, cattle, sheep, shrinkage=lam)
+        results[year] = cs.reconcile(frames[year], county_totals[year], variant, shrinkage=lam)
         c = cs.attach_error_flags(results[year].cells, lookup)
         c.insert(c.columns.get_loc("SOURCE") + 1, "SHRINKAGE_LAMBDA", c["VARIABLE"].map(
             {cs.MODEL_COLUMNS[v]: lam[v] for v in cs.VARIABLES}
@@ -325,7 +396,8 @@ def prepare(paths: Stage00Paths, variant: str = "joint", repetitions: int = cs.T
         str(paths.ed_2010): prepared_2010.render(),
         str(paths.audit_dir / "filled_cells.csv"): _csv_bytes(pd.concat(cells, ignore_index=True)),
         str(paths.audit_dir / "state_closure.csv"): _csv_bytes(closure),
-        str(paths.audit_dir / "unit_closure.csv"): _csv_bytes(unit_audit),
+        str(paths.audit_dir / "county_closure.csv"): _csv_bytes(unit_audit),
+        str(paths.audit_dir / "county_control_checks.csv"): _csv_bytes(checks),
         str(paths.audit_dir / "cow_cap.csv"): _csv_bytes(cap),
         str(paths.audit_dir / "hidden_cell_test.csv"): _csv_bytes(scores),
         str(paths.audit_dir / "hidden_cell_source_error.csv"): _csv_bytes(by_source),

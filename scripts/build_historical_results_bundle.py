@@ -59,8 +59,8 @@ BUNDLE_README = [
     ("What this is", "GOBLIN-Spatial historical baseline for Ireland: livestock, land, farm structure and Standard Output for 2,857 Electoral Divisions (EDs), every year 2015-2025 (31,427 ED-years), with county, WFD catchment, Colm catchment and national tables that sum exactly from the EDs."),
     ("Start here", "cso13_ed_year: CSO groups only (9 cattle, 4 sheep) with land and farm structure. goblin31_ed_year: 21 cattle + 10 sheep GOBLIN cohorts with the CSO groups kept as CSO_ columns. ed_year: everything wide, including Standard Output and derived signature metrics."),
     ("Keys", "YEAR x CSOED identifies every ED-year row. County, WFD_CATCHMENT_ID, COLM_CATCHMENT and YEAR key the aggregate tables."),
-    ("Evidence rule", "2020 ED values are the CSO Census of Agriculture values: published cells unchanged, suppressed cells filled before the model runs (Stage 00) so that census State totals hold exactly. Other years are reconstructed and sum exactly to CSO annual controls (AAA10 county cattle, AAA09 regional sheep, AQA06 regional land). PROVENANCE and SHEEP_DATA_STATUS label every row; data/inputs/baseline/census_reconciliation/filled_cells.csv lists every filled census cell with its prior source and measured hidden-cell error."),
-    ("2020 source difference", "Model-universe 2020 ED sums sit slightly below the annual controls: census animals in EDs outside the 2,857-ED model universe are reported, not moved into it (cattle 7,666, dairy cows 1,293, sheep 7,198 head), and AAA10/AAA09 are rounded to 100 head."),
+    ("Evidence rule", "2020 ED values are the CSO Census of Agriculture values: published cells unchanged, suppressed cells filled before the model runs (Stage 00) so that census county and State totals hold exactly. Other years are reconstructed and sum exactly to CSO annual controls (AAA10 county cattle, AAA09 regional sheep, AQA06 regional land). PROVENANCE and SHEEP_DATA_STATUS label every row; data/inputs/baseline/census_reconciliation/filled_cells.csv lists every filled census cell with its prior source and measured hidden-cell error."),
+    ("2020 source difference", "Model-universe 2020 ED sums sit slightly below the annual controls: census animals in EDs outside the 2,857-ED model universe are reported, not moved into it (cattle 8,744, dairy cows 1,723, sheep 4,518 head), and AAA10/AAA09 are rounded to 100 head."),
     ("2021-2022 land dip", "Area farmed falls about 3.9% in 2021-2022 and recovers in 2023. This is in the CSO AQA06 June series itself; the model follows the AQA06 regional index exactly."),
     ("Columns", "_columns gives the unit and meaning of every column in every public table."),
     ("Livestock signatures", "livestock_signature holds, for 2020 and 2025, the full 21-cohort cattle state plus adult/follower totals and signature ratios for every ED and WFD catchment (the two primary geographies) and for county, Colm catchment and Ireland. Aggregates sum populations first, then derive ratios. livestock_signature_long gives each ratio with its numerator and denominator."),
@@ -109,6 +109,11 @@ def main() -> None:
         "--output-root",
         default="reporting/report_data/historical",
     )
+    parser.add_argument(
+        "--allow-audit-failures",
+        action="store_true",
+        help="bundle despite failed coherence checks (robustness variants only)",
+    )
     args = parser.parse_args()
 
     cfg = load_config(Path(args.config))
@@ -155,7 +160,7 @@ def main() -> None:
             f"{audit_path} missing: run scripts/audit_historical_baseline.py first"
         )
     audit = pd.read_csv(audit_path)
-    if not audit["PASS"].all():
+    if not audit["PASS"].all() and not args.allow_audit_failures:
         failed = audit.loc[~audit["PASS"], "CHECK"].tolist()
         raise AssertionError(f"baseline coherence audit has failures: {failed}")
     tables["baseline_coherence_audit"] = audit

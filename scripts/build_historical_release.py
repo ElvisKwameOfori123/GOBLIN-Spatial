@@ -38,6 +38,11 @@ def main() -> int:
         action="store_true",
         help="build from census inputs that differ from Stage 00 (robustness variants only)",
     )
+    parser.add_argument(
+        "--no-audit-stop",
+        action="store_true",
+        help="continue past a failed coherence audit (robustness variants only)",
+    )
     args = parser.parse_args()
     config = ["--config", args.config]
 
@@ -53,10 +58,15 @@ def main() -> int:
     ]
     if args.skip_stage00_check:
         steps = steps[1:]
+    if args.no_audit_stop:
+        steps = [(label, cmd + ["--allow-audit-failures"] if label == "Release bundle" else cmd) for label, cmd in steps]
     for number, (label, command) in enumerate(steps, start=1):
         print(f"\n[{number}/{len(steps)}] {label}", flush=True)
         start = time.time()
         result = subprocess.run(command, cwd=ROOT)
+        if result.returncode != 0 and args.no_audit_stop and label == "Coherence audit":
+            print("      coherence audit failed; continuing (--no-audit-stop)", flush=True)
+            continue
         if result.returncode != 0:
             print(f"Stopped: '{label}' failed (exit {result.returncode}).", file=sys.stderr)
             return result.returncode

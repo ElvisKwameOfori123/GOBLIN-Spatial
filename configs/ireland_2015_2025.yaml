@@ -29,6 +29,8 @@ files:
   # (scripts/prepare_census_inputs.py) fills its suppressed cells and writes
   # the two prepared census inputs below; the model never reads it directly.
   cso_ava42_ed_livestock: data/inputs/baseline/00_CSO_AVA42_Livestock_ED_2000_2010_2020.csv
+  # Exact Census of Agriculture county livestock totals (2010, 2020); Stage 00 controls.
+  cso_census_county_livestock: data/inputs/baseline/00_CSO_Census_County_Livestock_2010_2020.csv
   cso_ed_2010: data/inputs/baseline/CSO_ED2010.csv
   cso_ed_2020: data/inputs/baseline/01_CSO_ED_Agricultural_Baseline_2020.csv
   cso_cattle_county: data/inputs/baseline/01_CSO_AAA10_Cattle_County_2015_2025.csv

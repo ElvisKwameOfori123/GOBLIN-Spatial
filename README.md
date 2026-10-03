@@ -56,7 +56,7 @@ livestock signatures and evaluation
 illustrative perturbation
 ```
 
-Published 2020 ED livestock values are retained as published; cells the CSO withheld for confidentiality are filled before the model runs (Stage 00, `scripts/prepare_census_inputs.py`) so that census State totals hold exactly. Surrounding years are census-anchored reconstructions under the authoritative annual controls. Supporting administrative data inform composition without replacing those controlling quantities.
+Published 2020 ED livestock values are retained as published; cells the CSO withheld for confidentiality are filled before the model runs (Stage 00, `scripts/prepare_census_inputs.py`) so that the census county and State totals hold exactly. Surrounding years are census-anchored reconstructions under the authoritative annual controls. Supporting administrative data inform composition without replacing those controlling quantities.
 
 All biological subdivisions preserve the population from which they are derived.
 

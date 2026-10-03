@@ -56,7 +56,7 @@ jobs:
           assert con.sql("select count(distinct County) from county_year").fetchone()[0] == 26
           assert con.sql("select count(distinct WFD_CATCHMENT_ID) from wfd_catchment_year").fetchone()[0] == 46
           assert con.sql("select count(*) from baseline_coherence_audit where not PASS").fetchone()[0] == 0
-          assert con.sql("select count(*) from baseline_coherence_audit").fetchone()[0] == 46
+          assert con.sql("select count(*) from baseline_coherence_audit").fetchone()[0] == 47
           assert con.sql("select count(*) from livestock_signature where GEOGRAPHY_TYPE = 'ED'").fetchone()[0] == 2 * 2857
           assert con.sql("select count(distinct WFD_CATCHMENT_ID) from utility_comparison_wfd").fetchone()[0] == 46
           con.close()

@@ -5,23 +5,25 @@ nothing in the model runtime imports it.
 
 The CSO Census of Agriculture ED table (AVA42) distinguishes three kinds of
 livestock cell: published values, published zeros and blank (unpublished) cells.
-The census also publishes exact State totals, so the number of animals held in
-blank cells is known for every livestock type and census year:
+The census also publishes exact county totals (2010 Tables 8A/8B, 2020 Tables
+4.2/4.4) that sum to the State totals, so the number of animals held in blank
+cells is known for every county, livestock type and census year:
 
-    hidden_v = StateTotal_v - sum(published ED values of v).
+    hidden_{c,v} = CountyTotal_{c,v} - sum(published ED values of v in c).
 
 Rules (the scientific contract):
 
 * Published ED values and published zeros are never changed.
 * Only blank cells are filled.
-* The national (State) total of every variable is reproduced exactly.
-* 2020 county (cattle, AAA10) and regional (sheep, AAA09) controls are used
-  within their 100-head publication rounding (+/-50 head).
+* Census county totals, and therefore State totals, are reproduced exactly for
+  every variable in both census years; no animal crosses a county boundary.
 * Fill order: total cattle -> dairy cows -> other cows -> sheep; other cattle is
   the residual T - D - S and is never negative.
 * Reconstructed cows (D + S) in a filled ED are capped at the 99th percentile of
   the cow share of cattle among published EDs with at least 200 cattle.
-  Published cells are never capped.
+  Published cells are never capped. Where a county's exact hidden total cannot
+  fit under the cap, the cap is relaxed in that county only, up to the ED's
+  cattle, and the excess is recorded.
 * Prior source chains are frozen in ``PRIOR_SPECS``. Within each control unit
   the blank cells share the hidden total by the prior shrunk toward an equal
   split, lambda * p_i / sum(p) + (1 - lambda) / n. Lambda is selected per
@@ -61,7 +63,6 @@ MODEL_COLUMNS = {"T": "TOTAL_CATTLE", "D": "DAIRY_COW", "S": "OTHER_COW", "SH": 
 RESIDUAL_COLUMN = "OTHER_CATTLE"
 COW_CAP_QUANTILE = 0.99
 COW_CAP_MIN_CATTLE = 200
-ROUNDING_TOLERANCE_HEAD = 50
 TEST_SEED = 20261003
 TEST_REPETITIONS = 40
 TEST_SIZE_QUANTILES = (1 / 3, 1 / 6, 1 / 10)
@@ -212,10 +213,12 @@ def match_aim(eds: pd.DataFrame, aim_local: pd.DataFrame) -> pd.DataFrame:
 
     A strict name key (qualifiers kept) is tried first, then a loose key
     (parenthesised qualifiers and Rural/Urban removed). A match is accepted
-    only when the key is unique on both sides within the county; ambiguous
-    names (e.g. two 'Clooney' EDs in Clare, or 'X Rural' and 'X Urban')
-    receive no local AIM evidence. Returns AIM columns indexed by census KEY
-    plus AIM_MATCH (STRICT, LOOSE or NONE).
+    only when the key is unique on both sides within the county, and a census
+    ED that shares its loose name with another ED of the county is matched
+    only by an AIM name carrying its own qualifier. Ambiguous names (two
+    'Clooney' EDs in Clare; 'Kilbarry' and 'Kilbarry (Part Rural)') are
+    discarded, not guessed, and receive no local AIM evidence. Returns AIM
+    columns indexed by census KEY plus AIM_MATCH (STRICT, LOOSE or NONE).
     """
 
     census = pd.DataFrame(
@@ -231,11 +234,29 @@ def match_aim(eds: pd.DataFrame, aim_local: pd.DataFrame) -> pd.DataFrame:
     matched = []
     used_keys: set = set()
     used_rows: set = set()
+    loose_shared = census.duplicated(["COUNTY", "LOOSE"], keep=False)
     for level in ("STRICT", "LOOSE"):
         c = census.loc[~census["KEY"].isin(used_keys)]
         a = aim.loc[~aim["ROW"].isin(used_rows)]
         c = c.loc[~c.duplicated(["COUNTY", level], keep=False)]
         a = a.loc[~a.duplicated(["COUNTY", level], keep=False)]
+        if level == "STRICT":
+            # An unqualified AIM name ("KILBARRY") cannot pick between census
+            # EDs that differ only by a qualifier ("Kilbarry", "Kilbarry (Part
+            # Rural)"); only a qualified AIM name may match such an ED.
+            qualified = a["STRICT"].ne(a["LOOSE"])
+            c_shared = c.loc[loose_shared.loc[c.index]]
+            c_unique = c.loc[~loose_shared.loc[c.index]]
+            m_unique = c_unique.merge(a[["COUNTY", level, "ROW"]], on=["COUNTY", level], how="inner", validate="one_to_one")
+            m_shared = c_shared.merge(
+                a.loc[qualified, ["COUNTY", level, "ROW"]], on=["COUNTY", level], how="inner", validate="one_to_one"
+            )
+            m = pd.concat([m_unique, m_shared], ignore_index=True)
+            m["AIM_MATCH"] = level
+            matched.append(m[["KEY", "ROW", "AIM_MATCH"]])
+            used_keys |= set(m["KEY"])
+            used_rows |= set(m["ROW"])
+            continue
         m = c.merge(a[["COUNTY", level, "ROW"]], on=["COUNTY", level], how="inner", validate="one_to_one")
         m["AIM_MATCH"] = level
         matched.append(m[["KEY", "ROW", "AIM_MATCH"]])
@@ -245,6 +266,22 @@ def match_aim(eds: pd.DataFrame, aim_local: pd.DataFrame) -> pd.DataFrame:
     out = links.join(aim[list(AIM_COLUMNS)], on="ROW").set_index("KEY").drop(columns="ROW")
     out = out.reindex(eds.index)
     out["AIM_MATCH"] = out["AIM_MATCH"].fillna("NONE")
+    return out
+
+
+COUNTY_TABLE_COLUMNS = {"T": "TOTAL_CATTLE", "D": "DAIRY_COW", "S": "OTHER_COW", "SH": "TOTAL_SHEEP"}
+
+
+def load_census_county(path: str | Path) -> dict[int, pd.DataFrame]:
+    """Exact Census of Agriculture county livestock totals, {year: frame by COUNTY}."""
+
+    raw = pd.read_csv(path, encoding="utf-8-sig")
+    out = {}
+    for year, g in raw.groupby("CENSUS_YEAR"):
+        g = g.assign(COUNTY=g["COUNTY"].map(normalise_county))
+        frame = g.groupby("COUNTY")[list(COUNTY_TABLE_COLUMNS.values())].sum().astype(np.int64)
+        frame.columns = list(COUNTY_TABLE_COLUMNS)
+        out[int(year)] = frame
     return out
 
 
@@ -290,7 +327,6 @@ def build_frame(
     aim_local: pd.DataFrame,
     aim_county: pd.DataFrame,
     model_keys: set[str],
-    county_region: pd.Series | None = None,
 ) -> CensusFrame:
     base = census[year].copy()
     for other in (2000, 2010, 2020):
@@ -309,8 +345,6 @@ def build_frame(
     merged["AIM_COUNTY_COW_PROXY"] = merged["COUNTY"].map(
         (aim_county["AVERAGE_CATTLE_BEEF"] / cn) * (aim_county["AVERAGE_CATTLE_AGE_36MTH_PLUS"] / cn)
     )
-    if county_region is not None:
-        merged["REGION"] = merged["COUNTY"].map(county_region)
     status = {
         v: np.where(merged[v].isna(), "BLANK", np.where(merged[v].eq(0), "ZERO", "POSITIVE"))
         for v in VARIABLES
@@ -450,41 +484,6 @@ def shrunk_weights(weights: np.ndarray, lam: float) -> np.ndarray:
     return lam * w / w.sum() + (1.0 - lam) * equal
 
 
-def unit_targets(
-    published_by_unit: pd.Series,
-    blank_units: set,
-    controls: pd.Series | None,
-    hidden_national: int,
-) -> pd.DataFrame:
-    """Per-unit hidden totals that sum exactly to the national hidden total.
-
-    Returns ROUNDED_GAP (control minus published, floored at zero) and TARGET.
-    Targets move away from the rounded gap by at most ROUNDING_TOLERANCE_HEAD
-    so that the State total closes. Without controls (2010) the single unit is
-    the State.
-    """
-
-    if controls is None:
-        hidden = int(hidden_national)
-        return pd.DataFrame({"ROUNDED_GAP": [hidden], "TARGET": [hidden]}, index=pd.Index(["STATE"]))
-    units = sorted(u for u in published_by_unit.index if u in blank_units)
-    gaps = (controls.reindex(units) - published_by_unit.reindex(units)).round().clip(lower=0).astype(np.int64)
-    if gaps.isna().any():
-        raise AssertionError(f"no control for units {list(gaps.index[gaps.isna()])}")
-    targets = gaps.copy()
-    delta = int(hidden_national - gaps.sum())
-    if delta:
-        if delta > 0:
-            room = np.full(len(units), ROUNDING_TOLERANCE_HEAD)
-        else:
-            room = np.minimum(gaps.to_numpy(), ROUNDING_TOLERANCE_HEAD)
-        step, _ = capped_hamilton(np.ones(len(units)), room, abs(delta))
-        targets = gaps + np.sign(delta) * pd.Series(step, index=units)
-    if int(targets.sum()) != int(hidden_national):
-        raise AssertionError("unit targets cannot close the national total within rounding tolerance")
-    return pd.DataFrame({"ROUNDED_GAP": gaps, "TARGET": targets})
-
-
 @dataclass
 class Reconciled:
     values: pd.DataFrame
@@ -495,132 +494,103 @@ class Reconciled:
 
 def reconcile(
     cf: CensusFrame,
+    county_totals: pd.DataFrame,
     variant: str = "joint",
-    cattle_controls: pd.DataFrame | None = None,
-    sheep_controls: pd.Series | None = None,
     shrinkage: dict[str, float] | None = None,
 ) -> Reconciled:
-    """Fill blank cells for one census year under the frozen rules.
+    """Fill blank cells of one census year inside exact county totals.
 
-    ``shrinkage`` gives lambda per variable, normally from
-    ``select_shrinkage``; without it the prior is used unshrunk (lambda 1).
+    ``county_totals`` holds the census county totals (columns T, D, S, SH).
+    ``shrinkage`` gives lambda per variable, normally from ``select_shrinkage``;
+    without it the prior is used unshrunk (lambda 1).
     """
 
     f = cf.frame
     spec = PRIOR_SPECS[variant][cf.year]
     values = f[list(VARIABLES)].copy()
     sources = {v: np.full(len(f), "", dtype=object) for v in VARIABLES}
+    over_cap = {v: np.zeros(len(f), dtype=bool) for v in VARIABLES}
     unit_rows = []
     shrinkage = {v: 1.0 for v in VARIABLES} | dict(shrinkage or {})
-    cattle_unit = "COUNTY" if cattle_controls is not None else None
-    sheep_unit = "REGION" if sheep_controls is not None else None
+    counties = f["COUNTY"].to_numpy()
+    if set(counties) != set(county_totals.index):
+        raise AssertionError(f"{cf.year}: census county table and AVA42 counties differ")
+    for v in VARIABLES:
+        if int(county_totals[v].sum()) != int(cf.state[v]):
+            raise AssertionError(f"{cf.year} {v}: county totals do not sum to the State total")
 
-    def unit_series(unit_col):
-        return f[unit_col] if unit_col else pd.Series("STATE", index=f.index)
-
-    def fill(v: str, unit_col, controls, capacity=None, floor=None):
-        units = unit_series(unit_col).to_numpy()
+    def fill(v: str, capacity=None, hard_capacity=None, floor=None):
         blank = values[v].isna().to_numpy()
-        hidden = int(cf.state[v] - np.nansum(f[v].to_numpy(float)))
-        if hidden < 0:
-            raise AssertionError(f"{cf.year} {v}: published EDs exceed the State total")
-        published = f[v].groupby(units).sum(min_count=1).fillna(0)
-        plan = unit_targets(published, set(units[blank]), controls, hidden)
+        published = f[v].groupby(counties).sum(min_count=1).fillna(0).astype(np.int64)
+        hidden = county_totals[v] - published.reindex(county_totals.index).fillna(0).astype(np.int64)
         prior, src = chained_prior(cf, v, spec[v])
         weight = prior_weight(cf, v, prior, values["T"].to_numpy(float))
         lam = float(shrinkage[v])
         if lam == 0.0:
             src = np.full(len(f), "EQUAL_SPLIT", dtype=object)
         cap = np.full(len(f), 1e15) if capacity is None else np.floor(capacity)
+        hard = cap if hard_capacity is None else np.floor(hard_capacity)
         filled = np.zeros(len(f), dtype=np.int64)
-        left_by_unit = {}
-        for unit, target in plan["TARGET"].items():
-            idx = np.flatnonzero(blank & (units == unit))
+        for county, target in hidden.items():
+            idx = np.flatnonzero(blank & (counties == county))
+            if target < 0:
+                raise AssertionError(f"{cf.year} {v} {county}: published EDs exceed the county total")
             if len(idx) == 0:
                 if target:
-                    raise AssertionError(f"{cf.year} {v} {unit}: target with no blank cells")
+                    raise AssertionError(f"{cf.year} {v} {county}: hidden animals but no blank cell")
                 continue
             base = np.zeros(len(idx), dtype=np.int64)
             remaining = int(target)
             if floor is not None:
                 base = np.minimum(floor[idx].astype(np.int64), remaining)
                 remaining -= int(base.sum())
-            alloc, left = capped_hamilton(shrunk_weights(weight[idx], lam), cap[idx] - base, remaining)
+            w = shrunk_weights(weight[idx], lam)
+            alloc, left = capped_hamilton(w, cap[idx] - base, remaining)
+            above_cap = 0
+            if left:
+                # The exact county total wins over the plausibility cap.
+                extra, left = capped_hamilton(w, hard[idx] - base - alloc, left)
+                alloc += extra
+                above_cap = int(extra.sum())
+            if left:
+                raise AssertionError(f"{cf.year} {v} {county}: hidden total exceeds the blank cells' cattle")
             filled[idx] = base + alloc
-            left_by_unit[unit] = int(left)
-
-        # Animals a unit cannot hold under the cow cap are passed to other units
-        # within their remaining rounding tolerance, so the State total closes.
-        spill = sum(left_by_unit.values())
-        received = pd.Series(0, index=plan.index, dtype=np.int64)
-        if spill:
-            shift = plan["TARGET"] - plan["ROUNDED_GAP"]
-            spare = []
-            for unit in plan.index:
-                idx = np.flatnonzero(blank & (units == unit))
-                cell_room = float(np.clip(cap[idx] - filled[idx], 0, None).sum()) if len(idx) else 0.0
-                tol_room = max(0, ROUNDING_TOLERANCE_HEAD - int(shift[unit])) if left_by_unit.get(unit, 0) == 0 else 0
-                spare.append(min(cell_room, tol_room))
-            unit_weight = np.array([max(float((blank & (units == u)).sum()), 1e-9) for u in plan.index])
-            give, unplaced = capped_hamilton(unit_weight, np.array(spare), spill)
-            if unplaced:
-                raise AssertionError(f"{cf.year} {v}: {unplaced} hidden animals cannot be placed under the cow cap")
-            for unit, extra in zip(plan.index, give):
-                if extra:
-                    idx = np.flatnonzero(blank & (units == unit))
-                    alloc, left = capped_hamilton(
-                        shrunk_weights(weight[idx], lam), cap[idx] - filled[idx], int(extra)
-                    )
-                    if left:
-                        raise AssertionError("spill-over allocation failed")
-                    filled[idx] += alloc
-                    received[unit] = int(extra)
-
-        control_sum = controls if controls is not None else pd.Series({"STATE": cf.state[v]})
-        for unit in plan.index:
-            idx = np.flatnonzero(blank & (units == unit))
-            got = int(filled[idx].sum())
-            pub = int(published.get(unit, 0)) if unit != "STATE" else int(np.nansum(f[v].to_numpy(float)))
+            over_cap[v][idx] = (base + alloc) > cap[idx]
             unit_rows.append(
                 {
                     "YEAR": cf.year,
                     "VARIABLE": MODEL_COLUMNS[v],
-                    "UNIT": unit,
+                    "COUNTY": county,
                     "SHRINKAGE_LAMBDA": lam,
-                    "CONTROL": int(control_sum[unit]),
-                    "PUBLISHED_SUM": pub,
-                    "ROUNDED_GAP": int(plan.at[unit, "ROUNDED_GAP"]),
-                    "TARGET": int(plan.at[unit, "TARGET"]),
+                    "CENSUS_COUNTY_TOTAL": int(county_totals.at[county, v]),
+                    "PUBLISHED_SUM": int(published.get(county, 0)),
+                    "HIDDEN_TOTAL": int(target),
                     "BLANK_CELLS": int(len(idx)),
-                    "FILLED": got,
-                    "PASSED_OUT_UNDER_CAP": int(left_by_unit.get(unit, 0)),
-                    "RECEIVED_UNDER_CAP": int(received[unit]),
-                    "DEVIATION_FROM_CONTROL": pub + got - int(control_sum[unit]),
-                    "FILLED_OUTSIDE_MODEL": int(filled[idx][~f["IN_MODEL"].to_numpy()[idx]].sum()),
+                    "FILLED": int((base + alloc).sum()),
+                    "FILLED_ABOVE_COW_CAP": above_cap,
+                    "FILLED_OUTSIDE_MODEL": int((base + alloc)[~f["IN_MODEL"].to_numpy()[idx]].sum()),
                 }
             )
-        if int(filled[blank].sum()) != hidden:
-            raise AssertionError(f"{cf.year} {v}: filled cells do not close the State total")
         values.loc[blank, v] = filled[blank]
         sources[v][blank] = src[blank]
 
     # 1 total cattle, never below the ED's published cows
     floor = (f["D"].fillna(0) + f["S"].fillna(0)).to_numpy()
-    fill("T", cattle_unit, cattle_controls["T"] if cattle_controls is not None else None, floor=floor)
+    fill("T", floor=floor)
     totals = values["T"].to_numpy(float)
     # cow-share cap from published EDs of this census year
     pub = f.loc[f["T"].ge(COW_CAP_MIN_CATTLE) & f["D"].notna() & f["S"].notna()]
     cap_share = float(((pub["D"] + pub["S"]) / pub["T"]).quantile(COW_CAP_QUANTILE))
+    s_pub = f["S"].fillna(0).to_numpy()
     # 2 dairy cows
-    cap_d = np.clip(cap_share * totals - f["S"].fillna(0).to_numpy(), 0, None)
-    cap_d = np.minimum(cap_d, totals - f["S"].fillna(0).to_numpy())
-    fill("D", cattle_unit, cattle_controls["D"] if cattle_controls is not None else None, capacity=cap_d)
+    hard_d = np.clip(totals - s_pub, 0, None)
+    fill("D", capacity=np.minimum(np.clip(cap_share * totals - s_pub, 0, None), hard_d), hard_capacity=hard_d)
     # 3 other cows
     dairy = values["D"].to_numpy(float)
-    cap_s = np.clip(np.minimum(cap_share * totals, totals) - dairy, 0, None)
-    fill("S", cattle_unit, cattle_controls["S"] if cattle_controls is not None else None, capacity=cap_s)
+    hard_s = np.clip(totals - dairy, 0, None)
+    fill("S", capacity=np.minimum(np.clip(cap_share * totals - dairy, 0, None), hard_s), hard_capacity=hard_s)
     # 4 sheep
-    fill("SH", sheep_unit, sheep_controls)
+    fill("SH")
 
     values = values.astype(np.int64)
     values[RESIDUAL_COLUMN] = values["T"] - values["D"] - values["S"]
@@ -630,10 +600,13 @@ def reconcile(
         published = cf.status[v] != "BLANK"
         if not (values.loc[published, v].to_numpy() == f.loc[published, v].to_numpy()).all():
             raise AssertionError(f"{cf.year} {v}: a published cell changed")
+        if not values[v].groupby(counties).sum().reindex(county_totals.index).eq(county_totals[v]).all():
+            raise AssertionError(f"{cf.year} {v}: county totals not reproduced")
 
     cells = []
     for v in VARIABLES:
         blank = cf.status[v] == "BLANK"
+        flag = over_cap[v][blank]
         cells.append(
             pd.DataFrame(
                 {
@@ -645,6 +618,7 @@ def reconcile(
                     "VARIABLE": MODEL_COLUMNS[v],
                     "FILLED_VALUE": values[v].to_numpy()[blank],
                     "SOURCE": sources[v][blank],
+                    "ABOVE_COW_CAP": flag,
                 }
             )
         )

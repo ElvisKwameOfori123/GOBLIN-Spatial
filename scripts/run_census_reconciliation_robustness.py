@@ -75,7 +75,7 @@ def _build(variant: str, workdir: Path) -> Path:
         (tree / path).write_bytes(payload)
     env = {**os.environ, "PYTHONPATH": str(tree / "src")}
     subprocess.run(
-        [sys.executable, "scripts/build_historical_release.py", "--skip-stage00-check"],
+        [sys.executable, "scripts/build_historical_release.py", "--skip-stage00-check", "--no-audit-stop"],
         cwd=tree,
         env=env,
         check=True,
@@ -91,6 +91,9 @@ def _metrics(db: Path) -> tuple[pd.DataFrame, dict[str, pd.DataFrame]]:
     def add(group, metric, value):
         rows.append({"GROUP": group, "METRIC": metric, "VALUE": float(value)})
 
+    audit = con.sql("select * from baseline_coherence_audit").df()
+    add("coherence audit", "failed checks", int((~audit["PASS"].astype(bool)).sum()))
+    print(f"  {db.parent.parent.parent.parent.name}: failed audit checks: " + "; ".join(audit.loc[~audit["PASS"].astype(bool), "CHECK"]), flush=True)
     disp = con.sql("select * from utility_displacement where QUANTITY = 'FOLLOWERS'").df()
     for _, r in disp.iterrows():
         tag = f"{r['ARM']} {int(r['YEAR'])}"

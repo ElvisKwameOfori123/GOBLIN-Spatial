@@ -28,7 +28,13 @@ from goblin_spatial.cattle.cohorts import CONTAINERS, FINAL_21_COHORTS
 from goblin_spatial.cattle.panel import _load_aaa10
 from goblin_spatial.config import SpatialConfig
 from goblin_spatial.export.livestock_panels import CSO_CATTLE_9, CSO_SHEEP_4
-from goblin_spatial.preparation.census_suppression import MODEL_COLUMNS, canonical_key, load_ava42
+from goblin_spatial.preparation.census_suppression import (
+    MODEL_COLUMNS,
+    canonical_key,
+    load_ava42,
+    load_census_county,
+    normalise_county,
+)
 from goblin_spatial.sheep.annual_panel import _load_workbook
 from goblin_spatial.sheep.cohorts import GOBLIN_SHEEP_10
 
@@ -138,6 +144,14 @@ def audit_historical_outputs(cfg: SpatialConfig) -> pd.DataFrame:
             closure.append(f"{column} outside model {outside:,}")
         check("B", "2020 inputs keep every published AVA42 ED cell (Stage 00)", changed == 0,
               f"{changed} published cells changed; " + "; ".join(closure))
+    if "cso_census_county_livestock" in cfg.files:
+        county_totals = load_census_county(cfg.files["cso_census_county_livestock"])[KNOWN_YEAR]
+        inside = y2020.groupby("County")[list(MODEL_COLUMNS.values())].sum()
+        inside.index = inside.index.map(normalise_county)
+        residual = county_totals.rename(columns=MODEL_COLUMNS) - inside.reindex(county_totals.index)
+        check("B", "2020 model-universe county sums do not exceed the census county totals (Stage 00)",
+              bool((residual >= 0).all().all()),
+              f"outside-model residual by variable: {residual.sum().astype(int).to_dict()}")
 
     aaa10 = _load_aaa10(cfg.files["cso_cattle_county"]).set_index(["Year", "County"])
     cattle = c13.groupby(["YEAR", "County"])[["DAIRY_COW", "OTHER_COW", "TOTAL_CATTLE"]].sum()
