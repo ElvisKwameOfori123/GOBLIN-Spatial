@@ -26,6 +26,7 @@ reporting/maps/
 reporting/tables/
 reporting/gis/
 reporting/explorer/
+reporting/paper1/
 
 # Full-data inputs kept outside Git during development
 # They are pinned in data_manifest.yaml and will be supplied by Zenodo/official URLs.
