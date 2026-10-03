@@ -10,7 +10,13 @@ import pandas as pd
 import pytest
 
 from goblin_spatial.preparation import census_suppression as cs
-from goblin_spatial.preparation.stage00 import LIVESTOCK_COLUMNS, Stage00Paths, prepare
+from goblin_spatial.preparation.stage00 import (
+    LIVESTOCK_COLUMNS,
+    MONTE_CARLO_FILES,
+    Stage00Paths,
+    compare_outputs,
+    prepare,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 PATHS = Stage00Paths.default(ROOT)
@@ -126,17 +132,28 @@ def test_cow_cap_is_exceeded_only_where_recorded() -> None:
     assert set(zip(flagged["YEAR"], flagged["COUNTY"])) <= set(zip(over["YEAR"], over["COUNTY"]))
 
 
-def test_shrinkage_is_selected_by_the_hidden_cell_test() -> None:
-    scores = pd.read_csv(AUDIT / "hidden_cell_test.csv")
-    selection = pd.read_csv(AUDIT / "shrinkage_selection.csv").set_index(["YEAR", "VARIABLE"])["SHRINKAGE_LAMBDA"]
-    expected = cs.select_shrinkage(scores)
-    assert expected.sort_index().equals(selection.sort_index())
+def test_shrinkage_follows_the_one_standard_error_rule() -> None:
+    table = pd.read_csv(AUDIT / "shrinkage_selection.csv")
+    for _, g in table.groupby(["YEAR", "VARIABLE"]):
+        assert int(g["SELECTED"].sum()) == 1
+        chosen = g.loc[g["SELECTED"]].iloc[0]
+        assert bool(chosen["ADMISSIBLE"])
+        assert chosen["LAMBDA"] == g.loc[g["ADMISSIBLE"], "LAMBDA"].min()
+    cells = pd.read_csv(AUDIT / "filled_cells.csv")
+    chosen = table.loc[table["SELECTED"]].set_index(["YEAR", "VARIABLE"])["LAMBDA"]
+    modelled = cells.loc[cells["SHRINKAGE_LAMBDA"].notna()]
+    for (year, variable), lam in chosen.items():
+        used = modelled.loc[modelled["YEAR"].eq(year) & modelled["VARIABLE"].eq(variable), "SHRINKAGE_LAMBDA"]
+        assert used.eq(lam).all()
 
 
-def test_stage00_regenerates_committed_outputs_exactly() -> None:
+def test_stage00_regenerates_committed_outputs() -> None:
     result = prepare(PATHS)
     for name, payload in result.files.items():
-        assert Path(name).read_bytes() == payload, name
+        verdict = compare_outputs(name, Path(name).read_bytes(), payload)
+        assert verdict is None or verdict.startswith("WITHIN_TOLERANCE"), (name, verdict)
+        if Path(name).name not in MONTE_CARLO_FILES:
+            assert verdict is None, name
 
 
 def test_capped_hamilton_respects_capacity_and_total() -> None:

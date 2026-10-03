@@ -64,7 +64,7 @@ RESIDUAL_COLUMN = "OTHER_CATTLE"
 COW_CAP_QUANTILE = 0.99
 COW_CAP_MIN_CATTLE = 200
 TEST_SEED = 20261003
-TEST_REPETITIONS = 40
+TEST_REPETITIONS = 100
 TEST_SIZE_QUANTILES = (1 / 3, 1 / 6, 1 / 10)
 # Allocation weight within a unit's blank cells:
 #   lambda * (prior_i / sum prior) + (1 - lambda) / n_blank.
@@ -641,7 +641,7 @@ def hidden_cell_test(
     repetitions: int = TEST_REPETITIONS,
     seed: int = TEST_SEED,
     fallback_only: bool = False,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Hide small published cells, predict them, score the error.
 
     In every unit (county, region or State) as many small published cells are
@@ -651,14 +651,16 @@ def hidden_cell_test(
     DISPLACED_PCT is the share of hidden animals placed in the wrong ED.
     ``unit_cols`` maps each variable to its control unit column (None = State).
 
-    Returns (scores, per-source error of the frozen chain by lambda). With
+    All methods are scored on the same hidden draws (common random numbers).
+    Returns (scores, per-source error of the frozen chain by lambda,
+    per-repetition DISPLACED_PCT of the frozen chain by lambda). With
     ``fallback_only`` the test cells are restricted to EDs without the first
     prior of the chain, i.e. the population on which the fallback order is used.
     """
 
     f = cf.frame
     rng = np.random.default_rng(seed)
-    rows, by_source = [], []
+    rows, by_source, per_rep = [], [], []
     for v in VARIABLES:
         unit_col = unit_cols.get(v)
         units = f[unit_col] if unit_col else pd.Series("STATE", index=f.index)
@@ -679,7 +681,9 @@ def hidden_cell_test(
             small = f.index[published & f[v].le(threshold)]
             stats = {m: [0.0, 0.0, [], []] for m in methods}
             src_err: dict[tuple[str, float], list[float]] = {}
-            for _ in range(repetitions):
+            label_q = f"smallest {q:.3f} of published cells"
+            for r in range(repetitions):
+                rep_err = {lam: [0.0, 0.0] for lam in SHRINKAGE_GRID}
                 for unit, idx in pd.Series(small, index=small).groupby(units.loc[small]):
                     pool = idx.to_numpy()
                     h = int(min(max(blanks_per_unit.get(unit, 0), 2), len(pool)))
@@ -700,13 +704,27 @@ def hidden_cell_test(
                         s[2].extend(pred)
                         s[3].extend(obs)
                         if name == "FROZEN_CHAIN":
+                            rep_err[lam][0] += 0.5 * np.abs(pred - obs).sum()
+                            rep_err[lam][1] += total
                             labels = frozen_src[pos] if lam > 0 else np.full(len(pos), "EQUAL_SPLIT", dtype=object)
                             for label in np.unique(labels):
                                 m = labels == label
                                 e = src_err.setdefault((label, lam), [0.0, 0.0])
                                 e[0] += np.abs(pred[m] - obs[m]).sum()
                                 e[1] += obs[m].sum()
-            label_q = f"smallest {q:.3f} of published cells"
+                if not fallback_only:
+                    for lam, (err, tot) in rep_err.items():
+                        if tot > 0:
+                            per_rep.append(
+                                {
+                                    "YEAR": cf.year,
+                                    "VARIABLE": MODEL_COLUMNS[v],
+                                    "LAMBDA": lam,
+                                    "TEST_CELLS": label_q,
+                                    "REPETITION": r,
+                                    "DISPLACED_PCT": 100 * err / tot,
+                                }
+                            )
             population = "WITHOUT_" + chains[v][0] if fallback_only else "ALL"
             for (name, lam), (err, tot, pred, obs) in stats.items():
                 if tot <= 0:
@@ -721,7 +739,7 @@ def hidden_cell_test(
                         "POPULATION": population,
                         "N_SCORED": len(obs),
                         "DISPLACED_PCT": round(100 * err / tot, 2),
-                        "SPEARMAN": round(float(spearmanr(pred, obs).statistic), 3),
+                        "SPEARMAN": _spearman(pred, obs),
                     }
                 )
             for (label, lam), (err, tot) in src_err.items():
@@ -736,19 +754,60 @@ def hidden_cell_test(
                         "TEST_ERROR_PCT": round(100 * err / tot, 2) if tot else np.nan,
                     }
                 )
-    return pd.DataFrame(rows), pd.DataFrame(by_source)
+    return pd.DataFrame(rows), pd.DataFrame(by_source), pd.DataFrame(per_rep)
 
 
-def select_shrinkage(scores: pd.DataFrame) -> pd.Series:
-    """Lambda per (year, variable): lowest mean DISPLACED_PCT of the frozen chain.
+def _spearman(pred, obs) -> float:
+    """Rank correlation, NaN (without a warning) when either side is constant."""
 
-    Ties go to the larger lambda (more weight on ED evidence).
+    pred, obs = np.asarray(pred, dtype=float), np.asarray(obs, dtype=float)
+    if len(pred) < 2 or np.ptp(pred) == 0 or np.ptp(obs) == 0:
+        return float("nan")
+    return round(float(spearmanr(pred, obs).statistic), 3)
+
+
+def shrinkage_selection_table(per_rep: pd.DataFrame) -> pd.DataFrame:
+    """One-standard-error rule for lambda, per (year, variable).
+
+    For each lambda the paired difference from the best lambda is taken draw by
+    draw (same hidden cells for every lambda). A lambda is admissible when its
+    mean difference is within one standard error of that difference. The most
+    shrunk admissible lambda is selected, so near-ties caused by Monte Carlo
+    noise resolve the same way on every platform.
     """
 
-    chain = scores.loc[scores["PRIOR"].eq("FROZEN_CHAIN") & scores["POPULATION"].eq("ALL")]
-    mean = chain.groupby(["YEAR", "VARIABLE", "LAMBDA"])["DISPLACED_PCT"].mean().round(2).reset_index()
-    mean = mean.sort_values(["YEAR", "VARIABLE", "DISPLACED_PCT", "LAMBDA"], ascending=[True, True, True, False])
-    return mean.groupby(["YEAR", "VARIABLE"])["LAMBDA"].first()
+    rows = []
+    for (year, variable), g in per_rep.groupby(["YEAR", "VARIABLE"]):
+        wide = g.pivot_table(index=["TEST_CELLS", "REPETITION"], columns="LAMBDA", values="DISPLACED_PCT")
+        mean = wide.mean()
+        best = float(mean.idxmin())
+        admissible = {}
+        for lam in wide.columns:
+            d = wide[lam] - wide[best]
+            se = float(d.std(ddof=1) / np.sqrt(len(d))) if lam != best else 0.0
+            admissible[lam] = float(d.mean()) <= se
+            rows.append(
+                {
+                    "YEAR": year,
+                    "VARIABLE": variable,
+                    "LAMBDA": lam,
+                    "MEAN_DISPLACED_PCT": round(float(mean[lam]), 2),
+                    "DIFF_FROM_BEST": round(float(d.mean()), 3),
+                    "SE_OF_DIFF": round(se, 3),
+                    "ADMISSIBLE": admissible[lam],
+                }
+            )
+        chosen = min(lam for lam, ok in admissible.items() if ok)
+        for row in rows[-len(wide.columns):]:
+            row["SELECTED"] = row["LAMBDA"] == chosen
+    return pd.DataFrame(rows)
+
+
+def select_shrinkage(per_rep: pd.DataFrame) -> pd.Series:
+    """Selected lambda per (year, variable), from ``shrinkage_selection_table``."""
+
+    table = shrinkage_selection_table(per_rep)
+    return table.loc[table["SELECTED"]].set_index(["YEAR", "VARIABLE"])["LAMBDA"]
 
 
 def source_error_lookup(by_source: pd.DataFrame, shrinkage: pd.Series) -> pd.Series:
