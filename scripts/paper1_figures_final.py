@@ -200,7 +200,6 @@ def f4_restructuring(restructuring, geo, pair, out, written):
 
     p = restructuring.copy(); eds = geo["ed"].copy(); _assert_ed_base(eds, "F4 geometry"); eds["KEY"] = eds["CSOED"].map(_canonical)
     eds = eds.merge(p[["KEY", "RELATIVE_PP", "STABLE_HERD_SHIFTED_SYSTEM"]], on="KEY", how="left", validate="one_to_one")
-    # Missing F4 values are expected for EDs without published cow cells in both censuses.
     if not set(p["KEY"]).issubset(set(eds["KEY"])):
         raise AssertionError("F4: census-restructuring keys failed to match the ED geography")
 
@@ -230,10 +229,8 @@ def f4_restructuring(restructuring, geo, pair, out, written):
 
 def _fill_holes(geom):
     from shapely.geometry import MultiPolygon, Polygon
-    if geom.geom_type == "Polygon":
-        return Polygon(geom.exterior)
-    if geom.geom_type == "MultiPolygon":
-        return MultiPolygon([Polygon(g.exterior) for g in geom.geoms])
+    if geom.geom_type == "Polygon": return Polygon(geom.exterior)
+    if geom.geom_type == "MultiPolygon": return MultiPolygon([Polygon(g.exterior) for g in geom.geoms])
     return geom
 
 
@@ -262,7 +259,7 @@ def f5_blackwater(derived, geo, out, written):
 def f6_incidence(data, geo, out, written):
     import matplotlib.pyplot as plt
     yr=base.CONFIG["perturbation_year"]; arm="DAIRY_PARENT"; ce=data["utility_comparison_ed"].loc[lambda d:(d["YEAR"]==yr)&(d["ARM"]==arm),["CSOED","DIFFERENCE_FOLLOWERS"]].copy()
-    e=geo["ed"].merge(ce,on="CSOED",how="left",validate="one_to_one"); _assert_ed_base(e,"F6 ED incidence");
+    e=geo["ed"].merge(ce,on="CSOED",how="left",validate="one_to_one"); _assert_ed_base(e,"F6 ED incidence")
     if e["DIFFERENCE_FOLLOWERS"].isna().any(): raise AssertionError("F6: one or more EDs failed the utility join")
     cw=data["utility_comparison_wfd"].loc[lambda d:(d["YEAR"]==yr)&(d["ARM"]==arm)].copy(); wg=geo["wfd_state"].merge(cw[["WFD_CATCHMENT_ID","WFD_CATCHMENT","DIFFERENCE_FOLLOWERS"]],on=["WFD_CATCHMENT_ID","WFD_CATCHMENT"],how="left",validate="one_to_one")
     fig=plt.figure(figsize=(base.FIG_W,3.9),constrained_layout=True); gs=fig.add_gridspec(1,3,width_ratios=[1,1,.9]); ax_a,ax_b,ax_c=[fig.add_subplot(gs[0,i]) for i in range(3)]
