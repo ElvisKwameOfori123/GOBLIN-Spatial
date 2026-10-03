@@ -62,24 +62,11 @@ def _first_ed_code(value: object) -> str:
 
 def _canonical_ed(value: object) -> str:
     from goblin_spatial.preparation.census_suppression import canonical_key
-
     first = _first_ed_code(value)
     return canonical_key(first) if first else ""
 
 
 def select_case_pair(data: dict, restructuring: pd.DataFrame, derived: dict) -> dict:
-    """Select a matched pair using census-grounded contrast only.
-
-    Eligibility:
-      * same-county/similar-herd pair already identified by the matched-pairs table;
-      * cow cells published in both the 2010 and 2020 censuses;
-      * at least one ED changes dairy share materially between censuses.
-
-    Ranking uses only 2020 census-grounded structure: absolute contrast in dairy
-    share of adult cows and followers per adult cow. The product of those two
-    contrasts is used as the transparent deterministic score. Model-informed
-    DxB/BxB composition is never used to select the illustrative pair.
-    """
     r = restructuring.set_index("KEY")
     e20 = derived["e20"].copy()
     e20["_KEY"] = e20["CSOED"].map(_canonical_ed)
