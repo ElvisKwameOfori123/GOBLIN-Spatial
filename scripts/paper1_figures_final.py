@@ -184,8 +184,11 @@ def f3_signatures(derived, geo, pair, out, written):
     from matplotlib.patches import Circle
 
     e20 = derived["e20"].copy()
+    e20["CSOED"] = e20["CSOED"].map(_first_ed_code)
     e20["_KEY"] = e20["CSOED"].map(_canonical_ed)
-    eds = geo["ed"].merge(e20.drop(columns=["_KEY"]), on=["CSOED", "County"], how="left", suffixes=("", "_y"))
+    edgeo = geo["ed"].copy()
+    edgeo["CSOED"] = edgeo["CSOED"].map(_first_ed_code)
+    eds = edgeo.merge(e20.drop(columns=["_KEY"]), on=["CSOED", "County"], how="left", suffixes=("", "_y"))
     coef = "FOLLOWERS_PER_COW_PLOT"
     vals = pd.to_numeric(eds[coef], errors="coerce")
     cmap = base.classed_cmap(base.C["follower"], 8)
@@ -205,14 +208,7 @@ def f3_signatures(derived, geo, pair, out, written):
     geo["ireland"].plot(ax=ax_b, color="#f4f4f4", edgecolor="#c8c8c8", linewidth=0.3)
     colours = [cmap(norm(v)) if np.isfinite(v) else base.C["nodata"] for v in vals.to_numpy(float)]
     order = np.argsort(-rad)
-    ax_b.add_collection(
-        PatchCollection(
-            [Circle(tuple(pts[k]), rad[k]) for k in order],
-            facecolor=[colours[k] for k in order],
-            edgecolor="white",
-            linewidth=0.08,
-        )
-    )
+    ax_b.add_collection(PatchCollection([Circle(tuple(pts[k]), rad[k]) for k in order], facecolor=[colours[k] for k in order], edgecolor="white", linewidth=0.08))
     base.map_axes(ax_b)
     base.title(ax_b, "b", "Animal-weighted cartogram (circle area = cattle)")
 
@@ -324,15 +320,7 @@ def f5_blackwater(derived, geo, out, written):
 
     z = gpd.clip(z, poly)
     v = pd.to_numeric(z["FOLLOWERS_PER_COW_PLOT"], errors="coerce").dropna()
-    stats = {
-        "WFD_CATCHMENT": name,
-        "SELECTION_REASON": "GeoGOBLIN comparability; within-catchment spread reported as found",
-        "N_ED": int(len(v)),
-        "P10": float(v.quantile(.1)),
-        "P50": float(v.quantile(.5)),
-        "P90": float(v.quantile(.9)),
-        "CATCHMENT_COEFFICIENT": catch_value,
-    }
+    stats = {"WFD_CATCHMENT": name, "SELECTION_REASON": "GeoGOBLIN comparability; within-catchment spread reported as found", "N_ED": int(len(v)), "P10": float(v.quantile(.1)), "P50": float(v.quantile(.5)), "P90": float(v.quantile(.9)), "CATCHMENT_COEFFICIENT": catch_value}
 
     norm = mcolors.Normalize(0, FOLLOWER_COEF_MAX)
     cmap = base.classed_cmap(base.C["follower"], 8)
