@@ -15,7 +15,7 @@ datasets:
   cso_census_county_livestock_2010_2020:
     stage: "00"
     module: [preparation]
-    description: "Exact CSO Census of Agriculture county livestock totals (total cattle, dairy cows, other cows, total sheep): 2010 Final Results Tables 8A/8B (North and South Tipperary summed), 2020 Results Tables 4.2/4.4. Counties sum to the AVA42 State totals; 2020 agrees with AAA10/AAA09 within 100-head rounding. Stage 00 county controls."
+    description: "Exact CSO Census of Agriculture county livestock totals (total cattle, dairy cows, other cows, total sheep): 2010 Final Results Tables 8A/8B (North and South Tipperary summed; checked against both full2010.pdf and Tables2010.pdf), 2020 Results Tables 4.2/4.4. Counties sum to the AVA42 State totals; 2020 agrees with AAA10/AAA09 within 100-head rounding. Stage 00 county controls."
     source: "git"
     path: "data/inputs/baseline/00_CSO_Census_County_Livestock_2010_2020.csv"
     sha256: "876cf589c0bf0805ef9a54c12e4a9e92343faae754b3dc852db2dc31cf75f104"

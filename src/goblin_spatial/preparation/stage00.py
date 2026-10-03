@@ -352,9 +352,8 @@ def prepare(paths: Stage00Paths, variant: str = "joint", repetitions: int = cs.T
         lam = {v: float(shrinkage.loc[(year, cs.MODEL_COLUMNS[v])]) for v in cs.VARIABLES}
         results[year] = cs.reconcile(frames[year], county_totals[year], variant, shrinkage=lam)
         c = cs.attach_error_flags(results[year].cells, lookup)
-        c.insert(c.columns.get_loc("SOURCE") + 1, "SHRINKAGE_LAMBDA", c["VARIABLE"].map(
-            {cs.MODEL_COLUMNS[v]: lam[v] for v in cs.VARIABLES}
-        ))
+        lam_col = c["VARIABLE"].map({cs.MODEL_COLUMNS[v]: lam[v] for v in cs.VARIABLES})
+        c.insert(c.columns.get_loc("SOURCE") + 1, "SHRINKAGE_LAMBDA", lam_col.where(c["SOURCE"].ne(cs.IDENTIFIED_SOURCE)))
         cells.append(c)
 
     # hard checks -----------------------------------------------------------

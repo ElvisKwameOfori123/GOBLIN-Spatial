@@ -83,8 +83,15 @@ def test_every_filled_cell_carries_source_and_measured_error() -> None:
             assert int((cells["YEAR"].eq(year) & cells["VARIABLE"].eq(column)).sum()) == n
     assert cells["SOURCE"].notna().all()
     assert cells["TEST_ERROR_PCT"].notna().all()
-    assert set(cells["CONFIDENCE_CLASS"]) <= {"HIGH", "MODERATE", "LOW"}
-    assert set(cells["SHRINKAGE_LAMBDA"]) <= set(cs.SHRINKAGE_GRID)
+    assert set(cells["CONFIDENCE_CLASS"]) <= {"EXACT", "HIGH", "MODERATE", "LOW"}
+    modelled = cells["SOURCE"].ne(cs.IDENTIFIED_SOURCE)
+    assert set(cells.loc[modelled, "SHRINKAGE_LAMBDA"]) <= set(cs.SHRINKAGE_GRID)
+    # A county's only blank cell is identified exactly by the county margin.
+    singles = cells.groupby(["YEAR", "VARIABLE", "COUNTY"])["KEY"].transform("size").eq(1)
+    assert cells.loc[singles, "SOURCE"].eq(cs.IDENTIFIED_SOURCE).all()
+    assert cells.loc[~singles, "SOURCE"].ne(cs.IDENTIFIED_SOURCE).all()
+    assert cells.loc[singles, "CONFIDENCE_CLASS"].eq("EXACT").all()
+    assert cells.loc[~modelled, "SHRINKAGE_LAMBDA"].isna().all()
 
 
 def test_census_county_totals_are_exact_in_both_years() -> None:

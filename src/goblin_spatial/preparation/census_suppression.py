@@ -105,6 +105,7 @@ BLEND_WEIGHT_2010 = 0.5  # 30-70% weights tested; hidden-cell error is practical
 
 # Labels summarise TEST_ERROR_PCT, the weighted absolute error of hidden test
 # cells that used the same prior source: sum|pred - obs| / sum(obs).
+IDENTIFIED_SOURCE = "COUNTY_RESIDUAL"
 CONFIDENCE_BANDS = ((25.0, "HIGH"), (50.0, "MODERATE"), (float("inf"), "LOW"))
 
 
@@ -528,6 +529,7 @@ def reconcile(
         lam = float(shrinkage[v])
         if lam == 0.0:
             src = np.full(len(f), "EQUAL_SPLIT", dtype=object)
+        src = src.copy()
         cap = np.full(len(f), 1e15) if capacity is None else np.floor(capacity)
         hard = cap if hard_capacity is None else np.floor(hard_capacity)
         filled = np.zeros(len(f), dtype=np.int64)
@@ -556,6 +558,10 @@ def reconcile(
                 raise AssertionError(f"{cf.year} {v} {county}: hidden total exceeds the blank cells' cattle")
             filled[idx] = base + alloc
             over_cap[v][idx] = (base + alloc) > cap[idx]
+            if len(idx) == 1:
+                # One blank cell: its value is the county residual, identified
+                # exactly; no prior or shrinkage is involved.
+                src[idx] = IDENTIFIED_SOURCE
             unit_rows.append(
                 {
                     "YEAR": cf.year,
@@ -763,10 +769,17 @@ def confidence_class(error_pct: float) -> str:
 
 
 def attach_error_flags(cells: pd.DataFrame, lookup: pd.Series) -> pd.DataFrame:
+    """Attach the measured error of each cell's prior source.
+
+    A cell that is the only blank cell of its county is identified exactly by
+    the county margin: error 0, class EXACT.
+    """
+
     keys = list(zip(cells["YEAR"], cells["VARIABLE"], cells["SOURCE"]))
     cells = cells.copy()
-    cells["TEST_ERROR_PCT"] = [lookup.get(k, np.nan) for k in keys]
-    cells["CONFIDENCE_CLASS"] = cells["TEST_ERROR_PCT"].map(confidence_class)
+    exact = cells["SOURCE"].eq(IDENTIFIED_SOURCE)
+    cells["TEST_ERROR_PCT"] = [0.0 if e else lookup.get(k, np.nan) for k, e in zip(keys, exact)]
+    cells["CONFIDENCE_CLASS"] = np.where(exact, "EXACT", cells["TEST_ERROR_PCT"].map(confidence_class))
     return cells
 
 
