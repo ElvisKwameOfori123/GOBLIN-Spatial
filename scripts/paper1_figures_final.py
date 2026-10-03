@@ -35,12 +35,6 @@ FOLLOWER_COEF_MAX = 2.5
 
 
 def _first_ed_code(value: object) -> str:
-    """Return the first ED code and normalise common spreadsheet artefacts.
-
-    Some source/export fields contain two ED codes. For figure joins we use the
-    first code deterministically. Numeric codes are zero-padded to six digits;
-    canonical_key remains the final authority for matching model/census keys.
-    """
     if value is None or (isinstance(value, float) and np.isnan(value)):
         return ""
     if isinstance(value, (list, tuple, np.ndarray, pd.Series)):
