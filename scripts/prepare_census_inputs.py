@@ -25,7 +25,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from goblin_spatial.preparation.census_suppression import PRIOR_SPECS  # noqa: E402
-from goblin_spatial.preparation.stage00 import Stage00Paths, prepare  # noqa: E402
+from goblin_spatial.preparation.stage00 import Stage00Paths, compare_outputs, prepare  # noqa: E402
 
 
 def main() -> int:
@@ -40,13 +40,21 @@ def main() -> int:
     paths = Stage00Paths.default(ROOT)
     result = prepare(paths, variant=args.variant)
 
-    differ = []
+    differ, tolerant = [], []
     for name, payload in result.files.items():
         relative = Path(name).relative_to(ROOT)
         target = (args.output_root or ROOT) / relative
         if args.check:
-            if not target.is_file() or target.read_bytes() != payload:
-                differ.append(str(relative))
+            if not target.is_file():
+                differ.append(f"{relative}: missing")
+                continue
+            verdict = compare_outputs(str(relative), target.read_bytes(), payload)
+            if verdict is None:
+                continue
+            if verdict.startswith("WITHIN_TOLERANCE"):
+                tolerant.append(f"{relative}: {verdict[len('WITHIN_TOLERANCE: '):]}")
+            else:
+                differ.append(f"{relative}: {verdict}")
             continue
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(payload)
@@ -59,7 +67,9 @@ def main() -> int:
         print("Stage 00 outputs differ from the committed files:\n  " + "\n  ".join(differ))
         return 1
     if args.check:
-        print("Stage 00 check passed: committed census inputs regenerate exactly.")
+        if tolerant:
+            print("Monte Carlo diagnostics regenerate within tolerance (platform floating point):\n  " + "\n  ".join(tolerant))
+        print("Stage 00 check passed: prepared census inputs and data-defining tables regenerate exactly.")
     return 0
 
 

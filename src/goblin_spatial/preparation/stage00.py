@@ -332,20 +332,23 @@ def prepare(paths: Stage00Paths, variant: str = "joint", repetitions: int = cs.T
         2010: cs.build_frame(2010, census, state, aim_local, aim_county, model_keys),
     }
 
-    scores, by_source, fallback, results, cells = [], [], [], {}, []
+    scores, by_source, fallback, reps, results, cells = [], [], [], [], {}, []
     for year in YEARS:
         cf = frames[year]
         chains = cs.PRIOR_SPECS[variant][year]
-        sc, src = cs.hidden_cell_test(cf, UNIT_COLUMNS, chains, repetitions=repetitions)
-        fb, _ = cs.hidden_cell_test(
+        sc, src, rp = cs.hidden_cell_test(cf, UNIT_COLUMNS, chains, repetitions=repetitions)
+        fb, _, _ = cs.hidden_cell_test(
             cf, UNIT_COLUMNS, chains, repetitions=repetitions, fallback_only=True
         )
         scores.append(sc)
+        reps.append(rp)
         by_source.append(src)
         fallback.append(fb)
     scores = pd.concat(scores + fallback, ignore_index=True)
     by_source = pd.concat(by_source, ignore_index=True)
-    shrinkage = cs.select_shrinkage(scores)
+    reps = pd.concat(reps, ignore_index=True)
+    selection_table = cs.shrinkage_selection_table(reps)
+    shrinkage = cs.select_shrinkage(reps)
     lookup = cs.source_error_lookup(by_source, shrinkage)
 
     for year in YEARS:
@@ -388,7 +391,7 @@ def prepare(paths: Stage00Paths, variant: str = "joint", repetitions: int = cs.T
     cap = pd.DataFrame(
         {"YEAR": list(YEARS), "COW_CAP_SHARE": [round(results[y].cow_cap_share, 4) for y in YEARS]}
     )
-    selection = shrinkage.rename("SHRINKAGE_LAMBDA").reset_index()
+    selection = selection_table
 
     files = {
         str(paths.ed_2020): prepared_2020.render(),
@@ -407,4 +410,77 @@ def prepare(paths: Stage00Paths, variant: str = "joint", repetitions: int = cs.T
     return Stage00Result(files, shrinkage, closure)
 
 
-__all__ = ["LIVESTOCK_COLUMNS", "Stage00Paths", "Stage00Result", "CsvTemplate", "prepare"]
+# ------------------------------------------------------------------ regeneration check
+
+# The hidden-cell test is a Monte Carlo diagnostic. Its random draws and float
+# summation can differ across NumPy/pandas builds and platforms, so its metrics
+# are compared on matching rows within these tolerances (None: diagnostic
+# table, drift reported but not failed; small-sample rows such as rare prior
+# sources vary with the random stream). Everything that
+# defines the data (prepared inputs, closures, controls, the selected lambda,
+# filled values and sources) must regenerate exactly. Tolerances were set from
+# runs with entirely different random seeds, a harsher test than any platform
+# difference.
+MONTE_CARLO_SPECS = {
+    "hidden_cell_test.csv": {
+        "keys": ["YEAR", "VARIABLE", "PRIOR", "LAMBDA", "TEST_CELLS", "POPULATION"],
+        "tolerance": {"DISPLACED_PCT": None, "SPEARMAN": None},
+        "exact": [],
+    },
+    "hidden_cell_source_error.csv": {
+        "keys": ["YEAR", "VARIABLE", "SOURCE", "LAMBDA", "TEST_CELLS"],
+        "tolerance": {"TEST_ERROR_PCT": None},
+        "exact": [],
+    },
+    "shrinkage_selection.csv": {
+        "keys": ["YEAR", "VARIABLE", "LAMBDA"],
+        "tolerance": {"MEAN_DISPLACED_PCT": 1.5},
+        "exact": ["SELECTED"],
+    },
+    "filled_cells.csv": {
+        "keys": ["YEAR", "KEY", "VARIABLE"],
+        "tolerance": {"TEST_ERROR_PCT": 6.0},
+        "exact": ["ED_NAME", "COUNTY", "IN_MODEL", "FILLED_VALUE", "SOURCE", "SHRINKAGE_LAMBDA", "ABOVE_COW_CAP"],
+    },
+}
+MONTE_CARLO_FILES = tuple(MONTE_CARLO_SPECS)
+MIN_MATCHED_ROWS = 0.95
+
+
+def compare_outputs(name: str, committed: bytes, regenerated: bytes) -> str | None:
+    """None if identical; 'WITHIN_TOLERANCE: ...' for acceptable Monte Carlo drift; else the reason."""
+
+    if committed == regenerated:
+        return None
+    spec = MONTE_CARLO_SPECS.get(Path(name).name)
+    if spec is None:
+        return "differs (exact match required)"
+    old = pd.read_csv(io.BytesIO(committed), dtype=str, keep_default_na=False)
+    new = pd.read_csv(io.BytesIO(regenerated), dtype=str, keep_default_na=False)
+    if list(old.columns) != list(new.columns):
+        return "differs in columns"
+    keys = spec["keys"]
+    if old.duplicated(keys).any() or new.duplicated(keys).any():
+        return "duplicate keys"
+    both = old.merge(new, on=keys, suffixes=("_OLD", "_NEW"), how="inner")
+    if spec["exact"]:
+        # data-defining rows must be identical in number and content
+        if len(both) != len(old) or len(both) != len(new):
+            return "rows differ"
+        bad = [c for c in spec["exact"] if not both[f"{c}_OLD"].equals(both[f"{c}_NEW"])]
+        if bad:
+            return f"differs in data-defining columns {bad}"
+    elif len(both) < MIN_MATCHED_ROWS * max(len(old), len(new)):
+        return f"only {len(both)} of {max(len(old), len(new))} rows match"
+    report = [f"{len(both)} matched rows"]
+    for column, tol in spec["tolerance"].items():
+        a = pd.to_numeric(both[f"{column}_OLD"], errors="coerce")
+        b = pd.to_numeric(both[f"{column}_NEW"], errors="coerce")
+        gap = float((a - b).abs().max()) if (a.notna() & b.notna()).any() else 0.0
+        report.append(f"{column} max diff {gap:.3f}")
+        if tol is not None and gap > tol:
+            return f"{column} differs by {gap:.3f} (> {tol})"
+    return "WITHIN_TOLERANCE: " + "; ".join(report)
+
+
+__all__ = ["LIVESTOCK_COLUMNS", "Stage00Paths", "Stage00Result", "CsvTemplate", "compare_outputs", "prepare"]

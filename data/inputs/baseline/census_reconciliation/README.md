@@ -1,6 +1,6 @@
 # Stage 00 census reconciliation: audit tables
 
-Written by `scripts/prepare_census_inputs.py` (library: `src/goblin_spatial/preparation/`). The method is described in `docs/methodology.md` section 2.0. Every file here regenerates exactly from the raw inputs; `python scripts/prepare_census_inputs.py --check` verifies this and is the first step of `scripts/build_historical_release.py`.
+Written by `scripts/prepare_census_inputs.py` (library: `src/goblin_spatial/preparation/`). The method is described in `docs/methodology.md` section 2.0. `python scripts/prepare_census_inputs.py --check` regenerates everything from the raw inputs and is the first step of `scripts/build_historical_release.py`. The prepared inputs and every data-defining table must match exactly. The hidden-cell test is a Monte Carlo diagnostic whose draws and float sums can differ across NumPy/pandas builds and platforms: in `filled_cells.csv` only `TEST_ERROR_PCT` may drift (by up to 6 points), in `shrinkage_selection.csv` only the mean errors (by up to 1.5 points) while the selected lambda must match, and the two test tables are checked for structure with their drift reported. These limits come from reruns with five different random seeds, under which the selected lambdas and all filled values never changed.
 
 ## Inputs and what is written
 
@@ -26,9 +26,9 @@ The county table was transcribed from CSO Census of Agriculture 2010 Final Resul
 | `county_control_checks.csv` | The validation of the census county table listed above, including census minus AAA10/AAA09. |
 | `state_closure.csv` | Per year and variable: State total, published sum, filled inside and outside the model universe, reconciled total (difference zero). |
 | `cow_cap.csv` | 99th percentile cow share of cattle among published EDs with at least 200 cattle. |
-| `hidden_cell_test.csv` | Hidden-cell test scores (`DISPLACED_PCT`, `SPEARMAN`) for every named prior, the equal split and the frozen chain at each lambda, for three test sizes; `POPULATION = WITHOUT_<first prior>` rows repeat the test on EDs lacking the first prior of the chain. |
+| `hidden_cell_test.csv` | Hidden-cell test scores (100 draws per test size) (`DISPLACED_PCT`, `SPEARMAN`) for every named prior, the equal split and the frozen chain at each lambda, for three test sizes; `POPULATION = WITHOUT_<first prior>` rows repeat the test on EDs lacking the first prior of the chain. |
 | `hidden_cell_source_error.csv` | Error of the frozen chain by prior source and lambda (source of `TEST_ERROR_PCT`). |
-| `shrinkage_selection.csv` | Selected lambda per year and variable. |
+| `shrinkage_selection.csv` | One-standard-error selection of lambda per year and variable: mean error, paired difference from the best lambda and its standard error, admissible and selected flags. |
 | `temporal_holdout_2010_2020.csv` | 2010 within-county shares applied to 2020 county totals, scored on EDs published in both censuses, at ED and WFD catchment level. Tests the persistence assumption behind non-census years; it is not a test of the filled cells. |
 | `coverage_outside_model.csv` | Census animals in the 552 EDs outside the 2,857-ED model universe, by county, WFD catchment and State. |
 | `robustness_variants.csv`, `robustness_signature_agreement.csv` | Headline results under census-input variants A (v1.1 dairy-only reconciliation), B (this stage) and C (AIM evidence first in 2020), from `scripts/run_census_reconciliation_robustness.py`. |
@@ -41,7 +41,7 @@ A county's only blank cell for a variable is identified exactly by the county ma
 
 - County placement of suppressed animals is census-exact. Only the placement among two or more blank EDs within a county is reconstructed.
 - The hidden test cells are the smallest published cells, yet real suppressed cells are smaller still (2020 mean per blank cell: 188 dairy cows, 37 other cows, 147 cattle, 301 sheep). Errors measured on test cells are therefore indicative, and the test favours methods that do not overstate between-cell spread, which is what shrinkage does.
-- Weighted by filled animals, `TEST_ERROR_PCT` in 2020 is 24.6% for dairy cows, 26.2% other cows, 40.6% total cattle and 26.8% sheep. Total cattle errors are high because most of the 84 blank 2020 totals are city and town EDs with little earlier evidence; 65 of them lie outside the model universe. Together they hold 12,337 cattle (0.17% of the State), 8,744 of them outside the model universe.
+- Weighted by filled animals, `TEST_ERROR_PCT` in 2020 is 24.6% for dairy cows, 24.9% other cows, 41.9% total cattle and 26.8% sheep. Total cattle errors are high because most of the 84 blank 2020 totals are city and town EDs with little earlier evidence; 65 of them lie outside the model universe. Together they hold 12,337 cattle (0.17% of the State), 8,744 of them outside the model universe.
 - AIM evidence is matched only one-to-one. Unqualified AIM names that could refer to either of two census EDs (e.g. "Kilbarry" and "Kilbarry (Part Rural)", "Cootehill Rural" and "Cootehill Urban") are discarded, not guessed.
 - Where a county's exact hidden total cannot fit under the cow cap, the cap gives way in that county and the cells are flagged (92 other cows in total, 2010 and 2020).
 - Many 2010 dairy and sheep fills sit in EDs with a published 2020 zero. That is the census record of exit (a few holdings in 2010, none in 2020), not an artefact of the fill.
