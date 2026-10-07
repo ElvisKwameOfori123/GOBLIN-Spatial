@@ -1,6 +1,6 @@
 # GOBLIN-Spatial data dictionary
 
-This document describes the principal variables exposed by the historical baseline, livestock signatures and illustrative perturbation. A complete column-by-column dictionary ships with the historical release bundle as `_columns` and `_columns.csv`.
+This document describes the principal variables exposed by the historical baseline, livestock signatures and multiscale reporting products. A complete column-by-column dictionary ships with the historical release bundle as `_columns` and `_columns.csv`.
 
 ## Core identifiers
 
@@ -84,6 +84,9 @@ Principal signature fields include:
 | `BXB_SHARE_FOLLOWERS_PCT` | BxB followers as a percentage of all followers |
 | `FOLLOWER_TO_ADULT_RATIO` | Followers per adult cow |
 | `CATTLE_PER_FARMED_HA` | Total cattle per farmed hectare |
+| `SHEEP_PER_FARMED_HA` | Total sheep per farmed hectare |
+| `GRASSLAND_SHARE_FARMED_PCT` | Grassland as a percentage of farmed area |
+| `CEREAL_SHARE_FARMED_PCT` | Cereals as a percentage of farmed area |
 | `SO_PER_FARMED_HA` | Covered fixed-2020 Standard Output per farmed hectare |
 | `UPLAND_SHARE_SHEEP_PCT` | Mountain/upland-type sheep share |
 
@@ -106,30 +109,25 @@ Support classes are:
 
 These are biological relationship-support classes, not movement, trade or origin observations.
 
-## Illustrative perturbation
+## Catchment signature spread
 
-The 30% perturbation tables distinguish:
-
-- `ARM`: dairy-parent, suckler-parent or supplementary proportional reference;
-- `METHOD`: signature-preserving, headcount benchmark or uniform reference;
-- changes in cattle, followers, livestock units and cattle Standard Output;
-- signature-minus-headcount differences at ED and WFD catchment scales;
-- spatial displacement summaries.
-
-Important displacement fields include:
+The `wfd_signature_spread` table pairs each catchment accounting value with
+the denominator-weighted distribution of ED signatures intersecting that
+catchment.
 
 | Variable | Meaning |
 |---|---|
-| `ED_TOTAL_DISPLACEMENT` | Half-sum spatial difference between signature and headcount representations at ED scale |
-| `WFD_TOTAL_DISPLACEMENT` | Corresponding WFD catchment displacement |
-| `ED_RECEIVER_COMPONENT` | Additive displacement associated with EDs without the corresponding local adult-parent population |
-| `ED_RATIO_COMPONENT` | Remaining additive ED displacement |
-| `ED_PURE_RATIO_DISPLACEMENT` | Separate diagnostic isolating heterogeneity among parent-bearing EDs |
-| `NATIONAL_METHOD_DIFFERENCE` | National difference between methods for quantities that are not nationally conserved, notably region-weighted Standard Output |
+| `CATCHMENT_VALUE` | Catchment signature recalculated from fractionally aggregated numerator and denominator |
+| `ED_WEIGHTED_P10` | Weighted 10th percentile of intersecting ED signature values |
+| `ED_WEIGHTED_P50` | Weighted median of intersecting ED signature values |
+| `ED_WEIGHTED_P90` | Weighted 90th percentile of intersecting ED signature values |
+| `ED_WEIGHTED_P90_P10` | Within-catchment P90-P10 spread |
+| `INTERSECTING_EDS` | EDs contributing positive denominator weight |
+| `DISTRIBUTION_DENOMINATOR` | Sum of ED signature denominators after fractional catchment weighting |
 
-The additive ratio component and the pure-ratio diagnostic are not the same quantity.
-
-The headcount method is an **attribution benchmark**, not a feasible alternative local herd state.
+This structural distribution complements the catchment accounting value. It
+does not relocate livestock within an ED and does not replace the fractional
+ED-to-catchment accounting rule.
 
 ## Interpretation boundary
 
