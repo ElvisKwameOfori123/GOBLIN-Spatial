@@ -36,6 +36,9 @@ jobs:
       - name: Build complete historical release
         run: python scripts/build_historical_release.py
 
+      - name: Build baseline paper figures
+        run: python scripts/paper1_figures_final.py
+
       - name: Confirm coherence audit and release products
         run: |
           test -f reporting/report_data/historical/historical_results.duckdb
@@ -46,6 +49,8 @@ jobs:
           test -f reporting/report_data/historical/livestock_signature.parquet
           test -f reporting/report_data/historical/wfd_signature_spread.parquet
           test -f reporting/report_data/historical/parent_follower_relationship_ed.parquet
+          test -f reporting/paper1/figures/F5_ed_agricultural_context.png
+          test -f reporting/paper1/figures/F6_blackwater_ed_catchment_signatures.png
           python - <<'PY'
           import duckdb
           from pathlib import Path
