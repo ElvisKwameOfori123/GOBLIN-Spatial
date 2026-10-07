@@ -540,6 +540,8 @@ def concentration_summary(ed_state: pd.DataFrame, year: int = 2020) -> pd.DataFr
             {
                 "YEAR": year,
                 "POPULATION": label,
+                "RANKING_METRIC": f"{label}_PER_FARMED_HA",
+                "RANKING_RULE": "top 10% of EDs ranked by this population divided by AREA_FARMED",
                 "TOP_DECILE_EDS": n_top,
                 "POPULATION_SHARE_PCT": (
                     100.0 * float(top["_VALUE"].sum()) / total_value
@@ -820,12 +822,23 @@ def build_historical_result_tables(
                 "COUNTY": county,
                 "WFD_CATCHMENT": catchment,
                 "NATIONAL": national,
-            }
+            },
+            year=2020,
+        ),
+        "signature_ranges_2025": signature_ranges(
+            {
+                "ED": ed,
+                "COUNTY": county,
+                "WFD_CATCHMENT": catchment,
+                "NATIONAL": national,
+            },
+            year=2025,
         ),
         "information_geography_2020": information_geography(
             ed.loc[ed["YEAR"] == 2020]
         ),
-        "concentration_2020": concentration_summary(ed),
+        "concentration_2020": concentration_summary(ed, year=2020),
+        "concentration_2025": concentration_summary(ed, year=2025),
         "matched_pairs_2020": build_matched_pairs(ed),
         "stable_ed_sensitivity": stable_ed_sensitivity(ed),
         "multiscale_example_2020": example,
