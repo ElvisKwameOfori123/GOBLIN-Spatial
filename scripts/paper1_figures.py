@@ -381,6 +381,7 @@ def derive(data: dict) -> dict:
                                          "Suckler-centred"], default="Mixed breeding")
     y0, yb, y1 = CONFIG["start_year"], CONFIG["base_year"], CONFIG["end_year"]
     e20 = ed.loc[ed["YEAR"] == yb].copy()
+    e25 = ed.loc[ed["YEAR"] == y1].copy()
 
     typology = (e20.groupby("SYSTEM_TYPE")
                 .agg(EDS=("CSOED", "size"), CATTLE=("TOTAL_CATTLE", "sum"), DAIRY_COWS=("dairy_cows", "sum"),
@@ -442,7 +443,7 @@ def derive(data: dict) -> dict:
     w["BXB_SHARE_FOLLOWERS_PCT"] = ratio(w["BXB_FOLLOWERS"], w["FOLLOWER_TOTAL"], 100)
     w["SO_PER_HA"] = ratio(w["SO_COVERED_TOTAL_2020_EUR"], w["AREA_FARMED"])
     print(f"3 DERIVE    typology {int((typology['EDS'] > 0).sum())} classes; national and catchment indicators")
-    return {"ed": ed, "e20": e20, "typology": typology, "typology_sensitivity": typology_sensitivity,
+    return {"ed": ed, "e20": e20, "e25": e25, "typology": typology, "typology_sensitivity": typology_sensitivity,
             "national_change": national_change, "wfd": w}
 
 
