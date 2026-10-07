@@ -356,9 +356,13 @@ def build_wfd_fractional_vs_majority(
     summaries: list[dict[str, object]] = []
 
     for year in years:
-        ed = add_signature_metrics(
-            ed_state.loc[pd.to_numeric(ed_state["YEAR"], errors="raise").astype(int) == int(year)].copy()
-        )
+        ed = ed_state.loc[
+            pd.to_numeric(ed_state["YEAR"], errors="raise").astype(int) == int(year)
+        ].copy()
+        required_ed = {"CSOED", *quantities}
+        missing_ed = sorted(required_ed - set(ed.columns))
+        if missing_ed:
+            raise ValueError(f"ED state lacks WFD comparison fields: {missing_ed}")
         ed["CSOED"] = ed["CSOED"].astype(str)
         if ed["CSOED"].duplicated().any():
             raise AssertionError(f"{year}: duplicate ED rows in majority-rule comparison")
