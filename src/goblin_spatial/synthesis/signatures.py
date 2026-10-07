@@ -223,6 +223,18 @@ def build_wfd_signature_spread(
                 "DISTRIBUTION_DENOMINATOR": float(
                     group.loc[valid, "DISTRIBUTION_WEIGHT"].sum()
                 ),
+                "_ED_AGG_NUMERATOR": float(
+                    (
+                        pd.to_numeric(group["NUMERATOR"], errors="coerce").fillna(0.0)
+                        * group["ED_CATCHMENT_WEIGHT"]
+                    ).sum()
+                ),
+                "_ED_AGG_DENOMINATOR": float(
+                    (
+                        pd.to_numeric(group["DENOMINATOR"], errors="coerce").fillna(0.0)
+                        * group["ED_CATCHMENT_WEIGHT"]
+                    ).sum()
+                ),
                 "DENOMINATOR_COLUMN": (
                     str(group["DENOMINATOR_COLUMN"].iloc[0]) if len(group) else ""
                 ),
@@ -251,6 +263,25 @@ def build_wfd_signature_spread(
         how="left",
         validate="one_to_one",
     )
+    valid = out["_ED_AGG_DENOMINATOR"] > 0
+    recomputed = (
+        out.loc[valid, "_ED_AGG_NUMERATOR"]
+        / out.loc[valid, "_ED_AGG_DENOMINATOR"]
+        * out.loc[valid, "SIGNATURE"].map(
+            {name: scale for name, (_, _, scale) in SIGNATURE_DEFINITIONS.items()}
+        )
+    )
+    if not np.allclose(
+        recomputed,
+        out.loc[valid, "CATCHMENT_VALUE"],
+        rtol=1e-9,
+        atol=1e-9,
+        equal_nan=True,
+    ):
+        raise AssertionError(
+            "WFD signature spread does not reproduce the catchment accounting value"
+        )
+    out = out.drop(columns=["_ED_AGG_NUMERATOR", "_ED_AGG_DENOMINATOR"])
     return out.sort_values(["YEAR", "SIGNATURE", "WFD_CATCHMENT_ID"]).reset_index(drop=True)
 
 
