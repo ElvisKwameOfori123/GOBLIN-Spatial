@@ -39,8 +39,8 @@ CSV and Parquet are the canonical files; the two databases are query copies of t
 | `baseline_coherence_audit` | | Every cross-product identity, re-derived. All rows must be `PASS`. |
 | `validation_detail_*` | | The diagnostics behind the validation summary. |
 | `livestock_signature`, `livestock_signature_long` | | Full cohort signatures for 2020 and 2025 at ED, WFD catchment, county, Colm catchment and national scale (see below). |
+| `wfd_signature_spread` | | Catchment accounting value paired with denominator-weighted P10, P50 and P90 of intersecting ED signatures. |
 | `parent_follower_relationship_*` | | ED parent-follower relationships and their shares by geography. |
-| `utility_*` | | The illustrative 30% dairy / suckler perturbation: signature against headcount, ED and WFD. |
 | `_columns` | | Unit and meaning of every column in every public table. |
 | `_readme` | | The points in this guide, inside the database. |
 
@@ -48,12 +48,13 @@ CSV and Parquet are the canonical files; the two databases are query copies of t
 
 ## Livestock signatures (ED and WFD catchment first)
 
-The two primary geographies are the **ED**, for spatial pattern, and the **WFD catchment**, for water-framework work. County, Colm catchment and national rows are provided for context.
+The two primary geographies are the **ED**, for fine-scale spatial pattern, and the **WFD catchment**, as an environmental reporting geography. County, Colm catchment and national rows are provided for context.
 
 | Table | What it holds |
 |---|---|
 | `livestock_signature` | For 2020 and 2025 and every geography unit: the full 21-cohort cattle state (dairy cows, suckler cows, bulls, and DxD/DxB/BxB by age and sex), adult and follower totals, sheep and upland sheep, farmed area, grassland, covered SO, and the signature ratios. Filter `GEOGRAPHY_TYPE` to `ED` or `WFD_CATCHMENT`. |
 | `livestock_signature_long` | Each signature ratio with its numerator, denominator and scale. Re-aggregate by summing numerators and denominators, never by averaging `VALUE`. |
+| `wfd_signature_spread` | For each catchment, year and signature: the accounting value plus denominator-weighted ED P10, P50, P90 and P90-P10 spread. All intersecting EDs enter with their fractional crosswalk weight. |
 | `parent_follower_relationship_ed` | One row per ED, follower cohort and signature year: parent population (dairy cows for DxD and DxB, suckler cows for BxB, all cows for bulls), parent head, follower head, follower-per-parent ratio, and relationship class. |
 | `parent_follower_relationship_shares` | For each ED, WFD catchment, county, Colm catchment and Ireland: follower head by origin group split into `LOCAL_ED`, `COUNTY_RECEIVER` and `NATIONAL_ORPHAN`. The class is an ED property; aggregate rows only say how much of their follower stock sits in each class. |
 | `parent_follower_relationship_by_year` | National shares by class for every year 2015-2025. |
@@ -62,39 +63,19 @@ Relationship classes: `LOCAL_ED` means the follower's parent cows are in the sam
 
 **Relationship support classes are not movement classes.** `COUNTY_RECEIVER` means only that an ED contains a follower cohort while the corresponding parent cows are absent locally and present elsewhere in the county. Under the corrected reconstruction, the published 2020 adult-cow support pattern is retained after 2020, so this relationship can persist in later years. It should be interpreted as biological support for the parent-follower representation, not as evidence that animals were bought in or moved from a particular place.
 
-## Livestock-signature perturbation (illustrative)
+## Reading catchment results
 
-A static endpoint perturbation of the frozen 2020 and 2025 baselines. It is not a scenario, forecast or behavioural model, and nothing is rebuilt.
+Catchments have two complementary representations. The accounting value is
+computed by transferring additive ED quantities with the full frozen
+ED-catchment area crosswalk, summing the numerator and denominator and
+recalculating the ratio. The within-catchment structural distribution retains
+the intersecting ED signature values and weights each by its denominator
+multiplied by the same fractional crosswalk weight. This yields P10, P50 and
+P90 values without treating ED percentages as additive.
 
-**Arms.** `DAIRY_PARENT`: a 30% national cut in dairy cows. `SUCKLER_PARENT`: a 30% national cut in suckler cows. Each cut is shared pro rata across EDs by their share of those cows, which is the same as cutting every ED's cows by 30%. For 2020 the dairy base is the published ED total, 1,379,884 cows (a cut of 413,965); for 2025 it is 1,588,100 (476,430).
-
-**Two methods, same national change.**
-
-| `METHOD` | Where follower change lands |
-|---|---|
-| `SIGNATURE` | Each linked follower cohort (DxD and DxB for dairy; BxB for suckler; 6 age-sex cohorts each) follows its frozen parent relationship: the ED's own cows; the county's cows where the ED has followers but no cows; national cows only as a fallback that does not occur. Followers stay in their ED. |
-| `HEADCOUNT` | National followers-per-cow coefficients applied to each ED's cow change: follower change is attributed to where the cows are. This is an unconstrained spatial attribution benchmark, not a feasible alternative ED herd; it is used to measure spatial allocation error and should not be interpreted as post-perturbation local stock. |
-
-Both remove the same national number of each follower cohort. Their difference is where the change lands, and its size is the information the ED and county signatures carry. `PRO_RATA` (all 21 cohorts, `METHOD = UNIFORM`) is kept as a supplementary reference.
-
-**Tables.**
-
-| Table | Use |
-|---|---|
-| `utility_comparison_ed` | Per ED and arm: signature, headcount and difference for followers, cattle, LU and cattle SO. Map this. |
-| `utility_comparison_wfd` | The same, aggregated to the 46 WFD catchments with the frozen ED weights. |
-| `utility_displacement` | How much the headcount method places differently, at ED, WFD and county scale. |
-| `utility_perturbation_ed`, `_aggregate`, `_national` | Every method's change, with `SIGNATURE` follower change split by support class. |
-
-**Displacement.** `ED_TOTAL_DISPLACEMENT` = ½ Σ |signature − headcount| over EDs. It splits exactly into:
-- `ED_RECEIVER_COMPONENT`: change in EDs holding followers but no parent cows, which the headcount method cannot place;
-- `ED_RATIO_COMPONENT`: the rest, from EDs whose followers per cow differ from the national figure.
-
-`ED_PURE_RATIO_DISPLACEMENT` is the displacement among parent-cow EDs if parent-less EDs did not exist, the cleanest measure of the ED signature itself. `WFD_TOTAL_DISPLACEMENT` repeats the half-sum after aggregation to catchments.
-
-**Two cautions.**
-- The receiver component reflects the frozen parent-support geography. Because a published 2020 zero remains zero after 2020, parent-less follower EDs can remain a material part of the dairy perturbation in 2025. This is a support-structure result, not a movement estimate.
-- Standard Output coefficients differ by region, so the headcount method also changes the national SO total (`NATIONAL_METHOD_DIFFERENCE`). SO differences are therefore reported but not decomposed.
+A majority-inside threshold may be used in a figure to display uncluttered ED
+polygons inside a named catchment, but it is a display rule only. It is not
+used for the published catchment totals or the `wfd_signature_spread` table.
 
 ## Reading the numbers correctly
 
@@ -119,13 +100,18 @@ SQLite, from the command line or any client:
 SELECT YEAR, SUM(TOTAL_CATTLE) AS cattle, SUM(TOTAL_SHEEP) AS sheep, SUM(AREA_FARMED) AS ha
 FROM cso13_ed_year GROUP BY YEAR ORDER BY YEAR;
 
--- WFD catchments: how differently does a headcount model place a 30% dairy cut? (2025)
-SELECT WFD_CATCHMENT, SIGNATURE_CHANGE_LU, HEADCOUNT_CHANGE_LU, DIFFERENCE_LU FROM utility_comparison_wfd
-WHERE ARM = 'DAIRY_PARENT' AND YEAR = 2025 ORDER BY abs(DIFFERENCE_LU) DESC LIMIT 10;
+-- WFD catchments: catchment value and ED heterogeneity (2020)
+SELECT WFD_CATCHMENT, CATCHMENT_VALUE,
+       ED_WEIGHTED_P10, ED_WEIGHTED_P50, ED_WEIGHTED_P90
+FROM wfd_signature_spread
+WHERE YEAR = 2020 AND SIGNATURE = 'FOLLOWER_TO_ADULT_RATIO'
+ORDER BY ED_WEIGHTED_P90_P10 DESC;
 
--- the displacement summary
-SELECT YEAR, ARM, QUANTITY, ED_TOTAL_DISPLACEMENT, ED_RECEIVER_COMPONENT, ED_RATIO_COMPONENT, WFD_TOTAL_DISPLACEMENT
-FROM utility_displacement WHERE QUANTITY = 'FOLLOWERS';
+-- WFD catchment agricultural context
+SELECT WFD_CATCHMENT, CATTLE_PER_FARMED_HA, SHEEP_PER_FARMED_HA,
+       GRASSLAND_SHARE_FARMED_PCT, CEREAL_SHARE_FARMED_PCT
+FROM livestock_signature
+WHERE GEOGRAPHY_TYPE = 'WFD_CATCHMENT' AND YEAR = 2020;
 
 -- ED signatures for mapping (2025)
 SELECT GEOGRAPHY_ID AS CSOED, DAIRY_SHARE_ADULT_PCT, DXB_SHARE_FOLLOWERS_PCT, FOLLOWER_TO_ADULT_RATIO

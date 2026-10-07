@@ -71,7 +71,6 @@ CONFIG = {
     },
     "stable_herd_pct": 5.0,
     "material_shift_pp": 10.0,
-    "perturbation_year": 2020,
     "share_breaks": [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
     "lu_breaks": [0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0],
     "dpi": 600,
@@ -274,8 +273,8 @@ def load(root: Path) -> dict:
         "ed_year", "county_year", "wfd_catchment_year", "national_year", "validation_summary",
         "validation_detail_sheep_composition_holdout_2022", "validation_detail_dafm_county_sheep_diagnostics",
         "validation_detail_temporal_rank_stability", "concentration_2020", "matched_pairs_2020",
-        "utility_comparison_ed", "utility_comparison_wfd", "utility_displacement", "baseline_coherence_audit",
-        "information_geography_2020",
+        "baseline_coherence_audit", "information_geography_2020", "livestock_signature",
+        "wfd_signature_spread",
     ]
     data = {n: pd.read_parquet(b / f"{n}.parquet") for n in names}
     data["ed_year"]["CSOED"] = data["ed_year"]["CSOED"].astype(str)
@@ -804,7 +803,7 @@ def f5_restructuring(p, geo, out, written):
     save(fig, out, "F5_observed_restructuring_2010_2020", written)
 
 
-def f6_catchments(derived, geo, out, written):
+def f6_catchments(data, derived, geo, out, written):
     """3.5 Catchments: WFD planning units and the ED variation they contain."""
     import matplotlib.pyplot as plt
 
@@ -834,18 +833,19 @@ def f6_catchments(derived, geo, out, written):
     colorbar(fig, [ax_b, ax_c], cmap, norm, f"Dairy share of adult cows, {yb} (%)", ticks=[0, 20, 40, 60, 80, 100],
              shrink=0.6)
 
-    # d: catchment value against the ED spread inside it (P10-P90, EDs weighted by adult cows)
-    xw = geo["crosswalk"][["CSOED", "WFD_CATCHMENT_ID", "ED_CATCHMENT_WEIGHT"]]
-    e = derived["e20"][["CSOED", "DAIRY_SHARE_PLOT", "ADULT_COWS"]].merge(xw, on="CSOED")
-    e = e.loc[e["DAIRY_SHARE_PLOT"].notna() & (e["ED_CATCHMENT_WEIGHT"] >= 0.5)]
-
-    def wq(g, q):
-        g = g.sort_values("DAIRY_SHARE_PLOT")
-        c = (g["ADULT_COWS"] * g["ED_CATCHMENT_WEIGHT"]).cumsum()
-        return float(np.interp(q * c.iloc[-1], c, g["DAIRY_SHARE_PLOT"]))
-
-    spread = e.groupby("WFD_CATCHMENT_ID").apply(lambda g: pd.Series({
-        "P10": wq(g, 0.1), "P90": wq(g, 0.9), "N": len(g)}), include_groups=False).reset_index()
+    # d: catchment accounting value against the structural ED spread inside it.
+    # The spread table uses all intersecting EDs with denominator x fractional
+    # ED-catchment weights; no majority-inside threshold enters the calculation.
+    spread = data["wfd_signature_spread"].loc[
+        (data["wfd_signature_spread"]["YEAR"] == yb)
+        & (data["wfd_signature_spread"]["SIGNATURE"] == "DAIRY_SHARE_ADULT_PCT")
+    ].rename(
+        columns={
+            "ED_WEIGHTED_P10": "P10",
+            "ED_WEIGHTED_P90": "P90",
+            "INTERSECTING_EDS": "N",
+        }
+    )[["WFD_CATCHMENT_ID", "P10", "P90", "N"]].copy()
     labels = geo["wfd"][["WFD_CATCHMENT_ID", "LABEL"]]
     d = w20[["WFD_CATCHMENT_ID", "DAIRY_SHARE_ADULT_PCT", "LU_PER_HA"]].merge(spread, on="WFD_CATCHMENT_ID") \
         .merge(labels, on="WFD_CATCHMENT_ID").sort_values("DAIRY_SHARE_ADULT_PCT").reset_index(drop=True)
@@ -857,79 +857,12 @@ def f6_catchments(derived, geo, out, written):
     ax_d.set(xlim=(-0.8, len(d) - 0.2), ylim=(0, 100), ylabel="Dairy share of adult cows (%)")
     width = float((d["P90"] - d["P10"]).median())
     ax_d.text(0.01, 0.97, f"median P10-P90 width inside a catchment: {width:.0f} pp\n"
-              f"(EDs with ≥50% of their area in the catchment, weighted by adult cows)", transform=ax_d.transAxes,
+              f"(all intersecting EDs; adult-cow denominator × fractional catchment weight)", transform=ax_d.transAxes,
               va="top", fontsize=6.4)
     ax_d.legend(loc="lower right", ncol=2)
     title(ax_d, "d", "A catchment value hides the EDs inside it (sorted by catchment dairy share)")
     save(fig, out, "F6_catchments_wfd", written)
     return d
-
-
-def f7_adjustment(data, geo, out, written):
-    """3.6 Illustrative adjustment: where the same national change lands."""
-    import matplotlib.pyplot as plt
-
-    yr = CONFIG["perturbation_year"]
-    ce = data["utility_comparison_ed"]
-    ce = ce.loc[ce["YEAR"] == yr].copy()
-    ce["CSOED"] = ce["CSOED"].astype(str)
-    cw = data["utility_comparison_wfd"]
-    cw = cw.loc[cw["YEAR"] == yr].copy()
-    cw["WFD_CATCHMENT_ID"] = cw["WFD_CATCHMENT_ID"].astype(str)
-    arms = [("DAIRY_PARENT", "30% fewer dairy cows", C["dairy"]), ("SUCKLER_PARENT", "30% fewer suckler cows", C["suckler"])]
-
-    fig = plt.figure(figsize=(FIG_W, 7.6), constrained_layout=True)
-    gs = fig.add_gridspec(3, 2, height_ratios=[1, 1, 0.55])
-    cw["DIFF_K"] = cw["DIFFERENCE_FOLLOWERS"] / 1e3
-    for j, (arm, label, _) in enumerate(arms):
-        ce_arm = ce.loc[ce["ARM"] == arm, ["CSOED", "DIFFERENCE_FOLLOWERS"]]
-        ax = fig.add_subplot(gs[0, j])
-        e = geo["ed"].merge(ce_arm, on="CSOED", how="left")
-        norm = diverging_norm(ce_arm["DIFFERENCE_FOLLOWERS"], q=0.98)
-        choropleth(ax, e, "DIFFERENCE_FOLLOWERS", cmap=DIVERGING, norm=norm,
-                   outlines=[(geo["county"], C["county"], 0.2)])
-        if j == 0:
-            scale_bar(ax)
-        colorbar(fig, ax, DIVERGING, norm, "signature minus headcount (head per ED)", extend="both", shrink=0.75)
-        title(ax, "ab"[j], f"{label}: ED")
-        ax = fig.add_subplot(gs[1, j])
-        cw_arm = cw.loc[cw["ARM"] == arm]
-        wg = geo["wfd_state"].merge(cw_arm, on=["WFD_CATCHMENT_ID", "WFD_CATCHMENT"], how="left")
-        norm = diverging_norm(cw_arm["DIFF_K"], q=1.0, floor=0.1)
-        choropleth(ax, wg, "DIFF_K", cmap=DIVERGING, norm=norm, lw=0.35)
-        colorbar(fig, ax, DIVERGING, norm, "signature minus headcount ('000 head per catchment)", shrink=0.75)
-        title(ax, "cd"[j], f"{label}: WFD catchment")
-
-    ax = fig.add_subplot(gs[2, :])
-    d = data["utility_displacement"]
-    d = d.loc[(d["YEAR"] == yr) & (d["QUANTITY"] == "FOLLOWERS")].set_index("ARM")
-    rv = data["s00_robustness_variants"].set_index("METRIC")
-    cats = ["ED", "County", "WFD catchment"]
-    width = 0.36
-    for k, (arm, label, colour) in enumerate(arms):
-        row = d.loc[arm]
-        nat = abs(row["NATIONAL_CHANGE"])
-        ed_ratio = 100 * row["ED_RATIO_COMPONENT"] / nat
-        ed_recv = 100 * row["ED_RECEIVER_COMPONENT"] / nat
-        county = 100 * row["COUNTY_TOTAL_DISPLACEMENT"] / nat
-        wfd = 100 * row["WFD_TOTAL_DISPLACEMENT"] / nat
-        xs = np.arange(len(cats)) + (k - 0.5) * width
-        ax.bar(xs[0], ed_ratio, width, color=colour, label=f"{label}")
-        ax.bar(xs[0], ed_recv, width, bottom=ed_ratio, color=colour, alpha=0.45, hatch="////", edgecolor="white", lw=0)
-        ax.bar(xs[1:], [county, wfd], width, color=colour)
-        for xx, v in zip(xs, [ed_ratio + ed_recv, county, wfd]):
-            ax.text(xx, v + 0.4, f"{v:.1f}%", ha="center", va="bottom", fontsize=6.6)
-        lo = rv.loc[f"{arm} {yr} ED displacement % of national change", ["B_JOINT", "C_AIM_FIRST"]]
-        lw_ = rv.loc[f"{arm} {yr} WFD displacement % of national change", ["B_JOINT", "C_AIM_FIRST"]]
-        for xx, rng in ((xs[0], lo), (xs[2], lw_)):
-            ax.vlines(xx, rng.min(), rng.max(), color="black", lw=0.8)
-    ax.bar([0], [0], color="#999999", alpha=0.45, hatch="////", edgecolor="white", label="ED: receiver component")
-    ax.set_xticks(np.arange(len(cats)), cats)
-    ax.set(ylabel="Young stock misattributed\n(% of the national change)", ylim=(0, None))
-    ax.set_ylim(0, ax.get_ylim()[1] * 1.15)
-    ax.legend(loc="upper right", ncol=3)
-    title(ax, "e", f"Headcount attribution misplaces young stock at every scale ({yr})")
-    save(fig, out, "F7_illustrative_adjustment", written)
 
 
 # ======================================================================================
@@ -979,28 +912,11 @@ def tables(data, derived, restructuring, catchment_spread) -> dict:
     t5 = w20[["WFD_CATCHMENT_ID", "WFD_CATCHMENT", "AREA_FARMED", "TOTAL_CATTLE", "TOTAL_SHEEP", "LU_PER_HA",
               "DAIRY_SHARE_ADULT_PCT", "FOLLOWERS_PER_ADULT_COW", "DXB_SHARE_FOLLOWERS_PCT", "BXB_SHARE_FOLLOWERS_PCT",
               "SO_PER_HA"]].merge(catchment_spread[["WFD_CATCHMENT_ID", "P10", "P90", "N"]], on="WFD_CATCHMENT_ID", how="left") \
-        .rename(columns={"P10": "ED_DAIRY_SHARE_P10", "P90": "ED_DAIRY_SHARE_P90", "N": "EDS_MAJORITY_INSIDE"}) \
+        .rename(columns={"P10": "ED_DAIRY_SHARE_P10", "P90": "ED_DAIRY_SHARE_P90", "N": "INTERSECTING_EDS"}) \
         .sort_values("WFD_CATCHMENT_ID")
 
-    d = data["utility_displacement"]
-    d = d.loc[d["QUANTITY"] == "FOLLOWERS"]
-    rv = data["s00_robustness_variants"].set_index("METRIC")
-    rows = []
-    for _, r in d.iterrows():
-        tag = f"{r['ARM']} {int(r['YEAR'])}"
-        nat = abs(r["NATIONAL_CHANGE"])
-        rng = lambda m: f"{rv.loc[f'{tag} {m}', ['B_JOINT', 'C_AIM_FIRST']].min():.1f}-{rv.loc[f'{tag} {m}', ['B_JOINT', 'C_AIM_FIRST']].max():.1f}"
-        rows.append({"YEAR": int(r["YEAR"]), "ARM": r["ARM"], "NATIONAL_CHANGE_FOLLOWERS": round(r["NATIONAL_CHANGE"]),
-                     "ED_PCT": round(100 * r["ED_TOTAL_DISPLACEMENT"] / nat, 1),
-                     "ED_PCT_RANGE_B_C": rng("ED displacement % of national change"),
-                     "COUNTY_PCT": round(100 * r["COUNTY_TOTAL_DISPLACEMENT"] / nat, 1),
-                     "WFD_PCT": round(100 * r["WFD_TOTAL_DISPLACEMENT"] / nat, 1),
-                     "WFD_PCT_RANGE_B_C": rng("WFD displacement % of national change"),
-                     "RECEIVER_SHARE_OF_ED_PCT": round(r["RECEIVER_SHARE_OF_ED_DISPLACEMENT_PCT"], 1),
-                     "PARENTLESS_EDS_WITH_FOLLOWERS": int(r["PARENTLESS_EDS_WITH_FOLLOWERS"])})
-    t6 = pd.DataFrame(rows)
-
     ig = data["information_geography_2020"].copy()
+    rv = data["s00_robustness_variants"].set_index("METRIC")
     rb = rv.loc[rv.index.isin(ig["METRIC"])][["B_JOINT", "C_AIM_FIRST"]]
     ig = ig.merge(rb, left_on="METRIC", right_index=True, how="left")
     ig["RANGE_B_C"] = ig[["B_JOINT", "C_AIM_FIRST"]].min(axis=1).round(3).astype(str) + "-" + \
@@ -1023,7 +939,7 @@ def tables(data, derived, restructuring, catchment_spread) -> dict:
 
     out = {
         "T1_evidence_hierarchy": t1, "T2_validation": t2, "T3_national_change": t3, "T4_system_typology_2020": t4,
-        "T5_catchment_signatures_2020": t5, "T6_illustrative_displacement": t6,
+        "T5_catchment_signatures_2020": t5,
         "S1_where_variation_sits_RB": s1, "S2_census_reconciliation": s2,
         "S3_typology_sensitivity": derived["typology_sensitivity"],
         "S4_robustness_variants": data["s00_robustness_variants"],
@@ -1069,9 +985,13 @@ def write_layers(derived, geo, out: Path, written: list):
     if gpkg.exists():
         gpkg.unlink()
     ed = geo["ed"].merge(derived["e20"][["CSOED", "SYSTEM_TYPE", "LU_PER_HA", "DAIRY_SHARE_PLOT", "FOLLOWERS_PER_COW_PLOT",
-                                         "CATTLE_PER_FARMED_HA", "SO_PER_FARMED_HA"]], on="CSOED", how="left")
+                                         "CATTLE_PER_FARMED_HA", "SHEEP_PER_FARMED_HA",
+                                         "GRASSLAND_SHARE_FARMED_PCT", "CEREAL_SHARE_FARMED_PCT",
+                                         "SO_PER_FARMED_HA"]], on="CSOED", how="left")
     w20 = derived["wfd"].loc[derived["wfd"]["YEAR"] == CONFIG["base_year"]]
     wfd = geo["wfd_state"].merge(w20[["WFD_CATCHMENT_ID", "LU_PER_HA", "DAIRY_SHARE_ADULT_PCT", "FOLLOWERS_PER_ADULT_COW",
+                                      "CATTLE_PER_FARMED_HA", "SHEEP_PER_FARMED_HA",
+                                      "GRASSLAND_SHARE_FARMED_PCT", "CEREAL_SHARE_FARMED_PCT",
                                       "SO_PER_HA"]], on="WFD_CATCHMENT_ID", how="left")
     for layer, gdf in (("ed_2020", ed), ("county", geo["county"]), ("wfd_catchment_2020", wfd), ("ireland", geo["ireland"])):
         gdf.to_file(gpkg, layer=layer, driver="GPKG")
@@ -1105,9 +1025,6 @@ def storyline(data, derived, restructuring, tp, spread) -> str:
     q = p.loc[~p["ZERO_DAIRY_BOTH"]]
     w20 = derived["wfd"].loc[derived["wfd"]["YEAR"] == yb]
     width = (spread["P90"] - spread["P10"])
-    d = data["utility_displacement"]
-    d = d.loc[(d["YEAR"] == yb) & (d["QUANTITY"] == "FOLLOWERS")].set_index("ARM")
-    pct = lambda arm, col: 100 * d.loc[arm, col] / abs(d.loc[arm, "NATIONAL_CHANGE"])
     lines = [
         "# Paper 1 Results: storyline and numbers",
         "",
@@ -1155,17 +1072,6 @@ def storyline(data, derived, restructuring, tp, spread) -> str:
         "livestock systems, and the measures that suit them, differ.",
         "- River proximity (riparian buffers) needs a river-network layer that the repository does not hold; this is an extension.",
         "",
-        "## 3.6 Illustrative adjustment and the bridge to 2050 (Figure 7, Table 6)",
-        f"- A 30% cut in dairy cows: headcount attribution misplaces {pct('DAIRY_PARENT', 'ED_TOTAL_DISPLACEMENT'):.1f}% of the "
-        f"young-stock change across EDs, {pct('DAIRY_PARENT', 'COUNTY_TOTAL_DISPLACEMENT'):.1f}% across counties and "
-        f"{pct('DAIRY_PARENT', 'WFD_TOTAL_DISPLACEMENT'):.1f}% across WFD catchments.",
-        f"- A 30% cut in suckler cows: {pct('SUCKLER_PARENT', 'ED_TOTAL_DISPLACEMENT'):.1f}% (ED), "
-        f"{pct('SUCKLER_PARENT', 'COUNTY_TOTAL_DISPLACEMENT'):.1f}% (county), {pct('SUCKLER_PARENT', 'WFD_TOTAL_DISPLACEMENT'):.1f}% (WFD).",
-        f"- Receiver share of ED displacement: dairy {d.loc['DAIRY_PARENT', 'RECEIVER_SHARE_OF_ED_DISPLACEMENT_PCT']:.1f}%, "
-        f"suckler {d.loc['SUCKLER_PARENT', 'RECEIVER_SHARE_OF_ED_DISPLACEMENT_PCT']:.1f}%.",
-        "- Framing: the adjustment is static and illustrative, not a forecast. It shows what any 2050 transition pathway must carry: "
-        "a change in breeding cows moves young stock along the livestock system (where calves are reared, which catchments hold "
-        "them), so pathways need ED signatures, not headcount alone.",
         "",
     ]
     return "\n".join(lines)
@@ -1186,7 +1092,7 @@ def main() -> int:
     out = root / CONFIG["output_dir"]
     for sub in ("figures", "tables", "maps"):
         (out / sub).mkdir(parents=True, exist_ok=True)
-    want = set(args.only) if args.only else {f"F{i}" for i in range(1, 8)}
+    want = set(args.only) if args.only else {f"F{i}" for i in range(1, 7)}
     style()
 
     data = load(root)
@@ -1209,9 +1115,7 @@ def main() -> int:
         f4_signatures(derived, geo, out, written)
     if "F5" in want:
         f5_restructuring(restructuring, geo, out, written)
-    spread = f6_catchments(derived, geo, out, written) if "F6" in want else None
-    if "F7" in want:
-        f7_adjustment(data, geo, out, written)
+    spread = f6_catchments(data, derived, geo, out, written) if "F6" in want else None
     if spread is not None:
         tabs = tables(data, derived, restructuring, spread)
         write_tables(tabs, out, written)

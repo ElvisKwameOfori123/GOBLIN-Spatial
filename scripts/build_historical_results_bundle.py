@@ -29,23 +29,18 @@ from goblin_spatial.synthesis.signatures import (
     build_relationship_ed,
     build_relationship_shares,
     build_signature_long,
+    build_wfd_signature_spread,
 )
-from goblin_spatial.synthesis.utility_perturbation import run_utility_perturbation
 from goblin_spatial.validation.coherence import output_paths
 
 # Tables whose every column must be described in the column dictionary.
 PUBLIC_TABLES = (
     "livestock_signature",
     "livestock_signature_long",
+    "wfd_signature_spread",
     "parent_follower_relationship_ed",
     "parent_follower_relationship_shares",
     "parent_follower_relationship_by_year",
-    "utility_perturbation_ed",
-    "utility_perturbation_aggregate",
-    "utility_perturbation_national",
-    "utility_comparison_ed",
-    "utility_comparison_wfd",
-    "utility_displacement",
     "cso13_ed_year",
     "goblin31_ed_year",
     "ed_year",
@@ -63,12 +58,10 @@ BUNDLE_README = [
     ("2020 source difference", "Model-universe 2020 ED sums sit slightly below the annual controls: census animals in EDs outside the 2,857-ED model universe are reported, not moved into it (cattle 8,744, dairy cows 1,723, sheep 4,518 head), and AAA10/AAA09 are rounded to 100 head."),
     ("2021-2022 land dip", "Area farmed falls about 3.9% in 2021-2022 and recovers in 2023. This is in the CSO AQA06 June series itself; the model follows the AQA06 regional index exactly."),
     ("Columns", "_columns gives the unit and meaning of every column in every public table."),
-    ("Livestock signatures", "livestock_signature holds, for 2020 and 2025, the full 21-cohort cattle state plus adult/follower totals and signature ratios for every ED and WFD catchment (the two primary geographies) and for county, Colm catchment and Ireland. Aggregates sum populations first, then derive ratios. livestock_signature_long gives each ratio with its numerator and denominator."),
+    ("Livestock signatures", "livestock_signature holds, for 2020 and 2025, the full 21-cohort cattle state plus adult/follower totals, livestock density, land composition and production-intensity ratios for every ED and WFD catchment (the two primary geographies), and for county, Colm catchment and Ireland. Aggregates sum populations and land first, then derive ratios. livestock_signature_long gives each ratio with its numerator and denominator."),
+    ("Catchment structure", "wfd_signature_spread pairs each catchment-level signature with the denominator-weighted P10, P50 and P90 of intersecting ED signatures. Catchment values use the full fractional ED-catchment crosswalk; the ED spread describes within-catchment heterogeneity and does not replace the accounting value."),
     ("Parent-follower relationships", "parent_follower_relationship_ed: for each ED, follower cohort and signature year, the parent population (dairy cows for DxD/DxB, suckler cows for BxB, all cows for bulls), follower-per-parent ratio and class LOCAL_ED, COUNTY_RECEIVER or NATIONAL_ORPHAN. parent_follower_relationship_shares reports how much follower stock each ED/WFD/county/national unit holds in each class."),
     ("Relationship support classes", "COUNTY_RECEIVER means an ED contains a follower cohort while the corresponding parent cows are absent locally and present elsewhere in the county. Under the corrected reconstruction, published 2020 adult-cow support is retained after 2020, so this class can persist in later years. It is a biological support classification, not an animal-movement or origin claim."),
-    ("Livestock-signature perturbation", "Illustrative static endpoint, not a scenario or forecast. A 30% national cut in dairy cows (DAIRY_PARENT) or suckler cows (SUCKLER_PARENT), shared pro rata across EDs, on the frozen 2020 and 2025 baselines. METHOD = SIGNATURE: linked follower change follows the ED's own parent relationship, the county's where the ED has no parents, national only as fallback; follower geography stays fixed. METHOD = HEADCOUNT: national followers-per-cow coefficients are applied to each ED's cow change, so follower change is attributed to adult-cow geography. PRO_RATA (all cohorts, METHOD = UNIFORM) is a supplementary reference."),
-    ("Perturbation tables", "utility_perturbation_ed / _aggregate (WFD catchment, county, national) / _national: changes in cattle, followers, LU and cattle SO by method. utility_comparison_ed / _wfd: signature minus headcount per ED and per WFD catchment, for mapping. utility_displacement: how many followers, cattle and LU the headcount method places differently, split into the receiver component (followers in EDs without parent cows) and the ratio component (EDs whose followers per cow differ from national), with a pure-ratio check."),
-    ("Perturbation caveats", "The receiver component reflects the frozen parent-support geography; published 2020 adult-cow zeros remain zeros after 2020, so parent-less follower EDs can remain material in 2025. This is not a movement estimate. Standard Output coefficients differ by region, so the headcount method also changes the national SO total (NATIONAL_METHOD_DIFFERENCE); SO differences are not decomposed."),
     ("Validation", "validation_summary is the headline table; validation_detail_* are the underlying diagnostics; baseline_coherence_audit re-derives every cross-product identity (must be all PASS)."),
     ("Standard Output", "Fixed 2020 IFS coefficients by historic FADN region. A production-value indicator, not income, profit or welfare."),
     ("SQLite names", "SQLite ignores case in column names. In the SQLite copy only, GOBLIN cohort columns that clash with a CSO column differing only in case get the suffix _goblin (e.g. bulls -> bulls_goblin). _columns records SQLITE_COLUMN_NAME."),
@@ -170,20 +163,20 @@ def main() -> None:
         tables[f"validation_detail_{path.stem}"] = pd.read_csv(path, low_memory=False)
 
     # Livestock signatures (2020, 2025) at ED, WFD catchment, county, Colm
-    # catchment and national scale; ED parent-follower relationships; and the
-    # illustrative 30% signature-vs-headcount perturbation. All derived; nothing is rebuilt.
+    # catchment and national scale, plus within-catchment ED distributions and
+    # ED parent-follower relationships. All derived; nothing is rebuilt.
     signature = build_livestock_signature(
         tables["ed_year"], tables["county_year"], tables["wfd_catchment_year"],
         tables["colm_catchment_year"], tables["national_year"],
     )
     relationship = build_relationship_ed(master, cfg)
     tables["livestock_signature"] = signature
-    tables["livestock_signature_long"] = build_signature_long(signature)
+    signature_long = build_signature_long(signature)
+    tables["livestock_signature_long"] = signature_long
+    tables["wfd_signature_spread"] = build_wfd_signature_spread(signature_long, crosswalk)
     tables["parent_follower_relationship_ed"] = relationship
     tables["parent_follower_relationship_shares"] = build_relationship_shares(relationship, crosswalk)
     tables["parent_follower_relationship_by_year"] = build_relationship_by_year(master, cfg)
-    so_mapping = pd.read_csv(root / "data/controls/standard_output/GOBLIN_SO_mapping.csv")
-    tables.update(run_utility_perturbation(tables["ed_year"], so_mapping, crosswalk))
 
     # The wide ED table must carry the authoritative values unchanged.
     check = tables["ed_year"].copy()

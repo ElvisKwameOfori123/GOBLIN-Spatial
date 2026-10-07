@@ -1,6 +1,6 @@
 # GOBLIN-Spatial data contract
 
-The repository is self-contained for the **2015-2025 historical baseline, multiscale reporting, livestock signatures, evaluation and the illustrative perturbation**. `data_manifest.yaml` is the machine-readable authority for production inputs and checksums.
+The repository is self-contained for the **2015-2025 historical baseline, multiscale reporting, livestock signatures and evaluation**. `data_manifest.yaml` is the machine-readable authority for production inputs and checksums.
 
 No normal model command downloads external data. Production inputs are read from frozen repository files.
 
@@ -36,7 +36,7 @@ repository-contained canonical inputs
         -> land / farm structure / Standard Output
         -> ED, county, WFD catchment and national reporting
         -> livestock signatures and parent-follower relationships
-        -> evaluation and illustrative perturbation
+        -> evaluation and catchment-structure summaries
 ```
 
 The complete manuscript/query release is produced by:
@@ -58,5 +58,3 @@ External datasets used only for evaluation, method comparison or application tes
 The Achill North benchmark is stored under `data/validation/external/achill_north/` and is used as an applied comparison of livestock, agricultural land and ED-to-catchment representation.
 
 ## Scenario work
-
-Future-pathway and SC1/SC2/SC3 development is intentionally **not part of this repository's active model scope**. That work is preserved separately in `ElvisKwameOfori123/GOBLIN-Spatial-SC` so the historical-baseline repository remains unambiguous and reproducible.

@@ -2,7 +2,7 @@
 
 ## 1. Scope
 
-GOBLIN-Spatial is a constraint-preserving small-area representation of Irish agriculture. The active implementation reconstructs the agricultural system annually from 2015 to 2025 across 2,857 Electoral Divisions (EDs), adds biological livestock structure, derives county and Water Framework Directive (WFD) catchment views from the same ED foundation, and produces livestock signatures and an illustrative spatial-attribution perturbation.
+GOBLIN-Spatial is a constraint-preserving small-area representation of Irish agriculture. The active implementation reconstructs the agricultural system annually from 2015 to 2025 across 2,857 Electoral Divisions (EDs), adds biological livestock structure, derives county and Water Framework Directive (WFD) catchment views from the same ED foundation, and produces livestock-system signatures and multiscale baseline diagnostics.
 
 The model distinguishes four kinds of information:
 
@@ -157,6 +157,16 @@ Ratios are never averaged across EDs. Numerators and denominators are aggregated
 
 The WFD view is an environmental reporting geography. It does not imply exact within-ED locations of farms or livestock and it is not a water-quality impact model.
 
+Catchments are described through two complementary summaries. The accounting
+view uses the full fractional ED-catchment crosswalk, sums each signature's
+numerator and denominator and then recalculates the catchment value. The
+structural view retains the intersecting ED signature values and reports
+denominator-weighted P10, P50 and P90 values using the same fractional
+crosswalk. The accounting value describes the catchment as one unit; the ED
+distribution describes heterogeneity within that unit. A majority-inside rule
+may be used for visual display of clipped ED polygons, but it does not enter
+the catchment calculations.
+
 ## 5. Livestock signatures and parent-follower geography
 
 Livestock signatures describe agricultural organisation rather than livestock abundance alone. Implemented signature indicators include:
@@ -165,6 +175,9 @@ Livestock signatures describe agricultural organisation rather than livestock ab
 - DxD, DxB and BxB shares of followers;
 - followers per adult cow;
 - cattle per farmed hectare;
+- sheep per farmed hectare;
+- grassland share of farmed area;
+- cereal share of farmed area;
 - covered Standard Output per farmed hectare;
 - mountain-type share of sheep.
 
@@ -184,8 +197,8 @@ The released historical baseline supports four descriptive analyses of the infor
 
 1. **Spatial concentration:** livestock populations are compared with the agricultural-land share of the most livestock-dense EDs.
 2. **Matched ED contrasts:** within-county ED pairs with similar total cattle populations are compared on livestock signatures.
-3. **Stable-abundance restructuring:** changes in signatures are examined among EDs whose total cattle population changes comparatively little between 2015 and 2025.
-4. **Effective information geography:** a between-county variance measure identifies whether a signature varies mainly between counties or substantially among EDs within the same county.
+3. **Observed cross-census restructuring:** 2010 and 2020 census states are compared to identify EDs where total cattle abundance remained comparatively stable while breeding structure changed materially.
+4. **Between-county share of spatial variation:** a descriptive variance measure identifies whether a signature varies mainly between counties or substantially among EDs within the same county. This is a spatial-organisation statistic, not a measure of evidence provenance.
 
 These are descriptive diagnostics, not causal inference.
 
@@ -201,43 +214,7 @@ Published 2020 ED livestock-unit information is used as a prespecified plausibil
 
 The withheld 2022 sheep-composition observation provides the strongest holdout comparison in the historical evaluation set, while the Achill North benchmark provides an applied external comparison of livestock, land and ED-to-catchment representation.
 
-## 8. Illustrative 30% spatial-attribution perturbation
-
-The perturbation is applied to the frozen 2020 and 2025 baselines. It is an illustrative static endpoint experiment, not a forecast, scenario pathway, behavioural response, equilibrium model or MACC.
-
-Two independent arms reduce adult dairy cows or adult suckler cows by 30%:
-
-\[
-P'_i=0.7P_i.
-\]
-
-Under the **signature-preserving representation**, linked followers remain in their reconstructed EDs and scale with the finest valid frozen parent relationship. Dairy changes are linked to DxD and DxB followers, and suckler changes to BxB followers.
-
-The **headcount attribution benchmark** instead applies the national follower-per-parent coefficient to the geography of adult-parent change:
-
-\[
-\Delta n^{H}_{i,k}=\bar r_k\Delta P_i.
-\]
-
-Both representations impose the same national adult-parent reduction and the same national linked-follower reduction. They differ only in where that change is represented.
-
-For ED \(i\):
-
-\[
-d_i=\Delta_i^{S}-\Delta_i^{H},
-\]
-
-and for nationally conserved quantities spatial displacement is:
-
-\[
-D=\frac{1}{2}\sum_i|d_i|.
-\]
-
-Displacement is calculated at ED, county and WFD catchment scales. Additional diagnostics distinguish the component associated with follower populations located in EDs without corresponding local adult parents from heterogeneity in follower-per-parent ratios.
-
-The perturbation demonstrates the spatial information contributed by retaining biological livestock structure; it does not estimate realised behavioural or policy outcomes.
-
-## 9. Interpretation boundary
+## 8. Interpretation boundary
 
 The historical model does not directly observe or predict individual animal movements, farm-to-farm trade, exact parcel-level livestock location, water-quality impacts, farmer behaviour, adoption, market equilibrium, household welfare or future scenario outcomes.
 

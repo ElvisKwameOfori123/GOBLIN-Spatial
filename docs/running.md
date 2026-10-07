@@ -1,6 +1,6 @@
 # Running GOBLIN-Spatial
 
-GOBLIN-Spatial now has one active scientific scope in this repository: the **2015-2025 historical baseline, multiscale reporting/signatures, evaluation and illustrative perturbation**.
+GOBLIN-Spatial now has one active scientific scope in this repository: the **2015-2025 historical baseline, multiscale reporting/signatures and evaluation**.
 
 Scenario-development code is preserved separately in `ElvisKwameOfori123/GOBLIN-Spatial-SC` and is not part of this runtime.
 
@@ -43,7 +43,7 @@ The script runs, in order:
 2. historical evaluation and cattle diagnostics;
 3. county, WFD catchment, GOBLIN-compatible catchment and national views;
 4. the independent coherence audit;
-5. the historical release bundle, including livestock signatures, parent-follower relationships and the illustrative perturbation.
+5. the historical release bundle, including livestock signatures, parent-follower relationships and catchment heterogeneity summaries.
 
 If any step fails, the build stops.
 
@@ -75,4 +75,4 @@ python scripts/build_historical_results_bundle.py
 
 ## Reporting boundary
 
-The historical ED baseline is the scientific authority. County, catchment and national views are derived from that common ED state. Livestock signatures and the illustrative perturbation are derived analytical products and do not rebuild or alter the baseline.
+The historical ED baseline is the scientific authority. County, catchment and national views are derived from that common ED state. Livestock signatures and catchment heterogeneity summaries are derived analytical products and do not rebuild or alter the baseline.

@@ -1,8 +1,8 @@
 # GOBLIN-Spatial
 
-**A small-area livestock cohort framework for place-based environmental transition planning**
+**A small-area livestock cohort framework for place-based agricultural and environmental analysis**
 
-GOBLIN-Spatial provides a constraint-preserving spatial representation of Irish agriculture. The active repository scope is deliberately limited to the **2015-2025 historical baseline, multiscale reporting, livestock signatures, evaluation and an illustrative static perturbation**.
+GOBLIN-Spatial provides a constraint-preserving spatial representation of Irish agriculture. The active repository scope is deliberately limited to the **2015-2025 historical baseline, multiscale reporting, livestock-system signatures and evaluation**.
 
 The baseline represents **2,857 Electoral Divisions (EDs)** annually from 2015 to 2025 and combines cattle, sheep, agricultural land, selected farm structure and fixed-coefficient Standard Output. County, Water Framework Directive (WFD) catchment and national views are derived from the same ED foundation.
 
@@ -51,9 +51,7 @@ land / farm structure / Standard Output
         ↓
 ED, county, WFD catchment and national views
         ↓
-livestock signatures and evaluation
-        ↓
-illustrative perturbation
+livestock signatures, catchment structure and evaluation
 ```
 
 Published 2020 ED livestock values are retained as published; cells the CSO withheld for confidentiality are filled before the model runs (Stage 00, `scripts/prepare_census_inputs.py`) so that the census county and State totals hold exactly. Surrounding years are census-anchored reconstructions under the authoritative annual controls. Supporting administrative data inform composition without replacing those controlling quantities.
@@ -78,24 +76,23 @@ Where an ED intersects more than one WFD catchment, additive quantities are allo
 
 ## Livestock signatures
 
-A livestock signature describes the **organisation** of the livestock system represented in a place. The implemented signature includes dairy share of adult cows, DxD/DxB/BxB follower shares, followers per adult cow, cattle density, Standard Output intensity and broad sheep production type.
+A livestock signature describes the **organisation** of the livestock system represented in a place. The implemented signature includes dairy share of adult cows, DxD/DxB/BxB follower shares, followers per adult cow, cattle and sheep density on farmed land, grassland and cereal shares of farmed area, Standard Output intensity and broad sheep production type.
 
 Parent-follower relationships are supported at the finest valid scale: local ED, county-supported or national fallback. These are relationship-support classes, not observations of animal movement or trade.
 
 ---
 
-## Illustrative perturbation
+## Catchment structure
 
-The historical release includes a controlled 30% dairy-parent and suckler-parent perturbation for 2020 and 2025.
+WFD catchments are reported in two complementary ways. The **accounting view**
+aggregates ED populations and land fractionally with the frozen ED-catchment
+crosswalk and then recalculates ratios from the aggregated numerators and
+denominators. The **structural view** retains the signatures of the EDs
+intersecting each catchment and reports denominator-weighted P10, P50 and P90
+values. The first describes the catchment as one agricultural accounting unit;
+the second shows the local heterogeneity that the catchment total can conceal.
 
-It compares:
-
-- a **signature-preserving representation**, in which linked follower geography is retained; and
-- a **headcount attribution benchmark**, in which national follower-per-parent coefficients are applied to adult-cow geography.
-
-Both impose the same national parent and follower changes. The experiment therefore isolates how retaining biological structure changes the **spatial attribution** of the same national adjustment.
-
-This is an illustrative static endpoint experiment, not a forecast, behavioural model, equilibrium model or future scenario.
+Neither view implies exact within-ED animal locations.
 
 ---
 
@@ -132,7 +129,7 @@ The complete release is written to:
 reporting/report_data/historical/
 ```
 
-It includes CSV, Parquet, SQLite and DuckDB copies of the principal historical, signature, evaluation and perturbation tables.
+It includes CSV, Parquet, SQLite and DuckDB copies of the principal historical, signature, catchment-structure and evaluation tables.
 
 To build only the core historical baseline:
 
@@ -154,13 +151,9 @@ Production inputs and checksums are registered in `data_manifest.yaml`.
 
 ## Repository scope
 
-This repository intentionally contains only the historical-baseline research product and its illustrative perturbation.
-
-Earlier SC1/SC2/SC3 and future-pathway development has been separated into:
-
-`ElvisKwameOfori123/GOBLIN-Spatial-SC`
-
-That separation prevents deferred scenario code from being confused with the model used for the historical-baseline manuscript.
+This repository contains the historical GOBLIN-Spatial baseline and its
+multiscale reporting and evaluation products. It does not contain a future
+scenario or policy-response experiment.
 
 ---
 

@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   historical-baseline:
     runs-on: ubuntu-latest
@@ -36,6 +40,9 @@ jobs:
       - name: Build complete historical release
         run: python scripts/build_historical_release.py
 
+      - name: Build baseline paper figures
+        run: python scripts/paper1_figures_final.py
+
       - name: Confirm coherence audit and release products
         run: |
           test -f reporting/report_data/historical/historical_results.duckdb
@@ -44,8 +51,10 @@ jobs:
           test -f reporting/report_data/historical/county_year.parquet
           test -f reporting/report_data/historical/wfd_catchment_year.parquet
           test -f reporting/report_data/historical/livestock_signature.parquet
+          test -f reporting/report_data/historical/wfd_signature_spread.parquet
           test -f reporting/report_data/historical/parent_follower_relationship_ed.parquet
-          test -f reporting/report_data/historical/utility_displacement.parquet
+          test -f reporting/paper1/figures/F5_ed_agricultural_context.png
+          test -f reporting/paper1/figures/F6_blackwater_ed_catchment_signatures.png
           python - <<'PY'
           import duckdb
           from pathlib import Path
@@ -58,7 +67,8 @@ jobs:
           assert con.sql("select count(*) from baseline_coherence_audit where not PASS").fetchone()[0] == 0
           assert con.sql("select count(*) from baseline_coherence_audit").fetchone()[0] == 47
           assert con.sql("select count(*) from livestock_signature where GEOGRAPHY_TYPE = 'ED'").fetchone()[0] == 2 * 2857
-          assert con.sql("select count(distinct WFD_CATCHMENT_ID) from utility_comparison_wfd").fetchone()[0] == 46
+          assert con.sql("select count(distinct WFD_CATCHMENT_ID) from wfd_signature_spread").fetchone()[0] == 46
+          assert con.sql("select count(distinct SIGNATURE) from wfd_signature_spread").fetchone()[0] >= 11
           con.close()
           PY
 
