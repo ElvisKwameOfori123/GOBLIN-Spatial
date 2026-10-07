@@ -53,6 +53,7 @@ STATE_COLUMNS = (
     "UPLAND_SHEEP",
     "AREA_FARMED",
     "ALL_GRASSLAND",
+    "TOTAL_CEREALS",
     "SO_COVERED_TOTAL_2020_EUR",
 )
 
@@ -64,6 +65,9 @@ SIGNATURE_DEFINITIONS = {
     "BXB_SHARE_FOLLOWERS_PCT": ("BXB_FOLLOWERS", "FOLLOWER_TOTAL", 100.0),
     "FOLLOWER_TO_ADULT_RATIO": ("FOLLOWER_TOTAL", "ADULT_COWS", 1.0),
     "CATTLE_PER_FARMED_HA": ("TOTAL_CATTLE", "AREA_FARMED", 1.0),
+    "SHEEP_PER_FARMED_HA": ("TOTAL_SHEEP", "AREA_FARMED", 1.0),
+    "GRASSLAND_SHARE_FARMED_PCT": ("ALL_GRASSLAND", "AREA_FARMED", 100.0),
+    "CEREAL_SHARE_FARMED_PCT": ("TOTAL_CEREALS", "AREA_FARMED", 100.0),
     "SO_PER_FARMED_HA": ("SO_COVERED_TOTAL_2020_EUR", "AREA_FARMED", 1.0),
     "UPLAND_SHARE_SHEEP_PCT": ("UPLAND_SHEEP", "TOTAL_SHEEP", 100.0),
 }
@@ -141,6 +145,113 @@ def build_signature_long(signature: pd.DataFrame) -> pd.DataFrame:
     if long.loc[~defined, "VALUE"].notna().any():
         raise AssertionError("signatures with a zero denominator must be undefined, not zero")
     return long
+
+
+def _weighted_quantile(values: pd.Series, weights: pd.Series, q: float) -> float:
+    """Weighted quantile used to describe ED heterogeneity inside catchments."""
+
+    value = pd.to_numeric(values, errors="coerce").astype(float)
+    weight = pd.to_numeric(weights, errors="coerce").astype(float)
+    keep = value.notna() & weight.notna() & (weight > 0)
+    if not keep.any():
+        return np.nan
+    value = value.loc[keep].to_numpy()
+    weight = weight.loc[keep].to_numpy()
+    order = np.argsort(value)
+    value = value[order]
+    weight = weight[order]
+    cumulative = np.cumsum(weight)
+    return float(np.interp(q * cumulative[-1], cumulative, value))
+
+
+def build_wfd_signature_spread(
+    signature_long: pd.DataFrame,
+    crosswalk: pd.DataFrame,
+) -> pd.DataFrame:
+    """Pair each WFD catchment signature with the weighted ED distribution inside it.
+
+    The catchment value is the accounting representation: additive numerators
+    and denominators are transferred with the frozen ED-catchment weights and
+    the ratio is then recomputed. The ED quantiles are the structural
+    representation: each intersecting ED retains its own signature and is
+    weighted by the share of the signature denominator assigned to the
+    catchment. No majority-inside rule is used in the calculation.
+    """
+
+    required = {"CSOED", "WFD_CATCHMENT_ID", "WFD_CATCHMENT", "ED_CATCHMENT_WEIGHT"}
+    missing = sorted(required - set(crosswalk.columns))
+    if missing:
+        raise ValueError(f"catchment crosswalk lacks fields: {missing}")
+
+    ed = signature_long.loc[signature_long["GEOGRAPHY_TYPE"] == "ED"].copy()
+    wfd = signature_long.loc[signature_long["GEOGRAPHY_TYPE"] == "WFD_CATCHMENT"].copy()
+    ed["CSOED"] = ed["GEOGRAPHY_ID"].astype(str)
+    xw = crosswalk[list(required)].copy()
+    xw["CSOED"] = xw["CSOED"].astype(str)
+    xw["WFD_CATCHMENT_ID"] = xw["WFD_CATCHMENT_ID"].astype(str)
+
+    joined = ed.merge(xw, on="CSOED", how="inner", validate="many_to_many")
+    joined["ED_CATCHMENT_WEIGHT"] = pd.to_numeric(
+        joined["ED_CATCHMENT_WEIGHT"], errors="raise"
+    ).astype(float)
+    joined["DISTRIBUTION_WEIGHT"] = (
+        pd.to_numeric(joined["DENOMINATOR"], errors="coerce").astype(float)
+        * joined["ED_CATCHMENT_WEIGHT"]
+    )
+
+    rows: list[dict[str, object]] = []
+    group_cols = ["YEAR", "WFD_CATCHMENT_ID", "WFD_CATCHMENT", "SIGNATURE"]
+    for keys, group in joined.groupby(group_cols, sort=True):
+        year, catchment_id, catchment_name, metric = keys
+        valid = group["VALUE"].notna() & (group["DISTRIBUTION_WEIGHT"] > 0)
+        rows.append(
+            {
+                "YEAR": int(year),
+                "WFD_CATCHMENT_ID": str(catchment_id),
+                "WFD_CATCHMENT": str(catchment_name),
+                "SIGNATURE": metric,
+                "ED_WEIGHTED_P10": _weighted_quantile(
+                    group.loc[valid, "VALUE"], group.loc[valid, "DISTRIBUTION_WEIGHT"], 0.10
+                ),
+                "ED_WEIGHTED_P50": _weighted_quantile(
+                    group.loc[valid, "VALUE"], group.loc[valid, "DISTRIBUTION_WEIGHT"], 0.50
+                ),
+                "ED_WEIGHTED_P90": _weighted_quantile(
+                    group.loc[valid, "VALUE"], group.loc[valid, "DISTRIBUTION_WEIGHT"], 0.90
+                ),
+                "INTERSECTING_EDS": int(group.loc[valid, "CSOED"].nunique()),
+                "DISTRIBUTION_DENOMINATOR": float(
+                    group.loc[valid, "DISTRIBUTION_WEIGHT"].sum()
+                ),
+                "DENOMINATOR_COLUMN": (
+                    str(group["DENOMINATOR_COLUMN"].iloc[0]) if len(group) else ""
+                ),
+            }
+        )
+    spread = pd.DataFrame(rows)
+    if spread.empty:
+        return spread
+    spread["ED_WEIGHTED_P90_P10"] = (
+        spread["ED_WEIGHTED_P90"] - spread["ED_WEIGHTED_P10"]
+    )
+
+    catchment = wfd[
+        ["YEAR", "GEOGRAPHY_ID", "GEOGRAPHY_NAME", "SIGNATURE", "VALUE"]
+    ].rename(
+        columns={
+            "GEOGRAPHY_ID": "WFD_CATCHMENT_ID",
+            "GEOGRAPHY_NAME": "WFD_CATCHMENT",
+            "VALUE": "CATCHMENT_VALUE",
+        }
+    )
+    catchment["WFD_CATCHMENT_ID"] = catchment["WFD_CATCHMENT_ID"].astype(str)
+    out = catchment.merge(
+        spread,
+        on=["YEAR", "WFD_CATCHMENT_ID", "WFD_CATCHMENT", "SIGNATURE"],
+        how="left",
+        validate="one_to_one",
+    )
+    return out.sort_values(["YEAR", "SIGNATURE", "WFD_CATCHMENT_ID"]).reset_index(drop=True)
 
 
 def build_relationship_ed(master: pd.DataFrame, cfg: SpatialConfig) -> pd.DataFrame:
