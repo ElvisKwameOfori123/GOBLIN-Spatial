@@ -6,17 +6,16 @@ Run from the repository root after the release build:
     python scripts/build_historical_release.py
     python scripts/paper1_figures.py
 
-Story line of the Results, one figure per step:
+Story line of the Results:
 
-    F1  Methods     evidence hierarchy and workflow (census preparation to reporting)
-    F2  3.1         validation: is the reconstruction trustworthy?
-    F3  3.2         scale and time: national change 2015-2025 and where it happened
-    F4  3.3         ED signatures: abundance is not system
-    F5  3.4         observed local restructuring between the 2010 and 2020 censuses
-    F6  3.5         catchments: WFD planning units hide ED variation
-    F7  3.6         illustrative adjustment: where a national change lands
+    F1  Methods     evidence hierarchy and workflow
+    F2  3.1         reconstruction integrity and evaluation
+    F3  3.2/3.3     national change and ED livestock-system geography
+    F4  supporting  observed local restructuring between the 2010 and 2020 censuses
+    F5  3.4         agricultural context
+    F6  3.5         catchment accounting and within-catchment ED heterogeneity
 
-Tables (main text T1-T6, supplementary S1-S5) go to one formatted workbook and to
+Tables and supplementary diagnostics go to one formatted workbook and to
 CSV; map layers go to one GeoPackage; a manifest records the model commit and
 every setting. The script reads the release bundle and the Stage 00 audit tables
 and never changes the scientific state.
@@ -59,6 +58,7 @@ CONFIG = {
     "end_year": 2025,
     # Ratio indicators are shown only where the denominator is meaningful.
     "min_adult_cows": 10,
+    "min_followers": 20,
     "min_cattle": 50,
     "min_farmed_ha": 50,
     # Livestock-system typology, applied in this order (first match wins).
