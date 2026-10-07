@@ -526,7 +526,7 @@ def f1_workflow(out, written):
     box(22, top, 18, 16, "Stage 00",
         "published cells kept\nsuppressed cells filled\ninside exact county\ntotals; tested priors\nwith shrinkage", "#fdf2e3", C["follower"])
     box(43, top, 18, 16, "ED baseline",
-        "2,857 EDs, 2015-2025\nannual CSO controls\n(AAA10, AAA09, AQA06)\n2010 to 2020 share path", "#eef3f8", C["dairy"])
+        "2,857 EDs, 2015-2025\nAAA10/AAA09 livestock controls\nAQA06 land-change indices\n2010 to 2020 share path", "#eef3f8", C["dairy"])
     box(64, top, 16, 16, "Cohorts",
         "21 cattle cohorts\n(DxD, DxB, BxB)\n10 sheep cohorts\nDAFM/AIM priors", "#f3eff9", C["dxb"])
     box(83, top, 16, 16, "Indicators",
@@ -880,7 +880,7 @@ def tables(data, derived, restructuring, catchment_spread) -> dict:
         ["CSO Census county totals (2010 Tables 8A/8B; 2020 Tables 4.2/4.4)", "2010, 2020", "County", "Exact control for suppressed cells"],
         ["CSO AAA10 cattle by county (June)", "2015-2025", "County", "Annual control; 2020 cross-check of census totals"],
         ["CSO AAA09 sheep by region (June)", "2015-2025", "7 regions", "Annual control; 2020 cross-check"],
-        ["CSO AQA06 land use", "2015-2025", "Region", "Annual land control"],
+        ["CSO AQA06 land use", "2015-2025", "Region", "Annual regional change index applied to the 2020 census land level"],
         ["DAFM/AIM cattle profile", "2020", "ED", "Prior for suppressed cells and age/genetic composition; not a control"],
         ["DAFM sheep breed and county data", "2016-2025", "County", "Breed composition and within-region weighting; pattern diagnostic"],
         ["GOBLIN/COHORTS relationships", "2012-2020", "National", "Cohort structure (21 cattle, 10 sheep)"],
