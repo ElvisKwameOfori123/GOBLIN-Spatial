@@ -341,9 +341,10 @@ def geometry(root: Path, ed_year: pd.DataFrame) -> dict:
     wfd["geometry"] = wfd.geometry.make_valid()
     wfd = wfd.dissolve(by=["WFD_CATCHMENT_ID", "WFD_CATCHMENT"], as_index=False)
     wfd = simplify(wfd[["WFD_CATCHMENT_ID", "WFD_CATCHMENT", "geometry"]], CONFIG["simplify_catchment_m"])
-    # 11 WFD units share two names (Shannon 25A-D, 26A-G): always label with the ID.
-    wfd["LABEL"] = [f"{n} ({i})" if n in ("Upper Shannon", "Lower Shannon") else n
-                    for n, i in zip(wfd["WFD_CATCHMENT"], wfd["WFD_CATCHMENT_ID"])]
+    # Catchment IDs are always included because several official names repeat.
+    wfd["LABEL"] = [
+        f"{i} {n}" for n, i in zip(wfd["WFD_CATCHMENT"], wfd["WFD_CATCHMENT_ID"])
+    ]
     # Clip catchments to the State for display (several cross the border).
     wfd_state = gpd.clip(wfd, ireland)
 
@@ -536,8 +537,8 @@ def f1_workflow(out, written):
         "ED, county, 46 WFD catchments,\nnational; every table sums\nexactly from the ED state", "#f7f7f7", C["grey"])
     box(37.5, low, 25, 11.5, "Verification and evaluation",
         "47 coherence checks; withheld\n2022 sheep composition; hidden-\ncell and 2010-2020 holdout tests", "#f7f7f7", C["grey"])
-    box(67, low, 25, 11.5, "Illustrative adjustment",
-        "30% fewer dairy or suckler cows:\nsignature-preserving versus\nheadcount attribution", "#f7f7f7", C["grey"])
+    box(67, low, 25, 11.5, "Multiscale reporting",
+        "county and WFD catchment views\nfrom the same ED baseline;\naggregate values plus ED spread", "#f7f7f7", C["grey"])
     arrow(91, top - 0.6, 79.5, low + 11.9)
     arrow(52, top - 0.6, 50, low + 11.9)
     arrow(52, top - 0.6, 20.5, low + 11.9)
