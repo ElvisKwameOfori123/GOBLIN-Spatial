@@ -985,9 +985,13 @@ def write_layers(derived, geo, out: Path, written: list):
     if gpkg.exists():
         gpkg.unlink()
     ed = geo["ed"].merge(derived["e20"][["CSOED", "SYSTEM_TYPE", "LU_PER_HA", "DAIRY_SHARE_PLOT", "FOLLOWERS_PER_COW_PLOT",
-                                         "CATTLE_PER_FARMED_HA", "SO_PER_FARMED_HA"]], on="CSOED", how="left")
+                                         "CATTLE_PER_FARMED_HA", "SHEEP_PER_FARMED_HA",
+                                         "GRASSLAND_SHARE_FARMED_PCT", "CEREAL_SHARE_FARMED_PCT",
+                                         "SO_PER_FARMED_HA"]], on="CSOED", how="left")
     w20 = derived["wfd"].loc[derived["wfd"]["YEAR"] == CONFIG["base_year"]]
     wfd = geo["wfd_state"].merge(w20[["WFD_CATCHMENT_ID", "LU_PER_HA", "DAIRY_SHARE_ADULT_PCT", "FOLLOWERS_PER_ADULT_COW",
+                                      "CATTLE_PER_FARMED_HA", "SHEEP_PER_FARMED_HA",
+                                      "GRASSLAND_SHARE_FARMED_PCT", "CEREAL_SHARE_FARMED_PCT",
                                       "SO_PER_HA"]], on="WFD_CATCHMENT_ID", how="left")
     for layer, gdf in (("ed_2020", ed), ("county", geo["county"]), ("wfd_catchment_2020", wfd), ("ireland", geo["ireland"])):
         gdf.to_file(gpkg, layer=layer, driver="GPKG")
