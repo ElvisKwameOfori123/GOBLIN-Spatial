@@ -30,6 +30,7 @@ from goblin_spatial.synthesis.signatures import (
     build_relationship_shares,
     build_signature_long,
     build_wfd_signature_spread,
+    build_wfd_fractional_vs_majority,
 )
 from goblin_spatial.validation.coherence import output_paths
 
@@ -38,6 +39,8 @@ PUBLIC_TABLES = (
     "livestock_signature",
     "livestock_signature_long",
     "wfd_signature_spread",
+    "wfd_fractional_vs_majority",
+    "wfd_fractional_vs_majority_summary",
     "parent_follower_relationship_ed",
     "parent_follower_relationship_shares",
     "parent_follower_relationship_by_year",
@@ -60,8 +63,9 @@ BUNDLE_README = [
     ("Columns", "_columns gives the unit and meaning of every column in every public table."),
     ("Livestock signatures", "livestock_signature holds, for 2020 and 2025, the full 21-cohort cattle state plus adult/follower totals, livestock density, land composition and production-intensity ratios for every ED and WFD catchment (the two primary geographies), and for county, Colm catchment and Ireland. Aggregates sum populations and land first, then derive ratios. livestock_signature_long gives each ratio with its numerator and denominator."),
     ("Catchment structure", "wfd_signature_spread pairs each catchment-level signature with the denominator-weighted P10, P50 and P90 of intersecting ED signatures. Catchment values use the full fractional ED-catchment crosswalk; the ED spread describes within-catchment heterogeneity and does not replace the accounting value."),
-    ("Parent-follower relationships", "parent_follower_relationship_ed: for each ED, follower cohort and signature year, the parent population (dairy cows for DxD/DxB, suckler cows for BxB, all cows for bulls), follower-per-parent ratio and class LOCAL_ED, COUNTY_RECEIVER or NATIONAL_ORPHAN. parent_follower_relationship_shares reports how much follower stock each ED/WFD/county/national unit holds in each class."),
-    ("Relationship support classes", "COUNTY_RECEIVER means an ED contains a follower cohort while the corresponding parent cows are absent locally and present elsewhere in the county. Under the corrected reconstruction, published 2020 adult-cow support is retained after 2020, so this class can persist in later years. It is a biological support classification, not an animal-movement or origin claim."),
+    ("Catchment allocation sensitivity", "wfd_fractional_vs_majority compares the production fractional allocation with a whole-ED majority-area assignment for 2020 and 2025. The summary table reports straddling-ED livestock shares and median/maximum catchment differences. Majority assignment is a sensitivity benchmark, not an alternative production result."),
+    ("Parent-follower relationships", "parent_follower_relationship_ed: for each ED, follower cohort and signature year, the parent population, follower-per-parent ratio and parent-support class. parent_follower_relationship_shares reports how much follower stock each ED/WFD/county/national unit holds in each class."),
+    ("Relationship support classes", "LOCAL_PARENT means corresponding parent cows occur in the ED; COUNTY_PARENT_SUPPORT means parents are absent locally but occur elsewhere in the county; NATIONAL_PARENT_SUPPORT is the final support level where the county has no corresponding parents. Legacy internal labels are retained in COHORT_SPATIAL_ROLE_LEGACY for compatibility. These are support classifications, not movement or origin claims."),
     ("Validation", "validation_summary is the headline table; validation_detail_* are the underlying diagnostics; baseline_coherence_audit re-derives every cross-product identity (must be all PASS)."),
     ("Standard Output", "Fixed 2020 IFS coefficients by historic FADN region. A production-value indicator, not income, profit or welfare."),
     ("SQLite names", "SQLite ignores case in column names. In the SQLite copy only, GOBLIN cohort columns that clash with a CSO column differing only in case get the suffix _goblin (e.g. bulls -> bulls_goblin). _columns records SQLITE_COLUMN_NAME."),
@@ -174,6 +178,11 @@ def main() -> None:
     signature_long = build_signature_long(signature)
     tables["livestock_signature_long"] = signature_long
     tables["wfd_signature_spread"] = build_wfd_signature_spread(signature_long, crosswalk)
+    wfd_compare, wfd_compare_summary = build_wfd_fractional_vs_majority(
+        tables["ed_year"], crosswalk
+    )
+    tables["wfd_fractional_vs_majority"] = wfd_compare
+    tables["wfd_fractional_vs_majority_summary"] = wfd_compare_summary
     tables["parent_follower_relationship_ed"] = relationship
     tables["parent_follower_relationship_shares"] = build_relationship_shares(relationship, crosswalk)
     tables["parent_follower_relationship_by_year"] = build_relationship_by_year(master, cfg)
