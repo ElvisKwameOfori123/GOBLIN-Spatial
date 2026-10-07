@@ -272,7 +272,8 @@ def load(root: Path) -> dict:
     names = [
         "ed_year", "county_year", "wfd_catchment_year", "national_year", "validation_summary",
         "validation_detail_sheep_composition_holdout_2022", "validation_detail_dafm_county_sheep_diagnostics",
-        "validation_detail_temporal_rank_stability", "concentration_2020", "matched_pairs_2020",
+        "validation_detail_temporal_rank_stability", "validation_detail_cattle_lsu_age_prior_summary",
+        "concentration_2020", "concentration_2025", "matched_pairs_2020",
         "baseline_coherence_audit", "information_geography_2020", "livestock_signature",
         "wfd_signature_spread",
     ]
