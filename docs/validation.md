@@ -107,23 +107,13 @@ Checks require:
 
 A true grassland-weighted ED-to-catchment allocation would require intersectable within-ED grassland geography. The historical release therefore uses the reproducible area crosswalk and does not infer within-ED livestock location from ED totals alone.
 
-## 7. Illustrative perturbation checks
+The within-catchment signature distribution is checked separately from the
+accounting value. ED signature values are weighted by their signature
+denominator multiplied by the same fractional ED-catchment area weight. This
+ensures that the P10, P50 and P90 summaries describe heterogeneity inside the
+catchment without changing any catchment total.
 
-The 30% dairy-parent and suckler-parent experiment is a controlled spatial-attribution test on the frozen 2020 and 2025 baselines.
-
-Verification requires that:
-
-- targeted adult-parent populations change by the specified proportion;
-- linked follower cohorts change according to the declared signature-preserving rule;
-- the signature-preserving and headcount benchmark representations impose identical national linked-follower changes;
-- untargeted cattle cohorts remain unchanged within each arm;
-- spatial displacement is computed consistently at ED, county and WFD catchment scales;
-- additive receiver and ratio components reconcile to total ED displacement;
-- the pure-ratio diagnostic is reported separately from the additive ratio component.
-
-The benchmark is an attribution comparison, not a feasible alternative local herd state.
-
-## 8. Repository-contained input verification
+## 7. Repository-contained input verification
 
 `data_manifest.yaml` is the machine-readable authority for production inputs.
 
@@ -135,7 +125,7 @@ goblin-spatial fetch-data --verify-only
 
 The command verifies local repository files and checksums and downloads nothing.
 
-## 9. Interpretation
+## 8. Interpretation
 
 Exact closure validates accounting, reconciliation and implementation boundaries. It is not independent empirical validation of every reconstructed non-census ED value.
 
