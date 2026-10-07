@@ -9,6 +9,7 @@ from goblin_spatial.baseline.signatures import parent_follower_multiplier
 from goblin_spatial.synthesis.signatures import (
     build_signature_long,
     build_wfd_signature_spread,
+    build_wfd_fractional_vs_majority,
 )
 
 
@@ -37,6 +38,7 @@ def _signature_frame() -> pd.DataFrame:
             "DXB_FOLLOWERS": [5.0, 15.0, 20.0],
             "BXB_FOLLOWERS": [10.0, 20.0, 30.0],
             "FOLLOWER_TOTAL": [20.0, 40.0, 60.0],
+            "UNDER1_FOLLOWERS": [10.0, 20.0, 30.0],
             "TOTAL_CATTLE": [80.0, 80.0, 160.0],
             "TOTAL_SHEEP": [20.0, 80.0, 100.0],
             "AREA_FARMED": [40.0, 80.0, 120.0],
@@ -48,6 +50,7 @@ def _signature_frame() -> pd.DataFrame:
             "DXD_SHARE_FOLLOWERS_PCT": [25.0, 12.5, 100.0 / 6.0],
             "DXB_SHARE_FOLLOWERS_PCT": [25.0, 37.5, 100.0 / 3.0],
             "BXB_SHARE_FOLLOWERS_PCT": [50.0, 50.0, 50.0],
+            "UNDER1_SHARE_FOLLOWERS_PCT": [50.0, 50.0, 50.0],
             "FOLLOWER_TO_ADULT_RATIO": [1.0 / 3.0, 1.0, 0.6],
             "CATTLE_PER_FARMED_HA": [2.0, 1.0, 4.0 / 3.0],
             "SHEEP_PER_FARMED_HA": [0.5, 1.0, 5.0 / 6.0],
@@ -73,6 +76,7 @@ def test_signature_long_carries_exact_numerators_and_denominators() -> None:
         "SHEEP_PER_FARMED_HA",
         "GRASSLAND_SHARE_FARMED_PCT",
         "CEREAL_SHARE_FARMED_PCT",
+        "UNDER1_SHARE_FOLLOWERS_PCT",
     }.issubset(set(long["SIGNATURE"]))
 
 
@@ -96,3 +100,35 @@ def test_wfd_signature_spread_pairs_accounting_value_with_ed_distribution() -> N
         row["ED_WEIGHTED_P90_P10"],
         row["ED_WEIGHTED_P90"] - row["ED_WEIGHTED_P10"],
     )
+
+
+
+def test_wfd_fractional_vs_majority_reports_split_ed_sensitivity() -> None:
+    ed = pd.DataFrame(
+        {
+            "YEAR": [2020, 2020],
+            "CSOED": ["1", "2"],
+            "TOTAL_CATTLE": [100.0, 100.0],
+            "dairy_cows": [50.0, 10.0],
+            "TOTAL_SHEEP": [20.0, 80.0],
+            "FOLLOWER_TOTAL": [40.0, 60.0],
+            "ADULT_COWS": [60.0, 40.0],
+        }
+    )
+    crosswalk = pd.DataFrame(
+        {
+            "CSOED": ["1", "1", "2"],
+            "WFD_CATCHMENT_ID": ["W1", "W2", "W2"],
+            "WFD_CATCHMENT": ["One", "Two", "Two"],
+            "ED_CATCHMENT_WEIGHT": [0.6, 0.4, 1.0],
+        }
+    )
+    detail, summary = build_wfd_fractional_vs_majority(ed, crosswalk, years=(2020,))
+    assert len(detail) == 2
+    assert int(summary.iloc[0]["STRADDLING_EDS"]) == 1
+    assert np.isclose(summary.iloc[0]["STRADDLING_TOTAL_CATTLE_SHARE_PCT"], 50.0)
+    w1 = detail.loc[detail["WFD_CATCHMENT_ID"] == "W1"].iloc[0]
+    assert np.isclose(w1["TOTAL_CATTLE_FRACTIONAL"], 60.0)
+    assert np.isclose(w1["TOTAL_CATTLE_MAJORITY"], 100.0)
+    assert np.isclose(w1["FOLLOWER_TO_ADULT_RATIO_FRACTIONAL"], 40.0 / 60.0)
+    assert np.isclose(w1["FOLLOWER_TO_ADULT_RATIO_MAJORITY"], 40.0 / 60.0)
