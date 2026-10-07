@@ -38,6 +38,9 @@ SIGNATURE_METRICS = (
     "BXB_SHARE_FOLLOWERS_PCT",
     "FOLLOWER_TO_ADULT_RATIO",
     "CATTLE_PER_FARMED_HA",
+    "SHEEP_PER_FARMED_HA",
+    "GRASSLAND_SHARE_FARMED_PCT",
+    "CEREAL_SHARE_FARMED_PCT",
     "SO_PER_FARMED_HA",
     "UPLAND_SHARE_SHEEP_PCT",
 )
@@ -90,6 +93,15 @@ def add_signature_metrics(frame: pd.DataFrame) -> pd.DataFrame:
     )
     out["CATTLE_PER_FARMED_HA"] = _safe_ratio(
         _num(out, "TOTAL_CATTLE"), _num(out, "AREA_FARMED")
+    )
+    out["SHEEP_PER_FARMED_HA"] = _safe_ratio(
+        _num(out, "TOTAL_SHEEP"), _num(out, "AREA_FARMED")
+    )
+    out["GRASSLAND_SHARE_FARMED_PCT"] = _safe_ratio(
+        _num(out, "ALL_GRASSLAND"), _num(out, "AREA_FARMED"), 100.0
+    )
+    out["CEREAL_SHARE_FARMED_PCT"] = _safe_ratio(
+        _num(out, "TOTAL_CEREALS"), _num(out, "AREA_FARMED"), 100.0
     )
     out["SO_PER_FARMED_HA"] = _safe_ratio(
         _num(out, "SO_COVERED_TOTAL_2020_EUR"), _num(out, "AREA_FARMED")
