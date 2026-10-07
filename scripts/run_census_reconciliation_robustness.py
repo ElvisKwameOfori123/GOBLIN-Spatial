@@ -51,6 +51,9 @@ SIGNATURES = (
     "BXB_SHARE_FOLLOWERS_PCT",
     "FOLLOWER_TO_ADULT_RATIO",
     "CATTLE_PER_FARMED_HA",
+    "SHEEP_PER_FARMED_HA",
+    "GRASSLAND_SHARE_FARMED_PCT",
+    "CEREAL_SHARE_FARMED_PCT",
 )
 
 
@@ -94,13 +97,6 @@ def _metrics(db: Path) -> tuple[pd.DataFrame, dict[str, pd.DataFrame]]:
     audit = con.sql("select * from baseline_coherence_audit").df()
     add("coherence audit", "failed checks", int((~audit["PASS"].astype(bool)).sum()))
     print(f"  {db.parent.parent.parent.parent.name}: failed audit checks: " + "; ".join(audit.loc[~audit["PASS"].astype(bool), "CHECK"]), flush=True)
-    disp = con.sql("select * from utility_displacement where QUANTITY = 'FOLLOWERS'").df()
-    for _, r in disp.iterrows():
-        tag = f"{r['ARM']} {int(r['YEAR'])}"
-        add("utility displacement", f"{tag} ED displacement % of national change", r["ED_DISPLACEMENT_PCT_OF_NATIONAL_CHANGE"])
-        add("utility displacement", f"{tag} WFD displacement % of national change", r["WFD_DISPLACEMENT_PCT_OF_NATIONAL_CHANGE"])
-        add("utility displacement", f"{tag} receiver share of ED displacement %", r["RECEIVER_SHARE_OF_ED_DISPLACEMENT_PCT"])
-        add("utility displacement", f"{tag} parentless EDs with followers", r["PARENTLESS_EDS_WITH_FOLLOWERS"])
     conc = con.sql("select * from concentration_2020").df()
     for _, r in conc.iterrows():
         add("concentration 2020", f"top-decile ED share of {r['POPULATION']} %", r["POPULATION_SHARE_PCT"])
