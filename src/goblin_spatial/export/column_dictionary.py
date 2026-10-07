@@ -224,6 +224,10 @@ def describe(column: str) -> tuple[str, str] | None:
     if column.startswith("CSO_") and column[4:] in _EXACT:
         unit, text = _EXACT[column[4:]]
         return unit, f"CSO control carried in the GOBLIN 31 panel: {column[4:]}. {text}"
+    if column.startswith("MEDIAN_FOLLOWER_TO_ADULT_ABS_DIFF"):
+        return "ratio", "Median absolute catchment difference in followers per adult cow."
+    if column.startswith("MAX_FOLLOWER_TO_ADULT_ABS_DIFF"):
+        return "ratio", "Maximum absolute catchment difference in followers per adult cow."
     if column.endswith("_FRACTIONAL"):
         return "head", "Catchment total under fractional ED-to-catchment allocation."
     if column.endswith("_MAJORITY"):
@@ -240,10 +244,6 @@ def describe(column: str) -> tuple[str, str] | None:
         return "%", "Median absolute catchment difference between majority and fractional allocation."
     if column.startswith("MAX_") and column.endswith("_ABS_DIFF_PCT"):
         return "%", "Maximum absolute catchment difference between majority and fractional allocation."
-    if column.startswith("MEDIAN_FOLLOWER_TO_ADULT_ABS_DIFF"):
-        return "ratio", "Median absolute catchment difference in followers per adult cow."
-    if column.startswith("MAX_FOLLOWER_TO_ADULT_ABS_DIFF"):
-        return "ratio", "Maximum absolute catchment difference in followers per adult cow."
     match = _COHORT_RE.match(column)
     if match:
         gen, stage = match.groups()
