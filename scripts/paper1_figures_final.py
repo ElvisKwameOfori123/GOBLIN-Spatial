@@ -156,13 +156,26 @@ def f3_signatures(derived, geo, pair, out, written):
     )
     if eds["TOTAL_CATTLE"].isna().any():
         raise AssertionError("F3: one or more EDs failed the 2025 model-data join")
+    eligible = (
+        (pd.to_numeric(eds["ADULT_COWS"], errors="coerce") >= base.CONFIG["min_adult_cows"])
+        & (pd.to_numeric(eds["FOLLOWER_TOTAL"], errors="coerce") >= base.CONFIG["min_followers"])
+    )
+    if int(eligible.sum()) != 2850:
+        raise AssertionError(f"F3: expected 2,850 eligible 2025 EDs, found {int(eligible.sum()):,}")
+    for column in (
+        "DAIRY_SHARE_ADULT_PCT",
+        "FOLLOWER_TO_ADULT_RATIO",
+        "UNDER1_SHARE_FOLLOWERS_PCT",
+        "DXD_SHARE_FOLLOWERS_PCT",
+    ):
+        eds[f"{column}_PLOT"] = pd.to_numeric(eds[column], errors="coerce").where(eligible)
 
     county = (geo["county"], base.C["county"], 0.25)
     panels = [
-        ("DAIRY_SHARE_ADULT_PCT", "Dairy share of adult cows (%)", base.C["dairy"], "a", 0.0, 100.0),
-        ("FOLLOWER_TO_ADULT_RATIO", "Followers per adult cow", base.C["follower"], "b", 0.0, None),
-        ("UNDER1_SHARE_FOLLOWERS_PCT", "Under-1 share of followers (%)", base.C["total"], "c", 0.0, 100.0),
-        ("DXD_SHARE_FOLLOWERS_PCT", "DxD share of followers (%)", base.C["dxb"], "d", 0.0, 100.0),
+        ("DAIRY_SHARE_ADULT_PCT_PLOT", "Dairy share of adult cows (%)", base.C["dairy"], "a", 0.0, 100.0),
+        ("FOLLOWER_TO_ADULT_RATIO_PLOT", "Followers per adult cow", base.C["follower"], "b", 0.0, None),
+        ("UNDER1_SHARE_FOLLOWERS_PCT_PLOT", "Under-1 share of followers (%)", base.C["total"], "c", 0.0, 100.0),
+        ("DXD_SHARE_FOLLOWERS_PCT_PLOT", "DxD share of followers (%)", base.C["dxb"], "d", 0.0, 100.0),
     ]
     fig, axes = plt.subplots(2, 2, figsize=(base.FIG_W, 6.4), constrained_layout=True)
     for ax, (column, label, colour, letter, vmin, vmax) in zip(axes.ravel(), panels):
