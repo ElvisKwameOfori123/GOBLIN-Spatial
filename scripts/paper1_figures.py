@@ -986,16 +986,46 @@ def write_layers(derived, geo, out: Path, written: list):
     gpkg = out / "maps" / "goblin_spatial_paper1_layers.gpkg"
     if gpkg.exists():
         gpkg.unlink()
-    ed = geo["ed"].merge(derived["e20"][["CSOED", "SYSTEM_TYPE", "LU_PER_HA", "DAIRY_SHARE_PLOT", "FOLLOWERS_PER_COW_PLOT",
-                                         "CATTLE_PER_FARMED_HA", "SHEEP_PER_FARMED_HA",
-                                         "GRASSLAND_SHARE_FARMED_PCT", "CEREAL_SHARE_FARMED_PCT",
-                                         "SO_PER_FARMED_HA"]], on="CSOED", how="left")
-    w20 = derived["wfd"].loc[derived["wfd"]["YEAR"] == CONFIG["base_year"]]
-    wfd = geo["wfd_state"].merge(w20[["WFD_CATCHMENT_ID", "LU_PER_HA", "DAIRY_SHARE_ADULT_PCT", "FOLLOWERS_PER_ADULT_COW",
-                                      "CATTLE_PER_FARMED_HA", "SHEEP_PER_FARMED_HA",
-                                      "GRASSLAND_SHARE_FARMED_PCT", "CEREAL_SHARE_FARMED_PCT",
-                                      "SO_PER_HA"]], on="WFD_CATCHMENT_ID", how="left")
-    for layer, gdf in (("ed_2020", ed), ("county", geo["county"]), ("wfd_catchment_2020", wfd), ("ireland", geo["ireland"])):
+
+    def ed_layer(frame):
+        return geo["ed"].merge(
+            frame[
+                [
+                    "CSOED", "SYSTEM_TYPE", "LU_PER_HA", "DAIRY_SHARE_PLOT",
+                    "FOLLOWERS_PER_COW_PLOT", "UNDER1_SHARE_FOLLOWERS_PCT",
+                    "DXD_SHARE_FOLLOWERS_PCT", "CATTLE_PER_FARMED_HA",
+                    "SHEEP_PER_FARMED_HA", "GRASSLAND_SHARE_FARMED_PCT",
+                    "CEREAL_SHARE_FARMED_PCT", "SO_PER_FARMED_HA",
+                ]
+            ],
+            on="CSOED",
+            how="left",
+        )
+
+    layers = [
+        ("ed_2020", ed_layer(derived["e20"])),
+        ("ed_2025", ed_layer(derived["e25"])),
+        ("county", geo["county"]),
+        ("ireland", geo["ireland"]),
+    ]
+    for year in (CONFIG["base_year"], CONFIG["end_year"]):
+        w = derived["wfd"].loc[derived["wfd"]["YEAR"] == year]
+        layer = geo["wfd_state"].merge(
+            w[
+                [
+                    "WFD_CATCHMENT_ID", "LU_PER_HA", "DAIRY_SHARE_ADULT_PCT",
+                    "FOLLOWERS_PER_ADULT_COW", "UNDER1_SHARE_FOLLOWERS_PCT",
+                    "CATTLE_PER_FARMED_HA", "SHEEP_PER_FARMED_HA",
+                    "GRASSLAND_SHARE_FARMED_PCT", "CEREAL_SHARE_FARMED_PCT",
+                    "SO_PER_HA",
+                ]
+            ],
+            on="WFD_CATCHMENT_ID",
+            how="left",
+        )
+        layers.append((f"wfd_catchment_{year}", layer))
+
+    for layer, gdf in layers:
         gdf.to_file(gpkg, layer=layer, driver="GPKG")
     written.append(gpkg)
 
