@@ -40,6 +40,9 @@ jobs:
       - name: Build complete historical release
         run: python scripts/build_historical_release.py
 
+      - name: Run independent release integrity checks
+        run: python scripts/check_release_integrity.py
+
       - name: Build baseline paper figures
         run: python scripts/paper1_figures_final.py
 
@@ -52,6 +55,8 @@ jobs:
           test -f reporting/report_data/historical/wfd_catchment_year.parquet
           test -f reporting/report_data/historical/livestock_signature.parquet
           test -f reporting/report_data/historical/wfd_signature_spread.parquet
+          test -f reporting/report_data/historical/wfd_fractional_vs_majority.parquet
+          test -f reporting/report_data/historical/wfd_fractional_vs_majority_summary.parquet
           test -f reporting/report_data/historical/parent_follower_relationship_ed.parquet
           test -f reporting/paper1/figures/F5_ed_agricultural_context.png
           test -f reporting/paper1/figures/F6_blackwater_ed_catchment_signatures.png
@@ -68,7 +73,9 @@ jobs:
           assert con.sql("select count(*) from baseline_coherence_audit").fetchone()[0] == 47
           assert con.sql("select count(*) from livestock_signature where GEOGRAPHY_TYPE = 'ED'").fetchone()[0] == 2 * 2857
           assert con.sql("select count(distinct WFD_CATCHMENT_ID) from wfd_signature_spread").fetchone()[0] == 46
-          assert con.sql("select count(distinct SIGNATURE) from wfd_signature_spread").fetchone()[0] >= 11
+          assert con.sql("select count(distinct SIGNATURE) from wfd_signature_spread").fetchone()[0] >= 12
+          assert con.sql("select count(*) from wfd_fractional_vs_majority").fetchone()[0] == 2 * 46
+          assert con.sql("select count(*) from wfd_fractional_vs_majority_summary").fetchone()[0] == 2
           con.close()
           PY
 

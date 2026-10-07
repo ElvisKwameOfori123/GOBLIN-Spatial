@@ -21,6 +21,7 @@ DXD = tuple(c for c in FINAL_21_COHORTS if c.startswith("DxD_"))
 DXB = tuple(c for c in FINAL_21_COHORTS if c.startswith("DxB_"))
 BXB = tuple(c for c in FINAL_21_COHORTS if c.startswith("BxB_"))
 PRE_ADULT_FOLLOWERS = (*DXD, *DXB, *BXB)
+UNDER1_FOLLOWERS = tuple(c for c in PRE_ADULT_FOLLOWERS if "_calves_" in c)
 UPLAND_SHEEP = tuple(c for c in GOBLIN_SHEEP_10 if c.startswith("Upland "))
 SO_COMPONENTS = (
     "SO_DAIRY_COWS_2020_EUR",
@@ -36,6 +37,7 @@ SIGNATURE_METRICS = (
     "DXD_SHARE_FOLLOWERS_PCT",
     "DXB_SHARE_FOLLOWERS_PCT",
     "BXB_SHARE_FOLLOWERS_PCT",
+    "UNDER1_SHARE_FOLLOWERS_PCT",
     "FOLLOWER_TO_ADULT_RATIO",
     "CATTLE_PER_FARMED_HA",
     "SHEEP_PER_FARMED_HA",
@@ -72,6 +74,9 @@ def add_signature_metrics(frame: pd.DataFrame) -> pd.DataFrame:
     out["FOLLOWER_TOTAL"] = (
         out["DXD_FOLLOWERS"] + out["DXB_FOLLOWERS"] + out["BXB_FOLLOWERS"]
     )
+    out["UNDER1_FOLLOWERS"] = out[list(UNDER1_FOLLOWERS)].apply(
+        pd.to_numeric, errors="raise"
+    ).sum(axis=1)
     out["UPLAND_SHEEP"] = out[list(UPLAND_SHEEP)].apply(
         pd.to_numeric, errors="raise"
     ).sum(axis=1)
@@ -87,6 +92,9 @@ def add_signature_metrics(frame: pd.DataFrame) -> pd.DataFrame:
     )
     out["BXB_SHARE_FOLLOWERS_PCT"] = _safe_ratio(
         out["BXB_FOLLOWERS"], out["FOLLOWER_TOTAL"], 100.0
+    )
+    out["UNDER1_SHARE_FOLLOWERS_PCT"] = _safe_ratio(
+        out["UNDER1_FOLLOWERS"], out["FOLLOWER_TOTAL"], 100.0
     )
     out["FOLLOWER_TO_ADULT_RATIO"] = _safe_ratio(
         out["FOLLOWER_TOTAL"], out["ADULT_COWS"]
@@ -337,6 +345,36 @@ def build_validation_summary(validation_dir: str | Path) -> pd.DataFrame:
             ]
         )
 
+    lsu_path = root / "cattle_lsu_age_prior_summary.csv"
+    if lsu_path.exists():
+        lsu = pd.read_csv(lsu_path)
+        for _, r in lsu.iterrows():
+            rows.extend(
+                [
+                    {
+                        "EVIDENCE": "2020 ED livestock-unit age-prior plausibility",
+                        "SCOPE": str(r["AGE_PRIOR"]),
+                        "METRIC": "Median absolute residual",
+                        "VALUE": float(r["median_abs_residual"]),
+                        "UNIT": "LSU",
+                    },
+                    {
+                        "EVIDENCE": "2020 ED livestock-unit age-prior plausibility",
+                        "SCOPE": str(r["AGE_PRIOR"]),
+                        "METRIC": "Eligible EDs",
+                        "VALUE": float(r["eligible_eds"]),
+                        "UNIT": "EDs",
+                    },
+                    {
+                        "EVIDENCE": "2020 ED livestock-unit age-prior plausibility",
+                        "SCOPE": str(r["AGE_PRIOR"]),
+                        "METRIC": "Median published ED LSU",
+                        "VALUE": float(r["median_published_lsu"]),
+                        "UNIT": "LSU",
+                    },
+                ]
+            )
+
     dafm = pd.read_csv(root / "dafm_county_sheep_summary.csv")
     for _, r in dafm.iterrows():
         mean_observed_county = float(r["OBSERVED_TOTAL"]) / float(r["N"])
@@ -502,6 +540,8 @@ def concentration_summary(ed_state: pd.DataFrame, year: int = 2020) -> pd.DataFr
             {
                 "YEAR": year,
                 "POPULATION": label,
+                "RANKING_METRIC": f"{label}_PER_FARMED_HA",
+                "RANKING_RULE": "top 10% of EDs ranked by this population divided by AREA_FARMED",
                 "TOP_DECILE_EDS": n_top,
                 "POPULATION_SHARE_PCT": (
                     100.0 * float(top["_VALUE"].sum()) / total_value
@@ -524,7 +564,12 @@ def build_matched_pairs(ed_state: pd.DataFrame, year: int = 2020) -> pd.DataFram
         (_num(part, "TOTAL_CATTLE") >= 500)
         & (_num(part, "ADULT_COWS") >= 200)
     ].copy()
-    vars_ = ["DAIRY_SHARE_ADULT_PCT", "DXB_SHARE_FOLLOWERS_PCT", "FOLLOWER_TO_ADULT_RATIO"]
+    vars_ = [
+        "DAIRY_SHARE_ADULT_PCT",
+        "FOLLOWER_TO_ADULT_RATIO",
+        "UNDER1_SHARE_FOLLOWERS_PCT",
+        "DXD_SHARE_FOLLOWERS_PCT",
+    ]
     for v in vars_:
         sd = float(pd.to_numeric(part[v], errors="coerce").std(ddof=0))
         mean = float(pd.to_numeric(part[v], errors="coerce").mean())
@@ -557,10 +602,12 @@ def build_matched_pairs(ed_state: pd.DataFrame, year: int = 2020) -> pd.DataFram
                     "SIGNATURE_DISTANCE": dist,
                     "DAIRY_SHARE_A_PCT": float(a["DAIRY_SHARE_ADULT_PCT"]),
                     "DAIRY_SHARE_B_PCT": float(b["DAIRY_SHARE_ADULT_PCT"]),
-                    "DXB_SHARE_A_PCT": float(a["DXB_SHARE_FOLLOWERS_PCT"]),
-                    "DXB_SHARE_B_PCT": float(b["DXB_SHARE_FOLLOWERS_PCT"]),
                     "FOLLOWER_ADULT_A": float(a["FOLLOWER_TO_ADULT_RATIO"]),
                     "FOLLOWER_ADULT_B": float(b["FOLLOWER_TO_ADULT_RATIO"]),
+                    "UNDER1_SHARE_A_PCT": float(a["UNDER1_SHARE_FOLLOWERS_PCT"]),
+                    "UNDER1_SHARE_B_PCT": float(b["UNDER1_SHARE_FOLLOWERS_PCT"]),
+                    "DXD_SHARE_A_PCT": float(a["DXD_SHARE_FOLLOWERS_PCT"]),
+                    "DXD_SHARE_B_PCT": float(b["DXD_SHARE_FOLLOWERS_PCT"]),
                     "CATTLE_PER_FARMED_HA_A": float(a["CATTLE_PER_FARMED_HA"]),
                     "CATTLE_PER_FARMED_HA_B": float(b["CATTLE_PER_FARMED_HA"]),
                     "SO_PER_FARMED_HA_A": float(a["SO_PER_FARMED_HA"]),
@@ -576,8 +623,17 @@ def build_matched_pairs(ed_state: pd.DataFrame, year: int = 2020) -> pd.DataFram
     return best.sort_values("SIGNATURE_DISTANCE", ascending=False, kind="stable").reset_index(drop=True)
 
 
-def stable_ed_sensitivity(ed_state: pd.DataFrame) -> pd.DataFrame:
-    """Summarise biological change inside alternative total-cattle stability bands."""
+def stable_ed_sensitivity(
+    ed_state: pd.DataFrame,
+    start_year: int = 2015,
+    end_year: int = 2020,
+) -> pd.DataFrame:
+    """Summarise change within stability bands over the two-anchor spatial period.
+
+    The default ends in 2020 because 2015-2019 ED shares move along the
+    2010-to-2020 census path. After 2020 the within-county ED support pattern
+    is deliberately held, so combining 2015-2025 would mix two spatial regimes.
+    """
 
     cols = [
         "CSOED", "YEAR", "TOTAL_CATTLE",
@@ -585,27 +641,29 @@ def stable_ed_sensitivity(ed_state: pd.DataFrame) -> pd.DataFrame:
         "BXB_SHARE_FOLLOWERS_PCT", "SO_PER_FARMED_HA",
     ]
     work = ed_state[cols].copy()
-    a = work.loc[work["YEAR"] == 2015].set_index("CSOED")
-    b = work.loc[work["YEAR"] == 2025].set_index("CSOED")
-    both = a.add_suffix("_2015").join(b.add_suffix("_2025"), how="inner")
+    a = work.loc[work["YEAR"] == start_year].set_index("CSOED")
+    b = work.loc[work["YEAR"] == end_year].set_index("CSOED")
+    both = a.add_suffix(f"_{start_year}").join(b.add_suffix(f"_{end_year}"), how="inner")
     both["CATTLE_CHANGE_PCT"] = 100.0 * (
-        both["TOTAL_CATTLE_2025"] - both["TOTAL_CATTLE_2015"]
-    ) / both["TOTAL_CATTLE_2015"].replace(0, np.nan)
+        both[f"TOTAL_CATTLE_{end_year}"] - both[f"TOTAL_CATTLE_{start_year}"]
+    ) / both[f"TOTAL_CATTLE_{start_year}"].replace(0, np.nan)
 
     for metric in ("DAIRY_SHARE_ADULT_PCT", "DXB_SHARE_FOLLOWERS_PCT", "BXB_SHARE_FOLLOWERS_PCT"):
         both[f"ABS_{metric}_CHANGE_PP"] = (
-            both[f"{metric}_2025"] - both[f"{metric}_2015"]
+            both[f"{metric}_{end_year}"] - both[f"{metric}_{start_year}"]
         ).abs()
 
     both["SO_INTENSITY_CHANGE_PCT"] = 100.0 * (
-        both["SO_PER_FARMED_HA_2025"] - both["SO_PER_FARMED_HA_2015"]
-    ) / both["SO_PER_FARMED_HA_2015"].replace(0, np.nan)
+        both[f"SO_PER_FARMED_HA_{end_year}"] - both[f"SO_PER_FARMED_HA_{start_year}"]
+    ) / both[f"SO_PER_FARMED_HA_{start_year}"].replace(0, np.nan)
 
     rows = []
     n_total = int(len(both))
     for band in (2.5, 5.0, 10.0):
         s = both.loc[both["CATTLE_CHANGE_PCT"].abs() <= band].copy()
         row: dict[str, object] = {
+            "START_YEAR": start_year,
+            "END_YEAR": end_year,
             "STABILITY_BAND_PCT": band,
             "N_ED": int(len(s)),
             "PCT_OF_ALL_ED": 100.0 * len(s) / n_total if n_total else np.nan,
@@ -764,12 +822,23 @@ def build_historical_result_tables(
                 "COUNTY": county,
                 "WFD_CATCHMENT": catchment,
                 "NATIONAL": national,
-            }
+            },
+            year=2020,
+        ),
+        "signature_ranges_2025": signature_ranges(
+            {
+                "ED": ed,
+                "COUNTY": county,
+                "WFD_CATCHMENT": catchment,
+                "NATIONAL": national,
+            },
+            year=2025,
         ),
         "information_geography_2020": information_geography(
             ed.loc[ed["YEAR"] == 2020]
         ),
-        "concentration_2020": concentration_summary(ed),
+        "concentration_2020": concentration_summary(ed, year=2020),
+        "concentration_2025": concentration_summary(ed, year=2025),
         "matched_pairs_2020": build_matched_pairs(ed),
         "stable_ed_sensitivity": stable_ed_sensitivity(ed),
         "multiscale_example_2020": example,

@@ -43,6 +43,7 @@ _EXACT: dict[str, tuple[str, str]] = {
     "GEOGRAPHY": ("name", "Reporting geography of the row (national table)."),
     "WFD_CATCHMENT_ID": ("code", "Official Water Framework Directive catchment identifier (46)."),
     "WFD_CATCHMENT": ("name", "Official WFD catchment name (46)."),
+    "WFD_CATCHMENT_LABEL": ("label", "Catchment identifier plus name, used where names repeat (for example Shannon units)."),
     "COLM_CATCHMENT": ("name", "Catchment in the 37-unit system of GOBLIN-Proj catchment_data_api (Upper and Lower Shannon merged); derived from the WFD result."),
     # provenance and method flags
     "PROVENANCE": ("flag", "Cattle provenance: CSO_ED_2020_PUBLISHED_UNCHANGED (2020), AAA10_COUNTY_CONTROL_ED_2010_2020_PATH (2015-2019), AAA10_COUNTY_CONTROL_ED_2020_PATTERN (2021-2025)."),
@@ -121,11 +122,13 @@ _EXACT: dict[str, tuple[str, str]] = {
     "DXB_FOLLOWERS": ("head", "Sum of the 6 DxB pre-adult cohorts."),
     "BXB_FOLLOWERS": ("head", "Sum of the 6 BxB pre-adult cohorts."),
     "FOLLOWER_TOTAL": ("head", "DXD_FOLLOWERS + DXB_FOLLOWERS + BXB_FOLLOWERS."),
+    "UNDER1_FOLLOWERS": ("head", "Sum of DxD, DxB and BxB male and female calf cohorts aged under one year."),
     "UPLAND_SHEEP": ("head", "Sum of the 5 upland sheep cohorts."),
     "DAIRY_SHARE_ADULT_PCT": ("%", "100 x dairy_cows / ADULT_COWS."),
     "DXD_SHARE_FOLLOWERS_PCT": ("%", "100 x DXD_FOLLOWERS / FOLLOWER_TOTAL."),
     "DXB_SHARE_FOLLOWERS_PCT": ("%", "100 x DXB_FOLLOWERS / FOLLOWER_TOTAL."),
     "BXB_SHARE_FOLLOWERS_PCT": ("%", "100 x BXB_FOLLOWERS / FOLLOWER_TOTAL."),
+    "UNDER1_SHARE_FOLLOWERS_PCT": ("%", "100 x UNDER1_FOLLOWERS / FOLLOWER_TOTAL."),
     "FOLLOWER_TO_ADULT_RATIO": ("ratio", "FOLLOWER_TOTAL / ADULT_COWS."),
     "CATTLE_PER_FARMED_HA": ("head per ha", "TOTAL_CATTLE / AREA_FARMED."),
     "SHEEP_PER_FARMED_HA": ("head per ha", "TOTAL_SHEEP / AREA_FARMED."),
@@ -152,6 +155,12 @@ _EXACT: dict[str, tuple[str, str]] = {
     "ED_WEIGHTED_P90_P10": ("as signature", "Within-catchment spread: ED_WEIGHTED_P90 - ED_WEIGHTED_P10."),
     "INTERSECTING_EDS": ("EDs", "Number of EDs contributing positive denominator weight to the catchment signature distribution."),
     "DISTRIBUTION_DENOMINATOR": ("as denominator", "Sum of each ED signature denominator multiplied by its ED-catchment area weight."),
+    "STRADDLING_EDS": ("EDs", "Number of EDs intersecting more than one WFD catchment."),
+    "TOTAL_EDS": ("EDs", "Number of EDs in the model universe for the comparison year."),
+    "FOLLOWER_TO_ADULT_RATIO_FRACTIONAL": ("ratio", "Followers per adult cow after fractional ED-to-catchment allocation."),
+    "FOLLOWER_TO_ADULT_RATIO_MAJORITY": ("ratio", "Followers per adult cow after assigning each ED wholly to its largest-area catchment."),
+    "FOLLOWER_TO_ADULT_ABS_DIFF": ("ratio", "Absolute difference between majority and fractional followers-per-adult-cow."),
+
     # parent-follower relationship tables
     "COHORT": ("label", "Follower cohort (18 DxD/DxB/BxB age-sex cohorts, or bulls)."),
     "ADULT_ORIGIN": ("label", "Parent population: DAIRY (DxD, DxB), SUCKLER (BxB) or ADULT_COWS (bulls)."),
@@ -160,18 +169,19 @@ _EXACT: dict[str, tuple[str, str]] = {
     "ED_COHORT_PER_ADULT_RATIO": ("ratio", "BASE_COHORT_HEAD / BASE_ORIGIN_ADULTS (0 where the ED has no parent cows)."),
     "COUNTY_ORIGIN_ADULT_TOTAL": ("head", "Parent cows in the ED's county."),
     "COUNTY_COHORT_TOTAL": ("head", "Follower cohort head in the ED's county."),
-    "ORPHAN_COHORT_PER_COUNTY_ADULT_RATIO": ("ratio", "For COUNTY_RECEIVER cells: follower head / county parent cows."),
-    "ORPHAN_SHARE_OF_COUNTY_COHORT": ("share", "For COUNTY_RECEIVER cells: follower head / county follower head."),
-    "COHORT_SPATIAL_ROLE": ("label", "LOCAL_ED (parents in the ED), COUNTY_RECEIVER (no parents in the ED, parents in the county), NATIONAL_ORPHAN (none in the county) or NONE (no followers). This is a support classification, not an animal-movement or origin claim."),
+    "ORPHAN_COHORT_PER_COUNTY_ADULT_RATIO": ("ratio", "For county-parent-support cells: follower head / county parent cows; legacy column name retained for compatibility."),
+    "ORPHAN_SHARE_OF_COUNTY_COHORT": ("share", "For county-parent-support cells: follower head / county follower head; legacy column name retained for compatibility."),
+    "COHORT_SPATIAL_ROLE": ("label", "Parent-support class: LOCAL_PARENT, COUNTY_PARENT_SUPPORT, NATIONAL_PARENT_SUPPORT or NONE. This is not an animal-movement or origin claim."),
+    "COHORT_SPATIAL_ROLE_LEGACY": ("label", "Legacy internal support label retained for compatibility: LOCAL_ED, COUNTY_RECEIVER, NATIONAL_ORPHAN or NONE."),
     "ORIGIN_GROUP": ("label", "DxD, DxB, BxB or bulls."),
     "PARENT": ("label", "Parent population of ORIGIN_GROUP."),
     "FOLLOWER_HEAD": ("head", "Follower head of ORIGIN_GROUP in the unit (catchments: area-weighted)."),
-    "LOCAL_ED_HEAD": ("head", "Follower head in LOCAL_ED cells."),
-    "COUNTY_RECEIVER_HEAD": ("head", "Follower head in COUNTY_RECEIVER cells."),
-    "NATIONAL_ORPHAN_HEAD": ("head", "Follower head in NATIONAL_ORPHAN cells."),
-    "LOCAL_ED_PCT": ("%", "100 x LOCAL_ED_HEAD / FOLLOWER_HEAD."),
-    "COUNTY_RECEIVER_PCT": ("%", "100 x COUNTY_RECEIVER_HEAD / FOLLOWER_HEAD."),
-    "NATIONAL_ORPHAN_PCT": ("%", "100 x NATIONAL_ORPHAN_HEAD / FOLLOWER_HEAD."),
+    "LOCAL_PARENT_HEAD": ("head", "Follower head in EDs where corresponding parent cows are present locally."),
+    "COUNTY_PARENT_SUPPORT_HEAD": ("head", "Follower head in EDs where corresponding parent cows are absent locally but present elsewhere in the county."),
+    "NATIONAL_PARENT_SUPPORT_HEAD": ("head", "Follower head in EDs whose county has no corresponding parent cows."),
+    "LOCAL_PARENT_PCT": ("%", "100 x LOCAL_PARENT_HEAD / FOLLOWER_HEAD."),
+    "COUNTY_PARENT_SUPPORT_PCT": ("%", "100 x COUNTY_PARENT_SUPPORT_HEAD / FOLLOWER_HEAD."),
+    "NATIONAL_PARENT_SUPPORT_PCT": ("%", "100 x NATIONAL_PARENT_SUPPORT_HEAD / FOLLOWER_HEAD."),
 }
 
 _GEN = {"DxD": "dairy dam x dairy sire", "DxB": "dairy dam x beef sire", "BxB": "beef dam x beef sire"}
@@ -214,6 +224,26 @@ def describe(column: str) -> tuple[str, str] | None:
     if column.startswith("CSO_") and column[4:] in _EXACT:
         unit, text = _EXACT[column[4:]]
         return unit, f"CSO control carried in the GOBLIN 31 panel: {column[4:]}. {text}"
+    if column.startswith("MEDIAN_FOLLOWER_TO_ADULT_ABS_DIFF"):
+        return "ratio", "Median absolute catchment difference in followers per adult cow."
+    if column.startswith("MAX_FOLLOWER_TO_ADULT_ABS_DIFF"):
+        return "ratio", "Maximum absolute catchment difference in followers per adult cow."
+    if column.endswith("_FRACTIONAL"):
+        return "head", "Catchment total under fractional ED-to-catchment allocation."
+    if column.endswith("_MAJORITY"):
+        return "head", "Catchment total under whole-ED majority-area assignment."
+    if column.endswith("_ABS_DIFF_PCT"):
+        return "%", "Absolute majority-versus-fractional catchment difference as a percentage of the fractional value."
+    if column.endswith("_DIFF"):
+        return "head", "Majority minus fractional catchment total."
+    if column.startswith("STRADDLING_") and column.endswith("_SHARE_PCT"):
+        return "%", "Share of the national quantity located in EDs intersecting more than one WFD catchment."
+    if column.startswith("STRADDLING_"):
+        return "head", "National quantity located in EDs intersecting more than one WFD catchment."
+    if column.startswith("MEDIAN_") and column.endswith("_ABS_DIFF_PCT"):
+        return "%", "Median absolute catchment difference between majority and fractional allocation."
+    if column.startswith("MAX_") and column.endswith("_ABS_DIFF_PCT"):
+        return "%", "Maximum absolute catchment difference between majority and fractional allocation."
     match = _COHORT_RE.match(column)
     if match:
         gen, stage = match.groups()

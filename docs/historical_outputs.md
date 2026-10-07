@@ -56,12 +56,12 @@ The two primary geographies are the **ED**, for fine-scale spatial pattern, and 
 | `livestock_signature_long` | Each signature ratio with its numerator, denominator and scale. Re-aggregate by summing numerators and denominators, never by averaging `VALUE`. |
 | `wfd_signature_spread` | For each catchment, year and signature: the accounting value plus denominator-weighted ED P10, P50, P90 and P90-P10 spread. All intersecting EDs enter with their fractional crosswalk weight. |
 | `parent_follower_relationship_ed` | One row per ED, follower cohort and signature year: parent population (dairy cows for DxD and DxB, suckler cows for BxB, all cows for bulls), parent head, follower head, follower-per-parent ratio, and relationship class. |
-| `parent_follower_relationship_shares` | For each ED, WFD catchment, county, Colm catchment and Ireland: follower head by origin group split into `LOCAL_ED`, `COUNTY_RECEIVER` and `NATIONAL_ORPHAN`. The class is an ED property; aggregate rows only say how much of their follower stock sits in each class. |
+| `parent_follower_relationship_shares` | For each ED, WFD catchment, county, Colm catchment and Ireland: follower head by origin group split into `LOCAL_PARENT`, `COUNTY_PARENT_SUPPORT` and `NATIONAL_PARENT_SUPPORT`. The class is an ED property; aggregate rows only say how much of their follower stock sits in each class. |
 | `parent_follower_relationship_by_year` | National shares by class for every year 2015-2025. |
 
-Relationship classes: `LOCAL_ED` means the follower's parent cows are in the same ED; `COUNTY_RECEIVER` means the ED has followers but none of their parent cows, which the county does have; `NATIONAL_ORPHAN` is the final fallback (no parent cows in the county) and does not occur in 2020 or 2025.
+Relationship classes: `LOCAL_PARENT` means the follower's corresponding parent cows are in the same ED; `COUNTY_PARENT_SUPPORT` means the ED has followers but the corresponding parent cows occur only elsewhere in the county; `NATIONAL_PARENT_SUPPORT` is the final support level where the county has no corresponding parents.
 
-**Relationship support classes are not movement classes.** `COUNTY_RECEIVER` means only that an ED contains a follower cohort while the corresponding parent cows are absent locally and present elsewhere in the county. Under the corrected reconstruction, the published 2020 adult-cow support pattern is retained after 2020, so this relationship can persist in later years. It should be interpreted as biological support for the parent-follower representation, not as evidence that animals were bought in or moved from a particular place.
+**Relationship support classes are not movement classes.** They describe only the finest spatial scale at which the parent-follower relationship is supported. The former internal codes are retained in `COHORT_SPATIAL_ROLE_LEGACY` for compatibility.
 
 ## Reading catchment results
 
@@ -79,11 +79,11 @@ used for the published catchment totals or the `wfd_signature_spread` table.
 
 ## Reading the numbers correctly
 
-**2020 is the observed year.** 2020 ED values for cattle (dairy cows, other cows, other cattle, total), sheep, land and holdings are the CSO Census of Agriculture 2020 values. Published cells are unchanged; livestock cells withheld for confidentiality were filled before the model ran (Stage 00, `docs/methodology.md` section 2.0), and `data/inputs/baseline/census_reconciliation/filled_cells.csv` lists each with its prior source and measured error. Every other year is reconstructed and sums exactly to an annual CSO control: AAA10 county cattle, AAA09 regional sheep, AQA06 regional land (all June). `PROVENANCE` (cattle) and `SHEEP_DATA_STATUS` (sheep) label every ED row; in the two livestock panels they are `CATTLE_PROVENANCE` and `SHEEP_PROVENANCE`.
+**2020 is the local census anchor.** 2020 ED values for cattle, sheep, land and holdings are the Census of Agriculture values, with confidentiality-suppressed livestock cells prepared in Stage 00. Reconstructed cattle years close exactly to AAA10 county controls and reconstructed sheep years close exactly to AAA09 regional controls. Land is different: the 2020 census level is retained and surrounding years follow the AQA06 regional change index, so the model is not forced to equal the absolute AQA06 land level. `PROVENANCE` (cattle) and `SHEEP_DATA_STATUS` (sheep) label every ED row; in the two livestock panels they are `CATTLE_PROVENANCE` and `SHEEP_PROVENANCE`.
 
 **2020 and the annual controls.** Model-universe 2020 ED sums sit slightly below the annual controls: census animals in the 552 EDs outside the model universe are reported, not moved in (8,744 cattle, 1,723 dairy cows, 4,518 sheep), and AAA10 and AAA09 are rounded to 100 head. The remaining 2020 step in ED time series is therefore about 0.1% nationally. Before Stage 00 (release v1.1) suppressed cells were stored as zero and 2020 dairy cows sat 187,716 head below AAA10 and sheep 259,807 head below AAA09.
 
-**The 2021-2022 land dip is in the CSO data.** Area farmed falls about 3.9% in 2021-2022 and recovers in 2023 because the AQA06 June series does; the model follows each AQA06 regional index exactly.
+**The 2021-2022 land dip is in the CSO data.** Area farmed falls about 3.9% in 2021-2022 and recovers in 2023 because the AQA06 June series does; the model follows the regional change index. Because 2020 census land is the level anchor, absolute model land totals need not equal AQA06 levels.
 
 **Within an ED, some splits are modelled.** Age-sex groups within other cattle, sheep classes within total sheep, DxD/DxB/BxB genetics and sheep breed types are estimates constrained to the observed or controlled totals. The GOBLIN genetic margins use national COHORTS ratios on AAA10 cow numbers in every year; they are not observed at ED level.
 
@@ -158,3 +158,10 @@ county <- dbGetQuery(con, "SELECT * FROM county_year WHERE YEAR = 2025")
 CI rebuilds the release on every change and fails if any check fails.
 
 See also: `docs/data_dictionary.md` (variable definitions), `docs/historical_results_bundle.md` (manuscript tables), `docs/validation.md` (validation design), `docs/methodology.md` (method).
+
+
+**Farm holdings after 2023.** The holding count reaches the 2023 Farm Structure Survey control and is held at that latest observed value through 2025. Report observed/reconstructed change in holdings through 2023 rather than interpreting 2024-2025 as new survey observations.
+
+**Cattle cohort input step.** The visible 2016-2017 drop in national DxD follower share is inherited from the COHORTS relationship input: the DxD-to-dairy-cow coefficient falls between those years. It should be attributed to the biological input series rather than interpreted as an ED allocation artefact.
+
+**County sheep reporting.** Manuscript county sheep quantities should be taken from the released tables, which are controlled to the AAA09 regional/State series used by the model, rather than from auxiliary workbook layouts that do not reproduce those totals.

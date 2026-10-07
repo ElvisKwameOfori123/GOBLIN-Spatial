@@ -6,17 +6,16 @@ Run from the repository root after the release build:
     python scripts/build_historical_release.py
     python scripts/paper1_figures.py
 
-Story line of the Results, one figure per step:
+Story line of the Results:
 
-    F1  Methods     evidence hierarchy and workflow (census preparation to reporting)
-    F2  3.1         validation: is the reconstruction trustworthy?
-    F3  3.2         scale and time: national change 2015-2025 and where it happened
-    F4  3.3         ED signatures: abundance is not system
-    F5  3.4         observed local restructuring between the 2010 and 2020 censuses
-    F6  3.5         catchments: WFD planning units hide ED variation
-    F7  3.6         illustrative adjustment: where a national change lands
+    F1  Methods     evidence hierarchy and workflow
+    F2  3.1         reconstruction integrity and evaluation
+    F3  3.2/3.3     national change and ED livestock-system geography
+    F4  supporting  observed local restructuring between the 2010 and 2020 censuses
+    F5  3.4         agricultural context
+    F6  3.5         catchment accounting and within-catchment ED heterogeneity
 
-Tables (main text T1-T6, supplementary S1-S5) go to one formatted workbook and to
+Tables and supplementary diagnostics go to one formatted workbook and to
 CSV; map layers go to one GeoPackage; a manifest records the model commit and
 every setting. The script reads the release bundle and the Stage 00 audit tables
 and never changes the scientific state.
@@ -59,6 +58,7 @@ CONFIG = {
     "end_year": 2025,
     # Ratio indicators are shown only where the denominator is meaningful.
     "min_adult_cows": 10,
+    "min_followers": 20,
     "min_cattle": 50,
     "min_farmed_ha": 50,
     # Livestock-system typology, applied in this order (first match wins).
@@ -272,7 +272,8 @@ def load(root: Path) -> dict:
     names = [
         "ed_year", "county_year", "wfd_catchment_year", "national_year", "validation_summary",
         "validation_detail_sheep_composition_holdout_2022", "validation_detail_dafm_county_sheep_diagnostics",
-        "validation_detail_temporal_rank_stability", "concentration_2020", "matched_pairs_2020",
+        "validation_detail_temporal_rank_stability", "validation_detail_cattle_lsu_age_prior_summary",
+        "concentration_2020", "concentration_2025", "matched_pairs_2020",
         "baseline_coherence_audit", "information_geography_2020", "livestock_signature",
         "wfd_signature_spread",
     ]
@@ -341,9 +342,10 @@ def geometry(root: Path, ed_year: pd.DataFrame) -> dict:
     wfd["geometry"] = wfd.geometry.make_valid()
     wfd = wfd.dissolve(by=["WFD_CATCHMENT_ID", "WFD_CATCHMENT"], as_index=False)
     wfd = simplify(wfd[["WFD_CATCHMENT_ID", "WFD_CATCHMENT", "geometry"]], CONFIG["simplify_catchment_m"])
-    # 11 WFD units share two names (Shannon 25A-D, 26A-G): always label with the ID.
-    wfd["LABEL"] = [f"{n} ({i})" if n in ("Upper Shannon", "Lower Shannon") else n
-                    for n, i in zip(wfd["WFD_CATCHMENT"], wfd["WFD_CATCHMENT_ID"])]
+    # Catchment IDs are always included because several official names repeat.
+    wfd["LABEL"] = [
+        f"{i} {n}" for n, i in zip(wfd["WFD_CATCHMENT"], wfd["WFD_CATCHMENT_ID"])
+    ]
     # Clip catchments to the State for display (several cross the border).
     wfd_state = gpd.clip(wfd, ireland)
 
@@ -380,6 +382,7 @@ def derive(data: dict) -> dict:
                                          "Suckler-centred"], default="Mixed breeding")
     y0, yb, y1 = CONFIG["start_year"], CONFIG["base_year"], CONFIG["end_year"]
     e20 = ed.loc[ed["YEAR"] == yb].copy()
+    e25 = ed.loc[ed["YEAR"] == y1].copy()
 
     typology = (e20.groupby("SYSTEM_TYPE")
                 .agg(EDS=("CSOED", "size"), CATTLE=("TOTAL_CATTLE", "sum"), DAIRY_COWS=("dairy_cows", "sum"),
@@ -441,7 +444,7 @@ def derive(data: dict) -> dict:
     w["BXB_SHARE_FOLLOWERS_PCT"] = ratio(w["BXB_FOLLOWERS"], w["FOLLOWER_TOTAL"], 100)
     w["SO_PER_HA"] = ratio(w["SO_COVERED_TOTAL_2020_EUR"], w["AREA_FARMED"])
     print(f"3 DERIVE    typology {int((typology['EDS'] > 0).sum())} classes; national and catchment indicators")
-    return {"ed": ed, "e20": e20, "typology": typology, "typology_sensitivity": typology_sensitivity,
+    return {"ed": ed, "e20": e20, "e25": e25, "typology": typology, "typology_sensitivity": typology_sensitivity,
             "national_change": national_change, "wfd": w}
 
 
@@ -523,7 +526,7 @@ def f1_workflow(out, written):
     box(22, top, 18, 16, "Stage 00",
         "published cells kept\nsuppressed cells filled\ninside exact county\ntotals; tested priors\nwith shrinkage", "#fdf2e3", C["follower"])
     box(43, top, 18, 16, "ED baseline",
-        "2,857 EDs, 2015-2025\nannual CSO controls\n(AAA10, AAA09, AQA06)\n2010 to 2020 share path", "#eef3f8", C["dairy"])
+        "2,857 EDs, 2015-2025\nAAA10/AAA09 livestock controls\nAQA06 land-change indices\n2010 to 2020 share path", "#eef3f8", C["dairy"])
     box(64, top, 16, 16, "Cohorts",
         "21 cattle cohorts\n(DxD, DxB, BxB)\n10 sheep cohorts\nDAFM/AIM priors", "#f3eff9", C["dxb"])
     box(83, top, 16, 16, "Indicators",
@@ -536,8 +539,8 @@ def f1_workflow(out, written):
         "ED, county, 46 WFD catchments,\nnational; every table sums\nexactly from the ED state", "#f7f7f7", C["grey"])
     box(37.5, low, 25, 11.5, "Verification and evaluation",
         "47 coherence checks; withheld\n2022 sheep composition; hidden-\ncell and 2010-2020 holdout tests", "#f7f7f7", C["grey"])
-    box(67, low, 25, 11.5, "Illustrative adjustment",
-        "30% fewer dairy or suckler cows:\nsignature-preserving versus\nheadcount attribution", "#f7f7f7", C["grey"])
+    box(67, low, 25, 11.5, "Multiscale reporting",
+        "county and WFD catchment views\nfrom the same ED baseline;\naggregate values plus ED spread", "#f7f7f7", C["grey"])
     arrow(91, top - 0.6, 79.5, low + 11.9)
     arrow(52, top - 0.6, 50, low + 11.9)
     arrow(52, top - 0.6, 20.5, low + 11.9)
@@ -877,7 +880,7 @@ def tables(data, derived, restructuring, catchment_spread) -> dict:
         ["CSO Census county totals (2010 Tables 8A/8B; 2020 Tables 4.2/4.4)", "2010, 2020", "County", "Exact control for suppressed cells"],
         ["CSO AAA10 cattle by county (June)", "2015-2025", "County", "Annual control; 2020 cross-check of census totals"],
         ["CSO AAA09 sheep by region (June)", "2015-2025", "7 regions", "Annual control; 2020 cross-check"],
-        ["CSO AQA06 land use", "2015-2025", "Region", "Annual land control"],
+        ["CSO AQA06 land use", "2015-2025", "Region", "Annual regional change index applied to the 2020 census land level"],
         ["DAFM/AIM cattle profile", "2020", "ED", "Prior for suppressed cells and age/genetic composition; not a control"],
         ["DAFM sheep breed and county data", "2016-2025", "County", "Breed composition and within-region weighting; pattern diagnostic"],
         ["GOBLIN/COHORTS relationships", "2012-2020", "National", "Cohort structure (21 cattle, 10 sheep)"],
@@ -984,16 +987,46 @@ def write_layers(derived, geo, out: Path, written: list):
     gpkg = out / "maps" / "goblin_spatial_paper1_layers.gpkg"
     if gpkg.exists():
         gpkg.unlink()
-    ed = geo["ed"].merge(derived["e20"][["CSOED", "SYSTEM_TYPE", "LU_PER_HA", "DAIRY_SHARE_PLOT", "FOLLOWERS_PER_COW_PLOT",
-                                         "CATTLE_PER_FARMED_HA", "SHEEP_PER_FARMED_HA",
-                                         "GRASSLAND_SHARE_FARMED_PCT", "CEREAL_SHARE_FARMED_PCT",
-                                         "SO_PER_FARMED_HA"]], on="CSOED", how="left")
-    w20 = derived["wfd"].loc[derived["wfd"]["YEAR"] == CONFIG["base_year"]]
-    wfd = geo["wfd_state"].merge(w20[["WFD_CATCHMENT_ID", "LU_PER_HA", "DAIRY_SHARE_ADULT_PCT", "FOLLOWERS_PER_ADULT_COW",
-                                      "CATTLE_PER_FARMED_HA", "SHEEP_PER_FARMED_HA",
-                                      "GRASSLAND_SHARE_FARMED_PCT", "CEREAL_SHARE_FARMED_PCT",
-                                      "SO_PER_HA"]], on="WFD_CATCHMENT_ID", how="left")
-    for layer, gdf in (("ed_2020", ed), ("county", geo["county"]), ("wfd_catchment_2020", wfd), ("ireland", geo["ireland"])):
+
+    def ed_layer(frame):
+        return geo["ed"].merge(
+            frame[
+                [
+                    "CSOED", "SYSTEM_TYPE", "LU_PER_HA", "DAIRY_SHARE_PLOT",
+                    "FOLLOWERS_PER_COW_PLOT", "UNDER1_SHARE_FOLLOWERS_PCT",
+                    "DXD_SHARE_FOLLOWERS_PCT", "CATTLE_PER_FARMED_HA",
+                    "SHEEP_PER_FARMED_HA", "GRASSLAND_SHARE_FARMED_PCT",
+                    "CEREAL_SHARE_FARMED_PCT", "SO_PER_FARMED_HA",
+                ]
+            ],
+            on="CSOED",
+            how="left",
+        )
+
+    layers = [
+        ("ed_2020", ed_layer(derived["e20"])),
+        ("ed_2025", ed_layer(derived["e25"])),
+        ("county", geo["county"]),
+        ("ireland", geo["ireland"]),
+    ]
+    for year in (CONFIG["base_year"], CONFIG["end_year"]):
+        w = derived["wfd"].loc[derived["wfd"]["YEAR"] == year]
+        layer = geo["wfd_state"].merge(
+            w[
+                [
+                    "WFD_CATCHMENT_ID", "LU_PER_HA", "DAIRY_SHARE_ADULT_PCT",
+                    "FOLLOWERS_PER_ADULT_COW", "UNDER1_SHARE_FOLLOWERS_PCT",
+                    "CATTLE_PER_FARMED_HA", "SHEEP_PER_FARMED_HA",
+                    "GRASSLAND_SHARE_FARMED_PCT", "CEREAL_SHARE_FARMED_PCT",
+                    "SO_PER_HA",
+                ]
+            ],
+            on="WFD_CATCHMENT_ID",
+            how="left",
+        )
+        layers.append((f"wfd_catchment_{year}", layer))
+
+    for layer, gdf in layers:
         gdf.to_file(gpkg, layer=layer, driver="GPKG")
     written.append(gpkg)
 

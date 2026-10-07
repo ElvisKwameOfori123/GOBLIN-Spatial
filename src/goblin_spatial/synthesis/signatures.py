@@ -15,7 +15,8 @@ livestock_signature_long
 parent_follower_relationship_ed
     One row per ED, follower cohort and signature year: parent population,
     parent and follower head, follower-per-parent ratio and relationship class
-    (LOCAL_ED, COUNTY_RECEIVER, NATIONAL_ORPHAN, NONE).
+    (LOCAL_PARENT, COUNTY_PARENT_SUPPORT, NATIONAL_PARENT_SUPPORT, NONE).
+    Legacy internal codes are retained in COHORT_SPATIAL_ROLE_LEGACY.
 
 parent_follower_relationship_shares
     For every geography unit: follower head by parental-origin group split by
@@ -36,7 +37,13 @@ from goblin_spatial.config import SpatialConfig
 from goblin_spatial.synthesis.historical import add_signature_metrics
 
 SIGNATURE_YEARS = (2020, 2025)
-RELATIONSHIP_CLASSES = ("LOCAL_ED", "COUNTY_RECEIVER", "NATIONAL_ORPHAN")
+RELATIONSHIP_CLASSES = ("LOCAL_PARENT", "COUNTY_PARENT_SUPPORT", "NATIONAL_PARENT_SUPPORT")
+LEGACY_RELATIONSHIP_CLASS_MAP = {
+    "LOCAL_ED": "LOCAL_PARENT",
+    "COUNTY_RECEIVER": "COUNTY_PARENT_SUPPORT",
+    "NATIONAL_ORPHAN": "NATIONAL_PARENT_SUPPORT",
+    "NONE": "NONE",
+}
 ORIGIN_GROUPS = {"DxD": "DAIRY", "DxB": "DAIRY", "BxB": "SUCKLER", "bulls": "ADULT_COWS"}
 
 STATE_COLUMNS = (
@@ -48,6 +55,7 @@ STATE_COLUMNS = (
     "DXB_FOLLOWERS",
     "BXB_FOLLOWERS",
     "FOLLOWER_TOTAL",
+    "UNDER1_FOLLOWERS",
     "TOTAL_CATTLE",
     "TOTAL_SHEEP",
     "UPLAND_SHEEP",
@@ -63,6 +71,7 @@ SIGNATURE_DEFINITIONS = {
     "DXD_SHARE_FOLLOWERS_PCT": ("DXD_FOLLOWERS", "FOLLOWER_TOTAL", 100.0),
     "DXB_SHARE_FOLLOWERS_PCT": ("DXB_FOLLOWERS", "FOLLOWER_TOTAL", 100.0),
     "BXB_SHARE_FOLLOWERS_PCT": ("BXB_FOLLOWERS", "FOLLOWER_TOTAL", 100.0),
+    "UNDER1_SHARE_FOLLOWERS_PCT": ("UNDER1_FOLLOWERS", "FOLLOWER_TOTAL", 100.0),
     "FOLLOWER_TO_ADULT_RATIO": ("FOLLOWER_TOTAL", "ADULT_COWS", 1.0),
     "CATTLE_PER_FARMED_HA": ("TOTAL_CATTLE", "AREA_FARMED", 1.0),
     "SHEEP_PER_FARMED_HA": ("TOTAL_SHEEP", "AREA_FARMED", 1.0),
@@ -282,12 +291,168 @@ def build_wfd_signature_spread(
             "WFD signature spread does not reproduce the catchment accounting value"
         )
     out = out.drop(columns=["_ED_AGG_NUMERATOR", "_ED_AGG_DENOMINATOR"])
+    out["WFD_CATCHMENT_LABEL"] = (
+        out["WFD_CATCHMENT_ID"].astype(str) + " " + out["WFD_CATCHMENT"].astype(str)
+    )
     return out.sort_values(["YEAR", "SIGNATURE", "WFD_CATCHMENT_ID"]).reset_index(drop=True)
+
+
+def _display_relationship_roles(frame: pd.DataFrame) -> pd.DataFrame:
+    """Expose parent-support terminology without changing baseline internals."""
+
+    out = frame.copy()
+    out["COHORT_SPATIAL_ROLE_LEGACY"] = out["COHORT_SPATIAL_ROLE"].astype(str)
+    out["COHORT_SPATIAL_ROLE"] = out["COHORT_SPATIAL_ROLE_LEGACY"].map(
+        LEGACY_RELATIONSHIP_CLASS_MAP
+    )
+    if out["COHORT_SPATIAL_ROLE"].isna().any():
+        bad = sorted(out.loc[out["COHORT_SPATIAL_ROLE"].isna(), "COHORT_SPATIAL_ROLE_LEGACY"].unique())
+        raise AssertionError(f"unknown relationship support class: {bad}")
+    return out
+
+
+def build_wfd_fractional_vs_majority(
+    ed_state: pd.DataFrame,
+    crosswalk: pd.DataFrame,
+    years: tuple[int, ...] = SIGNATURE_YEARS,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Compare fractional ED-to-WFD accounting with whole-ED majority assignment.
+
+    Fractional accounting is the production rule. Majority assignment is only a
+    sensitivity benchmark: each ED is assigned wholly to the catchment with the
+    largest intersection weight, with catchment ID breaking exact ties.
+    """
+
+    required = {"CSOED", "WFD_CATCHMENT_ID", "WFD_CATCHMENT", "ED_CATCHMENT_WEIGHT"}
+    missing = sorted(required - set(crosswalk.columns))
+    if missing:
+        raise ValueError(f"catchment crosswalk lacks fields: {missing}")
+
+    xw = crosswalk[list(required)].copy()
+    xw["CSOED"] = xw["CSOED"].astype(str)
+    xw["WFD_CATCHMENT_ID"] = xw["WFD_CATCHMENT_ID"].astype(str)
+    xw["ED_CATCHMENT_WEIGHT"] = pd.to_numeric(
+        xw["ED_CATCHMENT_WEIGHT"], errors="raise"
+    ).astype(float)
+
+    weight_sum = xw.groupby("CSOED")["ED_CATCHMENT_WEIGHT"].sum()
+    if not np.allclose(weight_sum.to_numpy(), 1.0, rtol=0, atol=1e-9):
+        raise AssertionError("ED-catchment weights do not sum to one for every ED")
+
+    majority = (
+        xw.sort_values(
+            ["CSOED", "ED_CATCHMENT_WEIGHT", "WFD_CATCHMENT_ID"],
+            ascending=[True, False, True],
+            kind="stable",
+        )
+        .groupby("CSOED", as_index=False, sort=False)
+        .head(1)
+        [["CSOED", "WFD_CATCHMENT_ID", "WFD_CATCHMENT"]]
+    )
+    n_units = xw.groupby("CSOED")["WFD_CATCHMENT_ID"].nunique()
+    split_eds = set(n_units.index[n_units > 1].astype(str))
+
+    quantities = ("TOTAL_CATTLE", "dairy_cows", "TOTAL_SHEEP", "FOLLOWER_TOTAL", "ADULT_COWS")
+    details: list[pd.DataFrame] = []
+    summaries: list[dict[str, object]] = []
+
+    for year in years:
+        ed = ed_state.loc[
+            pd.to_numeric(ed_state["YEAR"], errors="raise").astype(int) == int(year)
+        ].copy()
+        required_ed = {"CSOED", *quantities}
+        missing_ed = sorted(required_ed - set(ed.columns))
+        if missing_ed:
+            raise ValueError(f"ED state lacks WFD comparison fields: {missing_ed}")
+        ed["CSOED"] = ed["CSOED"].astype(str)
+        if ed["CSOED"].duplicated().any():
+            raise AssertionError(f"{year}: duplicate ED rows in majority-rule comparison")
+
+        weighted = ed[["CSOED", *quantities]].merge(
+            xw, on="CSOED", how="inner", validate="one_to_many"
+        )
+        for q in quantities:
+            weighted[q] = pd.to_numeric(weighted[q], errors="raise").astype(float) * weighted["ED_CATCHMENT_WEIGHT"]
+        frac = weighted.groupby(
+            ["WFD_CATCHMENT_ID", "WFD_CATCHMENT"], as_index=False, sort=True
+        )[list(quantities)].sum()
+
+        whole = ed[["CSOED", *quantities]].merge(
+            majority, on="CSOED", how="left", validate="one_to_one"
+        )
+        if whole["WFD_CATCHMENT_ID"].isna().any():
+            raise AssertionError("ED missing from majority catchment assignment")
+        maj = whole.groupby(
+            ["WFD_CATCHMENT_ID", "WFD_CATCHMENT"], as_index=False, sort=True
+        )[list(quantities)].sum()
+
+        joined = frac.merge(
+            maj,
+            on=["WFD_CATCHMENT_ID", "WFD_CATCHMENT"],
+            how="outer",
+            suffixes=("_FRACTIONAL", "_MAJORITY"),
+            validate="one_to_one",
+        ).fillna(0.0)
+        joined.insert(0, "YEAR", int(year))
+        joined["WFD_CATCHMENT_LABEL"] = (
+            joined["WFD_CATCHMENT_ID"].astype(str) + " " + joined["WFD_CATCHMENT"].astype(str)
+        )
+
+        for q in ("TOTAL_CATTLE", "dairy_cows", "TOTAL_SHEEP"):
+            a = joined[f"{q}_FRACTIONAL"].astype(float)
+            b = joined[f"{q}_MAJORITY"].astype(float)
+            joined[f"{q}_DIFF"] = b - a
+            joined[f"{q}_ABS_DIFF_PCT"] = np.where(
+                a != 0, 100.0 * (b - a).abs() / a.abs(), np.nan
+            )
+
+        joined["FOLLOWER_TO_ADULT_RATIO_FRACTIONAL"] = np.where(
+            joined["ADULT_COWS_FRACTIONAL"] > 0,
+            joined["FOLLOWER_TOTAL_FRACTIONAL"] / joined["ADULT_COWS_FRACTIONAL"],
+            np.nan,
+        )
+        joined["FOLLOWER_TO_ADULT_RATIO_MAJORITY"] = np.where(
+            joined["ADULT_COWS_MAJORITY"] > 0,
+            joined["FOLLOWER_TOTAL_MAJORITY"] / joined["ADULT_COWS_MAJORITY"],
+            np.nan,
+        )
+        joined["FOLLOWER_TO_ADULT_ABS_DIFF"] = (
+            joined["FOLLOWER_TO_ADULT_RATIO_MAJORITY"]
+            - joined["FOLLOWER_TO_ADULT_RATIO_FRACTIONAL"]
+        ).abs()
+        details.append(joined)
+
+        split = ed.loc[ed["CSOED"].isin(split_eds)]
+        row: dict[str, object] = {
+            "YEAR": int(year),
+            "STRADDLING_EDS": int(len(split)),
+            "TOTAL_EDS": int(len(ed)),
+        }
+        for q in ("TOTAL_CATTLE", "dairy_cows", "TOTAL_SHEEP"):
+            total = float(pd.to_numeric(ed[q], errors="raise").sum())
+            split_total = float(pd.to_numeric(split[q], errors="raise").sum())
+            row[f"STRADDLING_{q.upper()}"] = split_total
+            row[f"STRADDLING_{q.upper()}_SHARE_PCT"] = (
+                100.0 * split_total / total if total > 0 else np.nan
+            )
+            x = joined[f"{q}_ABS_DIFF_PCT"].dropna()
+            row[f"MEDIAN_{q.upper()}_ABS_DIFF_PCT"] = float(x.median())
+            row[f"MAX_{q.upper()}_ABS_DIFF_PCT"] = float(x.max())
+        x = joined["FOLLOWER_TO_ADULT_ABS_DIFF"].dropna()
+        row["MEDIAN_FOLLOWER_TO_ADULT_ABS_DIFF"] = float(x.median())
+        row["MAX_FOLLOWER_TO_ADULT_ABS_DIFF"] = float(x.max())
+        summaries.append(row)
+
+    detail = pd.concat(details, ignore_index=True).sort_values(
+        ["YEAR", "WFD_CATCHMENT_ID"], kind="stable"
+    ).reset_index(drop=True)
+    summary = pd.DataFrame(summaries).sort_values("YEAR").reset_index(drop=True)
+    return detail, summary
 
 
 def build_relationship_ed(master: pd.DataFrame, cfg: SpatialConfig) -> pd.DataFrame:
     frames = [build_signatures(master, cfg, year=year) for year in SIGNATURE_YEARS]
-    return pd.concat(frames, ignore_index=True)
+    return _display_relationship_roles(pd.concat(frames, ignore_index=True))
 
 
 def _origin_group(cohort: str) -> str:
@@ -351,8 +516,8 @@ def build_relationship_by_year(master: pd.DataFrame, cfg: SpatialConfig) -> pd.D
     """National follower head by relationship class for every baseline year.
 
     Diagnostic: shows how the ED relationship classes depend on the year's
-    parent geography. COUNTY_RECEIVER is a support classification only: the
-    follower cohort is present in the ED, the corresponding parent cows are
+    parent geography. COUNTY_PARENT_SUPPORT is a support classification only:
+    the follower cohort is present in the ED, the corresponding parent cows are
     absent locally, and parent cows are present elsewhere in the county. Under
     the corrected reconstruction, published 2020 adult-cow support is retained
     after 2020, so this class can persist in reconstructed years.
@@ -360,7 +525,7 @@ def build_relationship_by_year(master: pd.DataFrame, cfg: SpatialConfig) -> pd.D
 
     rows = []
     for year in sorted(int(y) for y in master["YEAR"].unique()):
-        rel = build_signatures(master, cfg, year=year)
+        rel = _display_relationship_roles(build_signatures(master, cfg, year=year))
         rel["ORIGIN_GROUP"] = rel["COHORT"].map(_origin_group)
         table = rel.groupby(["ORIGIN_GROUP", "COHORT_SPATIAL_ROLE"])["BASE_COHORT_HEAD"].sum().unstack(fill_value=0)
         for group, values in table.iterrows():

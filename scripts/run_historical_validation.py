@@ -10,6 +10,8 @@ import numpy as np
 import pandas as pd
 
 from goblin_spatial.config import load_config
+from goblin_spatial.cattle.annual_panel import build_annual_ed_panel
+from goblin_spatial.cattle.annual_age_sex import build_annual_age_sex_panel, lsu_check_2020
 from goblin_spatial.validation.historical import (
     sheep_anchor_holdout,
     temporal_rank_stability,
@@ -242,7 +244,42 @@ def main() -> None:
         ]
     )
 
-    # 4. Adjacent-year spatial-rank stability for counts and transparent signatures.
+    # 4. Prespecified 2020 LSU plausibility/model-selection diagnostic for
+    # the ED age prior. This is not independent validation: published LSU was
+    # used to evaluate the alternative age-prior representation.
+    cattle_panel, _ = build_annual_ed_panel(cfg)
+    age_rows = []
+    for mode in ("dafm_log_odds", "flat_county"):
+        age_panel = build_annual_age_sex_panel(cfg, cattle_panel, mode=mode)
+        check = lsu_check_2020(cfg, age_panel)
+        age_rows.append(
+            {
+                "AGE_PRIOR": mode,
+                **check,
+            }
+        )
+        overview_rows.extend(
+            [
+                {
+                    "VALIDATION_FAMILY": "CATTLE_AGE_PRIOR_PLAUSIBILITY",
+                    "SCOPE": mode,
+                    "METRIC": "MEDIAN_ABS_RESIDUAL_LSU",
+                    "VALUE": check["median_abs_residual"],
+                    "INTERPRETATION": "Model-selection/plausibility diagnostic against published 2020 ED LSU; not independent validation.",
+                },
+                {
+                    "VALIDATION_FAMILY": "CATTLE_AGE_PRIOR_PLAUSIBILITY",
+                    "SCOPE": mode,
+                    "METRIC": "ELIGIBLE_EDS",
+                    "VALUE": check["eligible_eds"],
+                    "INTERPRETATION": "Number of EDs eligible for the LSU age-prior comparison.",
+                },
+            ]
+        )
+    age_summary = pd.DataFrame(age_rows)
+    age_summary.to_csv(output_dir / "cattle_lsu_age_prior_summary.csv", index=False)
+
+    # 5. Adjacent-year spatial-rank stability for counts and transparent signatures.
     stability = temporal_rank_stability(master)
     stability.to_csv(output_dir / "temporal_rank_stability.csv", index=False)
     stability_summary = stability.groupby(
@@ -268,7 +305,7 @@ def main() -> None:
                 }
             )
 
-    # 5. Preserve the existing accounting-verification summary in the overview.
+    # 6. Preserve the existing accounting-verification summary in the overview.
     accounting_path = cfg.processed_dir / "validation_summary.csv"
     if accounting_path.exists():
         accounting = pd.read_csv(accounting_path)
@@ -305,6 +342,7 @@ def main() -> None:
     print(f"2022 sheep-composition holdout rows: {len(holdout_diag)}")
     print(f"Achill livestock benchmark rows: {len(achill_diag)}")
     print(f"Achill land benchmark rows: {len(achill_land_diag)}")
+    print(f"LSU age-prior comparison rows: {len(age_summary)}")
     print(f"Temporal stability diagnostics: {len(stability)}")
     print(overview.to_string(index=False))
 

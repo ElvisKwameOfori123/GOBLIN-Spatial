@@ -246,4 +246,5 @@ def lsu_check_2020(config: SpatialConfig, panel: pd.DataFrame) -> dict:
         "eligible_eds": int(eligible.sum()),
         "median_abs_residual": float(residual.abs().median()),
         "mean_residual": float(residual.mean()),
+        "median_published_lsu": float(lsu[eligible].median()),
     }

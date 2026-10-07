@@ -137,7 +137,9 @@ TOTAL\_CEREALS
 OTHER\_CROPS\_HA.
 \]
 
-The 2020 ED state is retained and surrounding years follow the documented higher-level statistical controls. Reconciliation prevents negative components and preserves the land accounting identity.
+The 2020 ED land state is retained as the level anchor. Outside 2020, each land component follows the annual change in its corresponding AQA06 regional series rather than being rescaled to the absolute AQA06 level. This preserves the census level while reproducing the official regional temporal index. Reconciliation prevents negative components and preserves the land accounting identity. The fall in farmed area in 2021-2022 is present in AQA06 itself and is therefore carried into the reconstructed baseline before the series recovers in 2023.
+
+Farm-structure trajectories use the documented structural controls around the census anchor. The national holding count reaches the 2023 Farm Structure Survey value and is then held at that latest observed control through 2025; changes after 2023 should therefore not be interpreted as independently observed annual holding dynamics.
 
 Standard Output is calculated only after livestock and land quantities are fixed. Fixed 2020 Integrated Farm Statistics coefficients are applied throughout 2015-2025. Standard Output is therefore a fixed-coefficient production-value exposure indicator, not farm income, profit, welfare or an economic-impact estimate.
 
@@ -185,9 +187,11 @@ Each ratio is retained with its underlying numerator and denominator so that hig
 
 For each follower cohort, the model records the finest spatial scale at which the corresponding adult-parent relationship is supported:
 
-- `LOCAL_ED`: corresponding parent cows are present in the same ED;
-- `COUNTY_RECEIVER`: followers are present locally, corresponding parent cows are absent locally, but occur elsewhere in the county;
-- `NATIONAL_ORPHAN`: final fallback where the corresponding parent population is absent from the county.
+- `LOCAL_PARENT`: corresponding parent cows are present in the same ED;
+- `COUNTY_PARENT_SUPPORT`: corresponding parent cows are absent locally but occur elsewhere in the county;
+- `NATIONAL_PARENT_SUPPORT`: final support level where the corresponding parent population is absent from the county.
+
+The release retains the former internal labels in `COHORT_SPATIAL_ROLE_LEGACY` for compatibility, but manuscript-facing outputs use the parent-support terminology above.
 
 These are relationship-support classes, not movement or trade classes.
 
@@ -195,7 +199,7 @@ These are relationship-support classes, not movement or trade classes.
 
 The released historical baseline supports four descriptive analyses of the information added by biological structure.
 
-1. **Spatial concentration:** livestock populations are compared with the agricultural-land share of the most livestock-dense EDs.
+1. **Spatial concentration:** for each population, EDs are ranked by that population per farmed hectare; the top decile is then compared with its share of national population and farmed area.
 2. **Matched ED contrasts:** within-county ED pairs with similar total cattle populations are compared on livestock signatures.
 3. **Observed cross-census restructuring:** 2010 and 2020 census states are compared to identify EDs where total cattle abundance remained comparatively stable while breeding structure changed materially.
 4. **Between-county share of spatial variation:** a descriptive variance measure identifies whether a signature varies mainly between counties or substantially among EDs within the same county. This is a spatial-organisation statistic, not a measure of evidence provenance.

@@ -22,8 +22,10 @@ reporting/report_data/historical/
 ├── anchor_reconciliation_2020.parquet
 ├── so_change_2015_2025.parquet
 ├── signature_ranges_2020.parquet
+├── signature_ranges_2025.parquet
 ├── information_geography_2020.parquet
 ├── concentration_2020.parquet
+├── concentration_2025.parquet
 ├── matched_pairs_2020.parquet
 ├── stable_ed_sensitivity.parquet
 ├── multiscale_example_2020.parquet
@@ -35,6 +37,7 @@ reporting/report_data/historical/
 ├── validation_detail_*.parquet
 ├── livestock_signature.parquet (+ _long)
 ├── wfd_signature_spread.parquet
+├── wfd_fractional_vs_majority.parquet (+ _summary)
 ├── parent_follower_relationship_ed.parquet (+ _shares, _by_year)
 ├── _columns.parquet
 ├── _readme.parquet
@@ -90,11 +93,12 @@ The bundle materialises the checks required for the model paper:
   other/suckler cows;
 - complete 2015-2025 fixed-coefficient Standard Output change decomposition;
 - held-out, external-source, applied and temporal validation summaries;
-- 2020 multiscale signature ranges;
+- 2020 and 2025 multiscale signature ranges;
 - information-geography statistics;
-- land-normalised concentration summaries;
-- within-county matched ED contrasts using a common farmed-area denominator;
-- stable-cattle ED sensitivity at ±2.5%, ±5% and ±10%;
+- land-normalised concentration summaries with the ranking rule recorded explicitly;
+- within-county matched ED contrasts on the final biological signature set;
+- stable-cattle ED sensitivity at ±2.5%, ±5% and ±10% over the 2015-2020 two-anchor spatial period;
+- WFD fractional-versus-majority allocation sensitivity;
 - a pre-specified multiscale illustration chosen by maximum adult-cow-weighted
   within-county dairy-share heterogeneity.
 

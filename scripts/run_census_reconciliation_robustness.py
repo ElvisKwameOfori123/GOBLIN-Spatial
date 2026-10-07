@@ -108,7 +108,7 @@ def _metrics(db: Path) -> tuple[pd.DataFrame, dict[str, pd.DataFrame]]:
         add("between-county share R_B 2020", r["METRIC"], r["BETWEEN_COUNTY_SHARE_RB"])
     flows = con.sql("select * from parent_follower_relationship_by_year where YEAR = 2020").df()
     for _, r in flows.iterrows():
-        add("parent-follower 2020", f"{r['ORIGIN_GROUP']} local-ED share %", r["LOCAL_ED_PCT"])
+        add("parent-follower 2020", f"{r['ORIGIN_GROUP']} local-parent-support share %", r["LOCAL_PARENT_PCT"])
     signatures = {
         geo: con.sql(
             f"select GEOGRAPHY_ID, {', '.join(SIGNATURES)} from livestock_signature "
