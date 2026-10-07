@@ -85,12 +85,17 @@ def select_case_pair(data: dict, restructuring: pd.DataFrame, derived: dict) -> 
             "CENSUS_DAIRY_SHARE_CONTRAST_PP": dairy_contrast,
             "CENSUS_FOLLOWERS_PER_COW_CONTRAST": follower_contrast,
             "CENSUS_CONTRAST_SCORE": dairy_contrast * follower_contrast,
+            "SIGNATURE_DISTANCE": float(x["SIGNATURE_DISTANCE"]),
+            "UNDER1_SHARE_A_PCT": float(x["UNDER1_SHARE_A_PCT"]),
+            "UNDER1_SHARE_B_PCT": float(x["UNDER1_SHARE_B_PCT"]),
+            "DXD_SHARE_A_PCT": float(x["DXD_SHARE_A_PCT"]),
+            "DXD_SHARE_B_PCT": float(x["DXD_SHARE_B_PCT"]),
         })
     if not rows:
         raise AssertionError("No matched ED pair satisfies the frozen census-grounded rule")
     return pd.DataFrame(rows).sort_values(
-        ["CENSUS_CONTRAST_SCORE", "CENSUS_DAIRY_SHARE_CONTRAST_PP", "CENSUS_FOLLOWERS_PER_COW_CONTRAST", "CATTLE_GAP_PCT_PAIR_MEAN"],
-        ascending=[False, False, False, True],
+        ["SIGNATURE_DISTANCE", "CENSUS_CONTRAST_SCORE", "CATTLE_GAP_PCT_PAIR_MEAN"],
+        ascending=[False, False, True],
     ).iloc[0].to_dict()
 
 
