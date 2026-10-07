@@ -15,7 +15,8 @@ livestock_signature_long
 parent_follower_relationship_ed
     One row per ED, follower cohort and signature year: parent population,
     parent and follower head, follower-per-parent ratio and relationship class
-    (LOCAL_ED, COUNTY_RECEIVER, NATIONAL_ORPHAN, NONE).
+    (LOCAL_PARENT, COUNTY_PARENT_SUPPORT, NATIONAL_PARENT_SUPPORT, NONE).
+    Legacy internal codes are retained in COHORT_SPATIAL_ROLE_LEGACY.
 
 parent_follower_relationship_shares
     For every geography unit: follower head by parental-origin group split by
@@ -515,8 +516,8 @@ def build_relationship_by_year(master: pd.DataFrame, cfg: SpatialConfig) -> pd.D
     """National follower head by relationship class for every baseline year.
 
     Diagnostic: shows how the ED relationship classes depend on the year's
-    parent geography. COUNTY_RECEIVER is a support classification only: the
-    follower cohort is present in the ED, the corresponding parent cows are
+    parent geography. COUNTY_PARENT_SUPPORT is a support classification only:
+    the follower cohort is present in the ED, the corresponding parent cows are
     absent locally, and parent cows are present elsewhere in the county. Under
     the corrected reconstruction, published 2020 adult-cow support is retained
     after 2020, so this class can persist in reconstructed years.
