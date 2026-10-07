@@ -345,6 +345,36 @@ def build_validation_summary(validation_dir: str | Path) -> pd.DataFrame:
             ]
         )
 
+    lsu_path = root / "cattle_lsu_age_prior_summary.csv"
+    if lsu_path.exists():
+        lsu = pd.read_csv(lsu_path)
+        for _, r in lsu.iterrows():
+            rows.extend(
+                [
+                    {
+                        "EVIDENCE": "2020 ED livestock-unit age-prior plausibility",
+                        "SCOPE": str(r["AGE_PRIOR"]),
+                        "METRIC": "Median absolute residual",
+                        "VALUE": float(r["median_abs_residual"]),
+                        "UNIT": "LSU",
+                    },
+                    {
+                        "EVIDENCE": "2020 ED livestock-unit age-prior plausibility",
+                        "SCOPE": str(r["AGE_PRIOR"]),
+                        "METRIC": "Eligible EDs",
+                        "VALUE": float(r["eligible_eds"]),
+                        "UNIT": "EDs",
+                    },
+                    {
+                        "EVIDENCE": "2020 ED livestock-unit age-prior plausibility",
+                        "SCOPE": str(r["AGE_PRIOR"]),
+                        "METRIC": "Median published ED LSU",
+                        "VALUE": float(r["median_published_lsu"]),
+                        "UNIT": "LSU",
+                    },
+                ]
+            )
+
     dafm = pd.read_csv(root / "dafm_county_sheep_summary.csv")
     for _, r in dafm.iterrows():
         mean_observed_county = float(r["OBSERVED_TOTAL"]) / float(r["N"])
