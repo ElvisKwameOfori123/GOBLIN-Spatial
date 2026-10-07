@@ -75,7 +75,7 @@ def _row(year: int, ed: str, county: str, dairy: int, suckler: int, followers: i
 
 def _frame() -> pd.DataFrame:
     rows = []
-    for year, scale in ((2015, 1.0), (2025, 1.1)):
+    for year, scale in ((2015, 1.0), (2020, 1.05), (2025, 1.1)):
         rows.extend(
             [
                 _row(year, "1", "A", int(300 * scale), 50, 650),
@@ -111,6 +111,8 @@ def test_stable_ed_sensitivity_reports_all_three_bands():
     result = stable_ed_sensitivity(out)
     assert result["STABILITY_BAND_PCT"].tolist() == [2.5, 5.0, 10.0]
     assert (result["N_ED"] >= 0).all()
+    assert (result["START_YEAR"] == 2015).all()
+    assert (result["END_YEAR"] == 2020).all()
 
 
 def test_matched_pairs_uses_common_farmed_area_denominator():
@@ -119,6 +121,8 @@ def test_matched_pairs_uses_common_farmed_area_denominator():
     assert not result.empty
     assert "CATTLE_PER_FARMED_HA_A" in result.columns
     assert "SO_PER_FARMED_HA_A" in result.columns
+    assert "UNDER1_SHARE_A_PCT" in result.columns
+    assert "DXD_SHARE_A_PCT" in result.columns
 
 
 
