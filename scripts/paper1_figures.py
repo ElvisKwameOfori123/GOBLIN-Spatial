@@ -803,7 +803,7 @@ def f5_restructuring(p, geo, out, written):
     save(fig, out, "F5_observed_restructuring_2010_2020", written)
 
 
-def f6_catchments(derived, geo, out, written):
+def f6_catchments(data, derived, geo, out, written):
     """3.5 Catchments: WFD planning units and the ED variation they contain."""
     import matplotlib.pyplot as plt
 
@@ -833,18 +833,19 @@ def f6_catchments(derived, geo, out, written):
     colorbar(fig, [ax_b, ax_c], cmap, norm, f"Dairy share of adult cows, {yb} (%)", ticks=[0, 20, 40, 60, 80, 100],
              shrink=0.6)
 
-    # d: catchment value against the ED spread inside it (P10-P90, EDs weighted by adult cows)
-    xw = geo["crosswalk"][["CSOED", "WFD_CATCHMENT_ID", "ED_CATCHMENT_WEIGHT"]]
-    e = derived["e20"][["CSOED", "DAIRY_SHARE_PLOT", "ADULT_COWS"]].merge(xw, on="CSOED")
-    e = e.loc[e["DAIRY_SHARE_PLOT"].notna() & (e["ED_CATCHMENT_WEIGHT"] >= 0.5)]
-
-    def wq(g, q):
-        g = g.sort_values("DAIRY_SHARE_PLOT")
-        c = (g["ADULT_COWS"] * g["ED_CATCHMENT_WEIGHT"]).cumsum()
-        return float(np.interp(q * c.iloc[-1], c, g["DAIRY_SHARE_PLOT"]))
-
-    spread = e.groupby("WFD_CATCHMENT_ID").apply(lambda g: pd.Series({
-        "P10": wq(g, 0.1), "P90": wq(g, 0.9), "N": len(g)}), include_groups=False).reset_index()
+    # d: catchment accounting value against the structural ED spread inside it.
+    # The spread table uses all intersecting EDs with denominator x fractional
+    # ED-catchment weights; no majority-inside threshold enters the calculation.
+    spread = data["wfd_signature_spread"].loc[
+        (data["wfd_signature_spread"]["YEAR"] == yb)
+        & (data["wfd_signature_spread"]["SIGNATURE"] == "DAIRY_SHARE_ADULT_PCT")
+    ].rename(
+        columns={
+            "ED_WEIGHTED_P10": "P10",
+            "ED_WEIGHTED_P90": "P90",
+            "INTERSECTING_EDS": "N",
+        }
+    )[["WFD_CATCHMENT_ID", "P10", "P90", "N"]].copy()
     labels = geo["wfd"][["WFD_CATCHMENT_ID", "LABEL"]]
     d = w20[["WFD_CATCHMENT_ID", "DAIRY_SHARE_ADULT_PCT", "LU_PER_HA"]].merge(spread, on="WFD_CATCHMENT_ID") \
         .merge(labels, on="WFD_CATCHMENT_ID").sort_values("DAIRY_SHARE_ADULT_PCT").reset_index(drop=True)
@@ -856,7 +857,7 @@ def f6_catchments(derived, geo, out, written):
     ax_d.set(xlim=(-0.8, len(d) - 0.2), ylim=(0, 100), ylabel="Dairy share of adult cows (%)")
     width = float((d["P90"] - d["P10"]).median())
     ax_d.text(0.01, 0.97, f"median P10-P90 width inside a catchment: {width:.0f} pp\n"
-              f"(EDs with ≥50% of their area in the catchment, weighted by adult cows)", transform=ax_d.transAxes,
+              f"(all intersecting EDs; adult-cow denominator × fractional catchment weight)", transform=ax_d.transAxes,
               va="top", fontsize=6.4)
     ax_d.legend(loc="lower right", ncol=2)
     title(ax_d, "d", "A catchment value hides the EDs inside it (sorted by catchment dairy share)")
@@ -911,10 +912,11 @@ def tables(data, derived, restructuring, catchment_spread) -> dict:
     t5 = w20[["WFD_CATCHMENT_ID", "WFD_CATCHMENT", "AREA_FARMED", "TOTAL_CATTLE", "TOTAL_SHEEP", "LU_PER_HA",
               "DAIRY_SHARE_ADULT_PCT", "FOLLOWERS_PER_ADULT_COW", "DXB_SHARE_FOLLOWERS_PCT", "BXB_SHARE_FOLLOWERS_PCT",
               "SO_PER_HA"]].merge(catchment_spread[["WFD_CATCHMENT_ID", "P10", "P90", "N"]], on="WFD_CATCHMENT_ID", how="left") \
-        .rename(columns={"P10": "ED_DAIRY_SHARE_P10", "P90": "ED_DAIRY_SHARE_P90", "N": "EDS_MAJORITY_INSIDE"}) \
+        .rename(columns={"P10": "ED_DAIRY_SHARE_P10", "P90": "ED_DAIRY_SHARE_P90", "N": "INTERSECTING_EDS"}) \
         .sort_values("WFD_CATCHMENT_ID")
 
     ig = data["information_geography_2020"].copy()
+    rv = data["s00_robustness_variants"].set_index("METRIC")
     rb = rv.loc[rv.index.isin(ig["METRIC"])][["B_JOINT", "C_AIM_FIRST"]]
     ig = ig.merge(rb, left_on="METRIC", right_index=True, how="left")
     ig["RANGE_B_C"] = ig[["B_JOINT", "C_AIM_FIRST"]].min(axis=1).round(3).astype(str) + "-" + \
@@ -1109,7 +1111,7 @@ def main() -> int:
         f4_signatures(derived, geo, out, written)
     if "F5" in want:
         f5_restructuring(restructuring, geo, out, written)
-    spread = f6_catchments(derived, geo, out, written) if "F6" in want else None
+    spread = f6_catchments(data, derived, geo, out, written) if "F6" in want else None
     if spread is not None:
         tabs = tables(data, derived, restructuring, spread)
         write_tables(tabs, out, written)
