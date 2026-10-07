@@ -44,8 +44,8 @@ jobs:
           test -f reporting/report_data/historical/county_year.parquet
           test -f reporting/report_data/historical/wfd_catchment_year.parquet
           test -f reporting/report_data/historical/livestock_signature.parquet
+          test -f reporting/report_data/historical/wfd_signature_spread.parquet
           test -f reporting/report_data/historical/parent_follower_relationship_ed.parquet
-          test -f reporting/report_data/historical/utility_displacement.parquet
           python - <<'PY'
           import duckdb
           from pathlib import Path
@@ -58,7 +58,8 @@ jobs:
           assert con.sql("select count(*) from baseline_coherence_audit where not PASS").fetchone()[0] == 0
           assert con.sql("select count(*) from baseline_coherence_audit").fetchone()[0] == 47
           assert con.sql("select count(*) from livestock_signature where GEOGRAPHY_TYPE = 'ED'").fetchone()[0] == 2 * 2857
-          assert con.sql("select count(distinct WFD_CATCHMENT_ID) from utility_comparison_wfd").fetchone()[0] == 46
+          assert con.sql("select count(distinct WFD_CATCHMENT_ID) from wfd_signature_spread").fetchone()[0] == 46
+          assert con.sql("select count(distinct SIGNATURE) from wfd_signature_spread").fetchone()[0] >= 11
           con.close()
           PY
 
