@@ -103,9 +103,11 @@ The long signature table retains each ratio together with its numerator and deno
 
 Support classes are:
 
-- `LOCAL_ED`: corresponding adult parents are present in the ED;
-- `COUNTY_RECEIVER`: followers occur locally but the corresponding adult-parent population is supported at county scale;
-- `NATIONAL_ORPHAN`: final national fallback.
+- `LOCAL_PARENT`: corresponding adult parents are present in the ED;
+- `COUNTY_PARENT_SUPPORT`: corresponding adult parents are absent locally but present elsewhere in the county;
+- `NATIONAL_PARENT_SUPPORT`: final support level where the county has no corresponding adult parents.
+
+The former internal codes are retained in `COHORT_SPATIAL_ROLE_LEGACY` for backward compatibility.
 
 These are biological relationship-support classes, not movement, trade or origin observations.
 
