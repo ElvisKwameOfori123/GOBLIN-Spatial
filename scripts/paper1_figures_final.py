@@ -5,8 +5,8 @@ Main text
 ---------
 3.1 Table 2: model integrity and technical validation
 3.2 Figure 2 + Figure 4: national and observed local restructuring
-3.3 Figure 3 + Figure 5: ED signatures and Blackwater catchment structure
-3.4 Figure 6: follower-head transition incidence
+3.3 Figure 3 + Figure 5: ED livestock-system signatures and agricultural context
+3.4 Figure 6: catchment accounting and within-catchment ED heterogeneity
 
 Run after:
     python scripts/build_historical_release.py
@@ -227,6 +227,40 @@ def f4_restructuring(restructuring, geo, pair, out, written):
     base.save(fig, out, "F4_local_restructuring_2010_2020", written)
 
 
+def f5_agricultural_context(derived, geo, out, written):
+    """ED-scale livestock density and agricultural land composition."""
+    import matplotlib.colors as mcolors
+    import matplotlib.pyplot as plt
+
+    eds = geo["ed"].merge(
+        derived["e20"],
+        on=["CSOED", "County"],
+        how="left",
+        validate="one_to_one",
+        suffixes=("", "_y"),
+    )
+    county = (geo["county"], base.C["county"], 0.25)
+    panels = [
+        ("CATTLE_PER_FARMED_HA", "Cattle per farmed ha", base.C["total"], "a"),
+        ("SHEEP_PER_FARMED_HA", "Sheep per farmed ha", base.C["sheep"], "b"),
+        ("GRASSLAND_SHARE_FARMED_PCT", "Grassland share of farmed area (%)", base.C["follower"], "c"),
+        ("CEREAL_SHARE_FARMED_PCT", "Cereal share of farmed area (%)", base.C["dairy"], "d"),
+    ]
+    fig, axes = plt.subplots(2, 2, figsize=(base.FIG_W, 6.4), constrained_layout=True)
+    for ax, (column, label, colour, letter) in zip(axes.ravel(), panels):
+        values = pd.to_numeric(eds[column], errors="coerce")
+        if column.endswith("_PCT"):
+            vmax = 100.0 if column == "GRASSLAND_SHARE_FARMED_PCT" else max(5.0, float(values.quantile(0.98)))
+        else:
+            vmax = max(0.1, float(values.quantile(0.98)))
+        cmap = base.classed_cmap(colour, 8)
+        norm = mcolors.Normalize(vmin=0.0, vmax=vmax)
+        base.choropleth(ax, eds, column, cmap=cmap, norm=norm, outlines=[county])
+        base.colorbar(fig, ax, cmap, norm, label, extend="max", shrink=0.72)
+        base.title(ax, letter, label)
+    base.save(fig, out, "F5_ed_agricultural_context", written)
+
+
 def _fill_holes(geom):
     from shapely.geometry import MultiPolygon, Polygon
     if geom.geom_type == "Polygon": return Polygon(geom.exterior)
@@ -234,7 +268,7 @@ def _fill_holes(geom):
     return geom
 
 
-def f5_blackwater(derived, geo, out, written):
+def f6_blackwater(data, derived, geo, out, written):
     import geopandas as gpd
     import matplotlib.pyplot as plt
 
@@ -242,10 +276,16 @@ def f5_blackwater(derived, geo, out, written):
     if len(match)!=1: raise AssertionError(f"Expected one Blackwater catchment, found {len(match)}")
     row=match.iloc[0]; cid=str(row["WFD_CATCHMENT_ID"]); name=row["WFD_CATCHMENT"]; catch_value=float(row["FOLLOWERS_PER_ADULT_COW"])
     xw=geo["crosswalk"].loc[geo["crosswalk"]["WFD_CATCHMENT_ID"].astype(str)==cid,["CSOED","ED_CATCHMENT_WEIGHT"]].copy()
-    e20=derived["e20"][["CSOED","County","FOLLOWERS_PER_COW_PLOT","ADULT_COWS"]].copy(); z=geo["ed"].merge(e20,on=["CSOED","County"],how="left",validate="one_to_one").merge(xw,on="CSOED",how="inner"); z=z.loc[z["ED_CATCHMENT_WEIGHT"]>=.5].copy()
+    e20=derived["e20"][["CSOED","County","FOLLOWERS_PER_COW_PLOT","ADULT_COWS"]].copy(); z=geo["ed"].merge(e20,on=["CSOED","County"],how="left",validate="one_to_one").merge(xw,on="CSOED",how="inner")
     poly=geo["wfd_state"].loc[geo["wfd_state"]["WFD_CATCHMENT_ID"].astype(str)==cid].copy(); z=gpd.clip(z,poly); z["WEIGHT"]=z["ADULT_COWS"]*z["ED_CATCHMENT_WEIGHT"]
-    p10=_weighted_quantile(z["FOLLOWERS_PER_COW_PLOT"],z["WEIGHT"],.10); p50=_weighted_quantile(z["FOLLOWERS_PER_COW_PLOT"],z["WEIGHT"],.50); p90=_weighted_quantile(z["FOLLOWERS_PER_COW_PLOT"],z["WEIGHT"],.90)
-    stats={"WFD_CATCHMENT":name,"N_ED":int(len(z)),"P10":p10,"P50":p50,"P90":p90,"CATCHMENT_COEFFICIENT":catch_value,"METRIC":"followers per adult cow","WEIGHTING":"adult cows x ED catchment weight"}
+    spread=data["wfd_signature_spread"].loc[
+        (data["wfd_signature_spread"]["YEAR"]==base.CONFIG["base_year"])
+        & (data["wfd_signature_spread"]["WFD_CATCHMENT_ID"].astype(str)==cid)
+        & (data["wfd_signature_spread"]["SIGNATURE"]=="FOLLOWER_TO_ADULT_RATIO")
+    ]
+    if len(spread)!=1: raise AssertionError(f"Expected one catchment-spread row for {name}")
+    sr=spread.iloc[0]; p10=float(sr["ED_WEIGHTED_P10"]); p50=float(sr["ED_WEIGHTED_P50"]); p90=float(sr["ED_WEIGHTED_P90"])
+    stats={"WFD_CATCHMENT":name,"N_ED":int(sr["INTERSECTING_EDS"]),"P10":p10,"P50":p50,"P90":p90,"CATCHMENT_COEFFICIENT":catch_value,"METRIC":"followers per adult cow","WEIGHTING":"adult cows x fractional ED-catchment weight"}
     cmap,norm=_follower_cmap_norm(); fig=plt.figure(figsize=(base.FIG_W,4.2),constrained_layout=True); gs=fig.add_gridspec(1,4,width_ratios=[.65,1.15,1.5,1.0]); ax_loc,ax_a,ax_b,ax_c=[fig.add_subplot(gs[0,i]) for i in range(4)]
     geo["ireland"].plot(ax=ax_loc,color="#eeeeee",edgecolor="#888888",linewidth=.35); poly.plot(ax=ax_loc,color=base.C["follower"],edgecolor="black",linewidth=.45); base.map_axes(ax_loc); base.title(ax_loc,"","Ireland locator")
     display_poly=poly.copy(); display_poly["geometry"]=display_poly.geometry.apply(_fill_holes); display_poly["COEF"]=catch_value; base.choropleth(ax_a,display_poly,"COEF",cmap=cmap,norm=norm,lw=.4); base.title(ax_a,"a",f"Catchment as a single unit\n{catch_value:.2f} followers/adult cow")
@@ -253,31 +293,7 @@ def f5_blackwater(derived, geo, out, written):
     v=pd.to_numeric(z["FOLLOWERS_PER_COW_PLOT"],errors="coerce"); weights=pd.to_numeric(z["WEIGHT"],errors="coerce"); ok=v.notna()&weights.notna()&(weights>0); ax_c.hist(v[ok],bins=18,weights=weights[ok],color=base.C["follower"],edgecolor="white",lw=.4)
     for xx,ls in ((p10,":"),(p50,"-"),(p90,":")): ax_c.axvline(xx,color="black",lw=.8,ls=ls)
     ax_c.axvline(catch_value,color=base.C["total"],lw=1.2,ls="--",label="catchment value"); ax_c.set(xlabel="Followers per adult cow",ylabel="Adult-cow weighted ED mass"); ax_c.legend(); base.title(ax_c,"c",f"Weighted P10-P90: {p10:.2f}-{p90:.2f}")
-    base.save(fig,out,"F5_blackwater_ed_catchment_signatures",written); return stats
-
-
-def f6_incidence(data, geo, out, written):
-    import matplotlib.pyplot as plt
-    yr=base.CONFIG["perturbation_year"]; arm="DAIRY_PARENT"; ce=data["utility_comparison_ed"].loc[lambda d:(d["YEAR"]==yr)&(d["ARM"]==arm),["CSOED","DIFFERENCE_FOLLOWERS"]].copy()
-    e=geo["ed"].merge(ce,on="CSOED",how="left",validate="one_to_one"); _assert_ed_base(e,"F6 ED incidence")
-    if e["DIFFERENCE_FOLLOWERS"].isna().any(): raise AssertionError("F6: one or more EDs failed the utility join")
-    cw=data["utility_comparison_wfd"].loc[lambda d:(d["YEAR"]==yr)&(d["ARM"]==arm)].copy(); wg=geo["wfd_state"].merge(cw[["WFD_CATCHMENT_ID","WFD_CATCHMENT","DIFFERENCE_FOLLOWERS"]],on=["WFD_CATCHMENT_ID","WFD_CATCHMENT"],how="left",validate="one_to_one")
-    fig=plt.figure(figsize=(base.FIG_W,3.9),constrained_layout=True); gs=fig.add_gridspec(1,3,width_ratios=[1,1,.9]); ax_a,ax_b,ax_c=[fig.add_subplot(gs[0,i]) for i in range(3)]
-    norm=base.diverging_norm(e["DIFFERENCE_FOLLOWERS"]); base.choropleth(ax_a,e,"DIFFERENCE_FOLLOWERS",cmap=base.DIVERGING,norm=norm,outlines=[(geo["county"],base.C["county"],.2)]); base.colorbar(fig,ax_a,base.DIVERGING,norm,"signature minus headcount (followers/ED)",extend="both",shrink=.75); base.title(ax_a,"a","30% fewer dairy cows: ED incidence")
-    normw=base.diverging_norm(wg["DIFFERENCE_FOLLOWERS"],q=1.0); base.choropleth(ax_b,wg,"DIFFERENCE_FOLLOWERS",cmap=base.DIVERGING,norm=normw,lw=.35); base.colorbar(fig,ax_b,base.DIVERGING,normw,"signature minus headcount (followers/catchment)",shrink=.75); base.title(ax_b,"b","The difference persists at catchment scale")
-    d=data["utility_displacement"].loc[lambda d:(d["YEAR"]==yr)&(d["QUANTITY"]=="FOLLOWERS")].set_index("ARM"); r=d.loc[arm]; nat=abs(r["NATIONAL_CHANGE"]); ratio_part=100*r["ED_RATIO_COMPONENT"]/nat; parent_absent=100*r["ED_RECEIVER_COMPONENT"]/nat; county=100*r["COUNTY_TOTAL_DISPLACEMENT"]/nat; wfd=100*r["WFD_TOTAL_DISPLACEMENT"]/nat
-    ax_c.bar(0,ratio_part,color=base.C["dairy"],width=.58,label="ratio component"); ax_c.bar(0,parent_absent,bottom=ratio_part,color=base.C["dairy"],alpha=.45,hatch="////",edgecolor="white",width=.58,label="parent-absent component"); ax_c.bar([1,2],[county,wfd],color=base.C["dairy"],width=.58)
-    for xx,vv in zip([0,1,2],[ratio_part+parent_absent,county,wfd]): ax_c.text(xx,vv+.35,f"{vv:.1f}%",ha="center",fontsize=6.4)
-    ax_c.set_xticks([0,1,2],["ED","County","WFD\ncatchment"]); ax_c.set_ylabel("Misattributed followers\n(% of national change)"); ax_c.legend(loc="upper right",fontsize=6); base.title(ax_c,"c","Spatial mismatch falls with aggregation")
-    base.save(fig,out,"F6_follower_spatial_transition_incidence",written)
-
-
-def catchment_spread(derived, geo):
-    xw=geo["crosswalk"][["CSOED","WFD_CATCHMENT_ID","ED_CATCHMENT_WEIGHT"]].copy(); e=derived["e20"][["CSOED","FOLLOWERS_PER_COW_PLOT","ADULT_COWS"]].merge(xw,on="CSOED",validate="one_to_many"); e=e.loc[e["FOLLOWERS_PER_COW_PLOT"].notna()&(e["ED_CATCHMENT_WEIGHT"]>=.5)].copy(); e["WEIGHT"]=e["ADULT_COWS"]*e["ED_CATCHMENT_WEIGHT"]
-    rows=[]
-    for cid,g in e.groupby("WFD_CATCHMENT_ID"):
-        rows.append({"WFD_CATCHMENT_ID":cid,"P10":_weighted_quantile(g["FOLLOWERS_PER_COW_PLOT"],g["WEIGHT"],.1),"P90":_weighted_quantile(g["FOLLOWERS_PER_COW_PLOT"],g["WEIGHT"],.9),"N":len(g)})
-    return pd.DataFrame(rows)
+    base.save(fig,out,"F6_blackwater_ed_catchment_signatures",written); return stats
 
 
 def build_table2(root: Path, data: dict) -> pd.DataFrame:
@@ -312,25 +328,54 @@ def build_table3(data: dict, derived: dict) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def build_table5(derived: dict, spread: pd.DataFrame) -> pd.DataFrame:
-    w20=derived["wfd"].loc[derived["wfd"]["YEAR"]==base.CONFIG["base_year"]]
-    return w20[["WFD_CATCHMENT_ID","WFD_CATCHMENT","AREA_FARMED","TOTAL_CATTLE","TOTAL_SHEEP","FOLLOWERS_PER_ADULT_COW"]].merge(spread,on="WFD_CATCHMENT_ID",how="left",validate="one_to_one").rename(columns={"P10":"ED_FOLLOWERS_PER_COW_P10","P90":"ED_FOLLOWERS_PER_COW_P90","N":"EDS_MAJORITY_INSIDE"}).sort_values("WFD_CATCHMENT_ID")
+def build_table5(data: dict) -> pd.DataFrame:
+    spread = data["wfd_signature_spread"].loc[
+        data["wfd_signature_spread"]["YEAR"] == base.CONFIG["base_year"]
+    ].copy()
+    selected = [
+        "CATTLE_PER_FARMED_HA",
+        "SHEEP_PER_FARMED_HA",
+        "GRASSLAND_SHARE_FARMED_PCT",
+        "CEREAL_SHARE_FARMED_PCT",
+        "DAIRY_SHARE_ADULT_PCT",
+        "FOLLOWER_TO_ADULT_RATIO",
+    ]
+    spread = spread.loc[spread["SIGNATURE"].isin(selected)]
+    values = spread.pivot(
+        index=["WFD_CATCHMENT_ID", "WFD_CATCHMENT"],
+        columns="SIGNATURE",
+        values="CATCHMENT_VALUE",
+    )
+    follower = spread.loc[
+        spread["SIGNATURE"] == "FOLLOWER_TO_ADULT_RATIO",
+        [
+            "WFD_CATCHMENT_ID",
+            "WFD_CATCHMENT",
+            "ED_WEIGHTED_P10",
+            "ED_WEIGHTED_P50",
+            "ED_WEIGHTED_P90",
+            "ED_WEIGHTED_P90_P10",
+            "INTERSECTING_EDS",
+        ],
+    ].set_index(["WFD_CATCHMENT_ID", "WFD_CATCHMENT"])
+    out = values.join(follower).reset_index()
+    return out.sort_values("WFD_CATCHMENT_ID").reset_index(drop=True)
 
 
 def main() -> int:
     parser=argparse.ArgumentParser(description=__doc__.split("\n")[0]); parser.add_argument("--root",default="."); args=parser.parse_args(); root=Path(args.root).resolve(); sys.path.insert(0,str(root/"src")); out=root/base.CONFIG["output_dir"]
     for sub in ("figures","tables","maps"): (out/sub).mkdir(parents=True,exist_ok=True)
     base.style(); data=base.load(root); geo=base.geometry(root,data["ed_year"]); derived=base.derive(data); model_keys=set(data["ed_year"]["CSOED"].map(_canonical)); p=base.observed_restructuring(root,data,model_keys); pair=select_case_pair(data,p,derived); written=[]; print(f"Case pair: {pair['ED_A']} / {pair['ED_B']} ({pair['County']})")
-    f2_national_restructuring(data,out,written); f4_restructuring(p,geo,pair,out,written); f3_signatures(derived,geo,pair,out,written); bw=f5_blackwater(derived,geo,out,written); f6_incidence(data,geo,out,written)
-    spread=catchment_spread(derived,geo); tabs=base.tables(data,derived,p,spread); tabs["T2_validation"]=build_table2(root,data); tabs["T3_national_change"]=build_table3(data,derived); tabs["T5_catchment_signatures_2020"]=build_table5(derived,spread)
+    f2_national_restructuring(data,out,written); f4_restructuring(p,geo,pair,out,written); f3_signatures(derived,geo,pair,out,written); f5_agricultural_context(derived,geo,out,written); bw=f6_blackwater(data,derived,geo,out,written)
+    follower_spread=data["wfd_signature_spread"].loc[(data["wfd_signature_spread"]["YEAR"]==base.CONFIG["base_year"]) & (data["wfd_signature_spread"]["SIGNATURE"]=="DAIRY_SHARE_ADULT_PCT")].rename(columns={"ED_WEIGHTED_P10":"P10","ED_WEIGHTED_P90":"P90","INTERSECTING_EDS":"N"})[["WFD_CATCHMENT_ID","P10","P90","N"]]
+    tabs=base.tables(data,derived,p,follower_spread); tabs["T2_validation"]=build_table2(root,data); tabs["T3_national_change"]=build_table3(data,derived); tabs["T5_catchment_signatures_2020"]=build_table5(data)
     if "T4_system_typology_2020" in tabs: tabs["S9_system_typology_2020"]=tabs.pop("T4_system_typology_2020")
-    if "T6_illustrative_displacement" in tabs: tabs["T6_illustrative_displacement"]=tabs["T6_illustrative_displacement"].rename(columns={"RECEIVER_SHARE_OF_ED_PCT":"PARENT_ABSENT_SHARE_OF_ED_PCT","PARENTLESS_EDS_WITH_FOLLOWERS":"PARENT_ABSENT_EDS_WITH_FOLLOWERS"})
     tabs["MAIN_case_pair"]=pd.DataFrame([pair]); tabs["MAIN_blackwater_spread"]=pd.DataFrame([bw]); base.write_tables(tabs,out,written); base.write_layers(derived,geo,out,written)
     tp=base.temporal_points(root,model_keys,geo["crosswalk"]); base.f2_validation(data,tp,out,written)
     for ext in ("png","pdf"):
         src=out/"figures"/f"F2_validation.{ext}"; dst=out/"figures"/f"S1_validation_diagnostics.{ext}"
         if src.exists(): src.replace(dst); written[:]=[dst if x==src else x for x in written]
-    manifest={"package":"GOBLIN_SPATIAL_PAPER1_FINAL","created_utc":datetime.now(timezone.utc).isoformat(timespec="seconds"),"repository":base.git_info(root),"coherence_audit":data["audit_pass"],"case_pair":pair,"case_pair_rule":"same county + similar herd + published cow cells in both censuses + material shift; ranked only on census-grounded dairy-share and followers-per-cow contrast","case_catchment":CASE_CATCHMENT,"blackwater_spread":bw,"architecture":["3.1 Table 2 validation","3.2 F2+F4 history","3.3 F3+F5 signatures","3.4 F6 incidence"],"files":{str(x.relative_to(out)):base.sha(x) for x in written if x.exists()}}
+    manifest={"package":"GOBLIN_SPATIAL_PAPER1_FINAL","created_utc":datetime.now(timezone.utc).isoformat(timespec="seconds"),"repository":base.git_info(root),"coherence_audit":data["audit_pass"],"case_pair":pair,"case_pair_rule":"same county + similar herd + published cow cells in both censuses + material shift; ranked only on census-grounded dairy-share and followers-per-cow contrast","case_catchment":CASE_CATCHMENT,"blackwater_spread":bw,"architecture":["3.1 Table 2 validation","3.2 F2+F4 history","3.3 F3+F5 ED structure","3.4 F6 catchment structure"],"files":{str(x.relative_to(out)):base.sha(x) for x in written if x.exists()}}
     (out/"paper1_manifest_final.json").write_text(json.dumps(manifest,indent=2,default=str)+"\n",encoding="utf-8"); print(f"Done: {out}"); return 0
 
 
