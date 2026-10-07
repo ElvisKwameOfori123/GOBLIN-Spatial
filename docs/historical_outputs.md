@@ -48,7 +48,7 @@ CSV and Parquet are the canonical files; the two databases are query copies of t
 
 ## Livestock signatures (ED and WFD catchment first)
 
-The two primary geographies are the **ED**, for spatial pattern, and the **WFD catchment**, for water-framework work. County, Colm catchment and national rows are provided for context.
+The two primary geographies are the **ED**, for fine-scale spatial pattern, and the **WFD catchment**, as an environmental reporting geography. County, Colm catchment and national rows are provided for context.
 
 | Table | What it holds |
 |---|---|
