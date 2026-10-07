@@ -34,9 +34,8 @@ reporting/report_data/historical/
 ├── baseline_coherence_audit.parquet
 ├── validation_detail_*.parquet
 ├── livestock_signature.parquet (+ _long)
+├── wfd_signature_spread.parquet
 ├── parent_follower_relationship_ed.parquet (+ _shares, _by_year)
-├── utility_comparison_ed.parquet (+ _wfd), utility_displacement.parquet
-├── utility_perturbation_ed.parquet (+ _aggregate, _national)
 ├── _columns.parquet
 ├── _readme.parquet
 ├── historical_results.duckdb
@@ -77,6 +76,11 @@ aggregated; ED percentages are never averaged to create a higher-level
 signature. Average holding size is recomputed from aggregate farmed area and
 holdings, while average holder age is holdings-weighted. Median holder age is
 retained only at ED level because ED medians cannot be validly aggregated.
+
+For WFD catchments, `wfd_signature_spread` provides the complementary
+within-catchment view: denominator-weighted P10, P50 and P90 values of
+intersecting ED signatures using the same fractional crosswalk. This describes
+local heterogeneity without replacing the catchment accounting value.
 
 ## Main paper checks
 
