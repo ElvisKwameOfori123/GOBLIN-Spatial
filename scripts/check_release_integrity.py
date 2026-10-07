@@ -105,10 +105,30 @@ def main() -> int:
     for number, col in enumerate(additive, start=29):
         check(f"{number:02d} national {col} aggregation", _close(nat_ed[col], nat_ref[col]))
 
-    # 33-36: the 46 WFD catchments close to national totals.
-    wfd_sum = wfd.groupby("YEAR", as_index=False)[additive].sum().sort_values("YEAR").reset_index(drop=True)
+    # 33-36: independently re-aggregate EDs through the frozen WFD crosswalk
+    # and reproduce the released 46-catchment table.
+    xw_for_join = xw[["CSOED", "WFD_CATCHMENT_ID", "ED_CATCHMENT_WEIGHT"]].copy()
+    weighted = ed[["YEAR", "CSOED", *additive]].merge(
+        xw_for_join, on="CSOED", how="inner", validate="many_to_many"
+    )
+    for col in additive:
+        weighted[col] = pd.to_numeric(weighted[col], errors="raise").astype(float) * pd.to_numeric(
+            weighted["ED_CATCHMENT_WEIGHT"], errors="raise"
+        ).astype(float)
+    reagg = (
+        weighted.groupby(["YEAR", "WFD_CATCHMENT_ID"], as_index=False)[additive]
+        .sum()
+        .sort_values(["YEAR", "WFD_CATCHMENT_ID"])
+        .reset_index(drop=True)
+    )
+    wfd_ref = (
+        wfd[["YEAR", "WFD_CATCHMENT_ID", *additive]]
+        .assign(WFD_CATCHMENT_ID=lambda d: d["WFD_CATCHMENT_ID"].astype(str))
+        .sort_values(["YEAR", "WFD_CATCHMENT_ID"])
+        .reset_index(drop=True)
+    )
     for number, col in enumerate(additive, start=33):
-        check(f"{number:02d} WFD {col} closes nationally", _close(wfd_sum[col], nat_ref[col], atol=1e-4))
+        check(f"{number:02d} WFD {col} crosswalk reaggregation", _close(reagg[col], wfd_ref[col], atol=1e-4))
 
     # 37-39: crosswalk contract.
     weight_sum = xw.groupby("CSOED")["ED_CATCHMENT_WEIGHT"].sum()
