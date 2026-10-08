@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Figure 6. What catchment aggregates show and what they hide.
+"""Supplementary figure. What catchment aggregates show and what they hide (46 catchments).
 
 a  The 46 EPA WFD catchments classed by the catchment aggregate of followers per adult cow, 2025.
 b  For each catchment, the aggregate (dot) against the ED-weighted P10-P90 range of the same
@@ -199,7 +199,7 @@ def main():
     fig.text(0.01, 0.005, "EDs clipped to the EPA WFD catchment boundaries (WFD_Catchments_Frozen.gpkg); "
              "ED values are whole-ED 2025 signatures. P10–P90 weighted by followers.",
              fontsize=5.6, color="#555555", va="bottom")
-    S.save(fig, "Fig6_catchments")
+    S.save(fig, "FigS_catchment_ranges")
 
 
 if __name__ == "__main__":
