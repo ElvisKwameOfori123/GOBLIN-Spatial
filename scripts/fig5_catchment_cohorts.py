@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Figure 6. One catchment at ED resolution: what the 21-cohort reconstruction adds.
+"""Figure 5 (Section 3.5). One catchment at ED resolution: what the 21-cohort reconstruction adds.
 
 Default catchment: 25C Lower Shannon (EPA WFD), chosen because all six cattle-system types
 of Figure 3 occur in it with at least six EDs each, and the dairy share of adult cows spans
@@ -20,7 +20,7 @@ EDs mostly outside are drawn in grey. ED values are whole-ED 2025 GOBLIN-Spatial
 Inputs: data/inputs/spatial/WFD_Catchments_Frozen.gpkg, ED_Boundaries_Frozen.gpkg (via
         paper1_style), reporting/report_data/historical/livestock_signature.csv and
         wfd_catchment_year.csv.
-Writes: reporting/paper1/figures/Fig6_catchment_<ID>.{png,pdf}
+Writes: reporting/paper1/figures/Fig5_catchment_<ID>.{png,pdf}
         reporting/paper1/tables/S_catchment_<ID>_ed_cohorts_2025.csv
 Run from the repository root:
     python scripts/fig6_catchment_cohorts.py              # 25C Lower Shannon
@@ -217,7 +217,7 @@ def panel_main(ax, side, land, w, target, name, cid, inside, edge, picks, agg, b
     hs.append(Patch(facecolor=OUTSIDE, edgecolor="#8C8C8C", lw=0.3,
                     label=f"ED mostly outside ({len(edge)})"))
     side.legend(handles=hs, loc="upper left", bbox_to_anchor=(0.0, 0.66), frameon=False,
-                fontsize=5.8, handlelength=1.1, title="Type as in Fig. 3 (number of EDs)",
+                fontsize=5.8, handlelength=1.1, title="Type as in Fig. 3a (number of EDs)",
                 title_fontsize=6.0, alignment="left")
     at = agg_type(agg)
     side.text(0.0, 0.0,
@@ -373,7 +373,7 @@ def main():
              "(WFD_Catchments_Frozen.gpkg); whole-ED 2025 values.\nPyramid: female left (solid), "
              "male right (light).",
              fontsize=5.4, color="#555555", va="bottom")
-    S.save(fig, f"Fig6_catchment_{cid}")
+    S.save(fig, f"Fig5_catchment_{cid}")
 
 
 if __name__ == "__main__":

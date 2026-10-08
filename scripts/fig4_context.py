@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Figure 5. Land and farm-structure context of ED cattle systems.
+"""Figure 4 (Section 3.4). Land and farm-structure context of ED cattle systems.
 
 a-f  Six classed ED maps: cattle and sheep per farmed hectare, cereal share of farmed area and
      Standard Output per farmed hectare (2025), average holding size and average holder age
@@ -10,7 +10,7 @@ g    Spearman correlation of three cattle-system signatures (dairy share of adul
      county, then correlated), which removes the between-county gradient.
 
 Eligible EDs: >= 10 adult cows, >= 20 followers and >= 50 farmed ha.
-Writes: reporting/paper1/figures/Fig5_context.{png,pdf}
+Writes: reporting/paper1/figures/Fig4_context.{png,pdf}
         reporting/paper1/tables/S_context_correlations_2025.csv
 """
 from __future__ import annotations
@@ -164,7 +164,7 @@ def main():
              "association with dairy share is partly by construction.\nHatched: farmed area "
              "< 50 ha. Within-county ρ correlates percentile ranks taken inside each county.",
              fontsize=5.6, color="#555555", va="bottom")
-    S.save(fig, "Fig5_context")
+    S.save(fig, "Fig4_context")
 
 
 if __name__ == "__main__":

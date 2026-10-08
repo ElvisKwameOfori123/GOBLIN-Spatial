@@ -1,5 +1,7 @@
 #!/usr/bin/env python
-"""Figure 4. Stable cattle numbers do not imply a stable cattle system (observed, 2010-2020).
+"""Supplementary figure. Stable cattle numbers do not imply a stable cattle system (observed, 2010-2020).
+
+Panel a is reused as Figure 3d (fig3_cattle_types.py); panel b (the map) is supplementary.
 
 Uses only census cells published in both the 2010 and 2020 Censuses of Agriculture, for EDs
 with >= 10 adult cows in both years (S5_observed_restructuring_ed.csv). No reconstructed
@@ -12,7 +14,7 @@ b  Where those stable-herd EDs are: shift toward dairy (>= +10 pp), shift toward
    (<= -10 pp) or limited change; all other EDs form the grey background.
    Cattle change above 100% is drawn at 100%. Methodological detail belongs in the caption.
 
-Writes: reporting/paper1/figures/Fig4_observed_restructuring.{png,pdf}
+Writes: reporting/paper1/figures/FigS_stable_herd_restructuring.{png,pdf}
         reporting/paper1/tables/S_stable_herd_eds_2010_2020.csv
 """
 from __future__ import annotations
@@ -52,7 +54,7 @@ def load() -> pd.DataFrame:
     return p
 
 
-def panel_a(ax, p):
+def panel_a(ax, p, letter: str = "a", title: str = "Stable herds, shifting systems"):
     rho_all = spearman(p.CATTLE_CHANGE_PCT, p.DS_CHANGE_PP)
     q = p[~p.ZERO_DAIRY_BOTH]
     rho_dairy = spearman(q.CATTLE_CHANGE_PCT, q.DS_CHANGE_PP)
@@ -66,7 +68,7 @@ def panel_a(ax, p):
         ax.scatter(x[m], p.DS_CHANGE_PP[m], s=9, color=c, lw=0, zorder=3)
     st = p[p.STABLE]
     n_sh = int(p.CLASS.isin(["to_dairy", "to_suckler"]).sum())
-    ax.text(9, 52, f"{n_sh} of {len(st)} stable-herd EDs changed ≥ {SHIFT_PP:.0f} pp", fontsize=6.4,
+    ax.text(9, 52, f"{n_sh} of {len(st)} stable-herd EDs shifted ≥ {SHIFT_PP:.0f} pp", fontsize=6.4,
             fontweight="bold", color=S.TEXT, va="top")
     ax.text(9, 46, f"{int((p.CLASS == 'to_dairy').sum())} toward dairy", fontsize=6.4, color=TO_DAIRY,
             fontweight="bold", va="top")
@@ -79,7 +81,7 @@ def panel_a(ax, p):
     ax.set_ylim(-57, 56)
     ax.set_xlabel("Change in total cattle, 2010–2020 (%)")
     ax.set_ylabel("Change in dairy share of adult cows (pp)")
-    S.title(ax, "a", "Stable herds, shifting systems")
+    S.title(ax, letter, title)
     return rho_all, rho_dairy
 
 
@@ -115,7 +117,7 @@ def main():
     ra, rd = panel_a(fig.add_subplot(gs[0, 0]), p)
     g = panel_b(fig.add_subplot(gs[0, 1]), p)
     fig.subplots_adjust(left=0.075, right=0.99, top=0.92, bottom=0.12)
-    S.save(fig, "Fig4_observed_restructuring")
+    S.save(fig, "FigS_stable_herd_restructuring")
     out = p.loc[p.STABLE, ["KEY", "County", "ED_NAME", "CATTLE_CHANGE_PCT", "DS10", "DS20",
                            "DS_CHANGE_PP", "CLASS"]].sort_values("DS_CHANGE_PP", ascending=False)
     out.round(2).to_csv(S.TAB / "S_stable_herd_eds_2010_2020.csv", index=False)

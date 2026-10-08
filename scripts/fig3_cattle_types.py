@@ -1,26 +1,31 @@
 #!/usr/bin/env python
-"""Figure 3 and Table 4. Cattle-system types: where they are and what they contain (2025).
+"""Figure 3 (Section 3.3). Cattle-system differentiation and observed restructuring.
 
 Typology (fixed thresholds; eligible EDs have >= 10 adult cows and >= 20 followers):
     breeding orientation  Suckler: dairy share of adult cows < 40%; Mixed: 40-60%; Dairy: > 60%
     follower intensity    lower: <= 1.9 followers per adult cow; higher: > 1.9
 
-a  WHERE: the six types across EDs, with a compact key (rows: orientation; light/dark:
-   follower intensity).
-b  BROAD COMPOSITION: whole-herd composition of each type as 100% bars (dairy cows, suckler
-   cows, bulls, DxD, DxB and BxB followers).
-c  FULL BIOLOGY: the complete 21-cohort profile of each type in a 3 x 2 grid (rows: suckler,
-   mixed, dairy; columns: lower, higher follower intensity). Shared x-axis (% of all cattle in
-   the type) capped at 14%; bars beyond the cap carry a break mark and their value.
+a  Where: the six types across EDs, 2025.
+b  Whole-herd composition of the six types (100% bars: dairy cows, suckler cows, bulls,
+   DxD, DxB and BxB followers).
+c  Complete 21-cohort profile of each type (columns: suckler, mixed, dairy; rows: lower,
+   higher follower intensity), one common x-axis for all six profiles:
+     --profile-scale cap   (version A) axis capped at 14%; bars beyond carry a break and value
+     --profile-scale full  (version B) full common axis; adult cows drawn as outlined bars
+d  Observed 2010-2020 census change: cattle-number change against change in the dairy share
+   of adult cows (panel a of figS_stable_herd_restructuring.py).
 
-Values are cohort head summed over the type's EDs divided by total cattle of those EDs.
+Values in b and c are cohort head summed over the type's EDs divided by total cattle of
+those EDs.
 Writes:
-    reporting/paper1/figures/Fig3_cattle_system_types.{png,pdf}
+    reporting/paper1/figures/Fig3_cattle_systems[_B].{png,pdf}
     reporting/paper1/tables/T4_cattle_system_types_2025.csv
     reporting/paper1/tables/S_cattle_type_cohort_shares_2025.csv  (all 126 profile values)
     reporting/paper1/tables/S_cattle_types_2020_2025_crosstab.csv
 """
 from __future__ import annotations
+
+import argparse
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -28,6 +33,7 @@ import pandas as pd
 from matplotlib.patches import Patch, Rectangle
 
 import paper1_style as S
+import figS_stable_herd_restructuring as R
 
 XCAP = 14.0
 GROUPS = [  # (label, column or origin, colour, hatch, text colour on bar)
@@ -101,7 +107,7 @@ def panel_map(ax, d):
     county.boundary.plot(ax=ax, color="#8C8C8C", lw=0.3)
     ax.set_axis_off(); ax.set_aspect("equal")
     ax.set_xlabel(""); ax.set_ylabel("")
-    lg = ax.inset_axes([-0.02, 0.72, 0.32, 0.2])
+    lg = ax.inset_axes([0.0, 0.70, 0.36, 0.24])
     lg.set_xlim(0, 3.6); lg.set_ylim(0, 3.9); lg.axis("off")
     for i, b in enumerate(("Suckler", "Mixed", "Dairy")):
         y = 2 - i
@@ -109,8 +115,8 @@ def panel_map(ax, d):
         for j, f in enumerate(("lower-follower", "higher-follower")):
             lg.add_patch(Rectangle((1.2 + j * 1.15, y + 0.08), 1.05, 0.78, lw=0,
                                    color=S.TYPE_COLOURS[f"{b}, {f}"]))
-    lg.text(1.725, 3.05, "lower", ha="center", va="bottom", fontsize=5.8, color="#555555")
-    lg.text(2.875, 3.05, "higher", ha="center", va="bottom", fontsize=5.8, color="#555555")
+    lg.text(1.725, 3.05, "low", ha="center", va="bottom", fontsize=5.8, color="#555555")
+    lg.text(2.875, 3.05, "high", ha="center", va="bottom", fontsize=5.8, color="#555555")
     lg.text(2.3, 3.55, "followers per cow", ha="center", va="bottom", fontsize=5.8, color="#555555")
 
 
@@ -138,8 +144,8 @@ def panel_bars(ax, G):
     ax.set_xlabel("% of all cattle in the type", fontsize=6.0, labelpad=1)
     ax.spines["left"].set_visible(False)
     hs = [Patch(facecolor=c, hatch=h, edgecolor="white", label=lab) for lab, _, c, h, _ in GROUPS]
-    ax.legend(handles=hs, loc="upper center", bbox_to_anchor=(0.45, -0.27), ncol=3, frameon=False,
-              fontsize=5.8, handlelength=1.0, columnspacing=0.9, borderaxespad=0.0)
+    ax.legend(handles=hs, loc="lower center", bbox_to_anchor=(0.45, 1.0), ncol=3, frameon=False,
+              fontsize=5.8, handlelength=1.0, columnspacing=0.9, borderaxespad=0.3)
 
 
 def profile_layout():
@@ -158,7 +164,7 @@ def profile_layout():
     return np.array(pos)
 
 
-def mini_profile(ax, values: pd.Series, title: str, colour: str, labels: bool):
+def mini_profile(ax, values: pd.Series, title: str, colour: str, labels: bool, mode: str, xmax: float):
     rows = S.cohorts21()
     ypos = profile_layout()
     for (lab, grp, col), yy in zip(rows, ypos):
@@ -168,16 +174,19 @@ def mini_profile(ax, values: pd.Series, title: str, colour: str, labels: bool):
         else:
             colr, h = ORIGIN_COLOUR[grp]
             alpha = 1.0 if " female " in lab else 0.55
-        ax.barh(yy, min(v, XCAP), color=colr, hatch=h, alpha=alpha, edgecolor="white", lw=0.15,
-                height=1.0)
-        if v > XCAP:
-            ax.plot([XCAP - 1.0, XCAP - 0.6], [yy - 0.5, yy + 0.5], color="white", lw=1.3,
+        if mode == "full" and col in ("dairy_cows", "suckler_cows"):
+            ax.barh(yy, v, facecolor="white", edgecolor=colr, lw=0.8, height=0.86)
+        else:
+            ax.barh(yy, min(v, xmax), color=colr, hatch=h, alpha=alpha, edgecolor="white",
+                    lw=0.15, height=1.0)
+        if mode == "cap" and v > xmax:
+            ax.plot([xmax - 1.0, xmax - 0.6], [yy - 0.5, yy + 0.5], color="white", lw=1.3,
                     solid_capstyle="butt")
-            ax.text(XCAP + 0.3, yy, f"{v:.0f}", va="center", ha="left", fontsize=5.4, color=S.TEXT)
-    ax.set_xlim(0, XCAP)
+            ax.text(xmax + 0.3, yy, f"{v:.0f}", va="center", ha="left", fontsize=5.4, color=S.TEXT)
+    ax.set_xlim(0, xmax)
     ax.set_ylim(ypos.min() - 0.8, 0.8)
     ax.set_yticks([])
-    ax.set_xticks([0, 5, 10])
+    ax.set_xticks([0, 5, 10] if mode == "cap" else [0, 10, 20, 30])
     ax.tick_params(axis="x", labelsize=5.4, length=1.5, pad=1)
     ax.spines["left"].set_visible(False)
     ax.xaxis.grid(True, color="#EAEAEA", lw=0.4)
@@ -188,40 +197,43 @@ def mini_profile(ax, values: pd.Series, title: str, colour: str, labels: bool):
     if labels:
         tr = ax.get_yaxis_transform()
         for (lab, grp, col), yy in zip(rows, ypos):
-            if grp == "Adults":
-                ax.text(-0.02, yy, {"dairy_cows": "Dairy cows", "suckler_cows": "Suckler cows",
-                                    "bulls": "Bulls"}[col],
-                        transform=tr, ha="right", va="center", fontsize=5.3, color=S.TEXT)
-            elif " female " in lab:  # one age label per F/M pair
+            if " female " in lab:  # one age label per F/M pair
                 age = lab.split()[-2].replace("-", "–")
                 ax.text(-0.02, yy - 0.5, f"{age} yr", transform=tr, ha="right", va="center",
                         fontsize=5.3, color=S.TEXT)
-        for grp in S.ORIGINS:
+        for grp in ("Adults",) + tuple(S.ORIGINS):
             ys = [yy for (lab, g, _), yy in zip(rows, ypos) if g == grp]
-            ax.plot([-0.30, -0.30], [min(ys) - 0.4, max(ys) + 0.4], transform=tr, color="#9E9E9E",
+            ax.plot([-0.17, -0.17], [min(ys) - 0.4, max(ys) + 0.4], transform=tr, color="#9E9E9E",
                     lw=0.6, clip_on=False)
-            ax.text(-0.34, np.mean(ys), grp, transform=tr, ha="right", va="center", fontsize=5.8,
-                    fontweight="bold", color={"DxD": S.DAIRY, "DxB": "#2C7FB8", "BxB": "#B36B00"}[grp])
+            ax.text(-0.20, np.mean(ys), grp, transform=tr, ha="right", va="center", fontsize=5.8,
+                    fontweight="bold", color={"Adults": "#555555", "DxD": S.DAIRY, "DxB": "#2C7FB8",
+                                                 "BxB": "#B36B00"}[grp])
 
 
-def panel_profiles(fig, spec, P):
-    sub = spec.subgridspec(3, 2, hspace=0.24, wspace=0.10)
+def panel_profiles(fig, spec, P, mode: str):
+    """Six profiles: columns = suckler, mixed, dairy; rows = lower, higher follower intensity."""
+    xmax = XCAP if mode == "cap" else float(np.ceil(P.values.max() / 5) * 5)
+    sub = spec.subgridspec(2, 3, hspace=0.22, wspace=0.10)
     axes = []
-    for i, b in enumerate(("Suckler", "Mixed", "Dairy")):
-        for j, f in enumerate(("lower-follower", "higher-follower")):
+    for i, f in enumerate(("lower-follower", "higher-follower")):
+        for j, b in enumerate(("Suckler", "Mixed", "Dairy")):
             t = f"{b}, {f}"
             ax = fig.add_subplot(sub[i, j])
             mini_profile(ax, P[t], f"{S.TYPE_SHORT[S.TYPE_ORDER.index(t)]}  {t}",
-                         S.TYPE_COLOURS[t], labels=(j == 0))
-            if i < 2:
+                         S.TYPE_COLOURS[t], labels=(j == 0), mode=mode, xmax=xmax)
+            if i == 0:
                 ax.tick_params(axis="x", labelbottom=False)
+            else:
+                ax.set_xlabel("% of all cattle in the type", fontsize=5.9, labelpad=1)
             axes.append(ax)
-    for ax in axes[-2:]:
-        ax.set_xlabel("% of all cattle in the type", fontsize=5.9, labelpad=1)
     return axes
 
 
 def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--profile-scale", choices=["cap", "full"], default="cap",
+                    help="cap = version A (chosen); full = version B (comparison only)")
+    mode = ap.parse_args().profile_scale
     S.style()
     d25 = typed(2025)
     t4 = table4(d25)
@@ -239,26 +251,30 @@ def main():
     pd.crosstab(both.TYPE_2020, both.TYPE_2025).reindex(index=S.TYPE_ORDER, columns=S.TYPE_ORDER).to_csv(
         S.TAB / "S_cattle_types_2020_2025_crosstab.csv")
     print(t4.round(1).to_string())
-    print(G.round(1).to_string())
 
-    fig = plt.figure(figsize=(7.4, 7.6))
-    left = fig.add_gridspec(2, 1, height_ratios=[1, 0.34], hspace=0.17, left=0.055, right=0.44,
-                            top=0.955, bottom=0.13)
-    right = fig.add_gridspec(1, 1, left=0.575, right=0.965, top=0.915, bottom=0.05)
-    axm = fig.add_subplot(left[0])
+    fig = plt.figure(figsize=(7.4, 9.8))
+    top = fig.add_gridspec(1, 2, width_ratios=[1, 1], wspace=0.10, left=0.0, right=0.975,
+                           top=0.925, bottom=0.645)
+    axm = fig.add_subplot(top[0])
     panel_map(axm, d25)
-    axm.set_anchor("N")
-    axb = fig.add_subplot(left[1])
+    axb = fig.add_subplot(top[1])
     panel_bars(axb, G)
-    axes = panel_profiles(fig, right[0], P)
-    fig.text(0.01, 0.985, "a   Six cattle-system types across EDs", fontsize=8.5, fontweight="bold", va="top")
-    fig.text(0.01, axb.get_position().y1 + 0.035, "b   Whole-herd composition", fontsize=8.5,
-             fontweight="bold", va="bottom")
-    fig.text(0.49, 0.985, "c   Complete 21-cohort profile of each type", fontsize=8.5,
+    mid = fig.add_gridspec(1, 1, left=0.10, right=0.975, top=0.578, bottom=0.30)
+    axes_c = panel_profiles(fig, mid[0], P, mode)
+    low = fig.add_gridspec(1, 1, left=0.10, right=0.975, top=0.225, bottom=0.045)
+    axd = fig.add_subplot(low[0])
+    R.panel_a(axd, R.load(), letter="d", title="Stable cattle numbers, changing systems (2010–2020 censuses)")
+    axd.title.set_x(-0.11)
+    axd.set_ylabel("Change in dairy share\nof adult cows (pp)")
+
+    fig.text(0.01, 0.985, "a   Cattle-system types across EDs, 2025", fontsize=8.5, fontweight="bold", va="top")
+    fig.text(0.50, 0.985, "b   Whole-herd composition of the six types", fontsize=8.5,
              fontweight="bold", va="top")
-    fig.text(0.49, 0.962, "solid = female, light = male; bars beyond 14% are broken and labelled",
-             fontsize=5.8, color="#555555", va="top")
-    S.save(fig, "Fig3_cattle_system_types")
+    fig.text(0.01, 0.622, "c   Complete 21-cohort profiles", fontsize=8.5, fontweight="bold", va="top")
+    note = ("Female solid; male light. Values > 14% labelled." if mode == "cap"
+            else "Female solid; male light. Adult cows outlined.")
+    fig.text(0.01, 0.604, note, fontsize=5.9, color="#555555", va="top")
+    S.save(fig, "Fig3_cattle_systems" + ("" if mode == "cap" else "_B"))
 
 
 if __name__ == "__main__":
