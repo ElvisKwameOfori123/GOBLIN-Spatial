@@ -6,9 +6,11 @@ beside it, no frames, grids or north arrows.
 
 a  The 46 EPA WFD catchments coloured by the cattle-system type their 2025 aggregate falls into
    (thresholds of Figure 3 applied to catchment totals). The selected catchment is outlined.
-b  The selected catchment (default 25C Lower Shannon) at ED resolution: each ED coloured by its
-   own type; four contrasting EDs (A-D) marked. EDs count as members when >= 50% of their area
-   lies inside the EPA boundary.
+b  The selected catchment (default 25C Lower Shannon, chosen as an illustrative heterogeneous
+   catchment containing all six types) at ED resolution: every intersecting ED piece is clipped
+   to the boundary and coloured by its whole-ED type. Display only: catchment totals are the
+   release's fractional (area-weighted) aggregates. The in-figure count refers to EDs with
+   >= 50% of their area inside; A-D are drawn from EDs with >= 80% inside.
 c  Complete 21-cohort structure of EDs A-D and of the catchment aggregate.
 
 Writes: reporting/paper1/figures/Fig5_catchment_<ID>.{png,pdf}
@@ -354,12 +356,12 @@ def panel_zoom(ax, w, target, inside, edge, picks, agg, cid, name):
     pad = (tx1 - tx0) * 0.03
     land.plot(ax=ax, color=S.GREY_LAND, edgecolor="none", zorder=0)
     w.boundary.plot(ax=ax, color="white", lw=0.8, zorder=1)
-    edge.plot(ax=ax, color=OUTSIDE, edgecolor="white", lw=0.3, zorder=2)
+    pieces = pd.concat([inside, edge])  # every ED piece intersecting the catchment, clipped
     for t in S.TYPE_ORDER:
-        part = inside[inside.TYPE == t]
+        part = pieces[pieces.TYPE == t]
         if len(part):
             part.plot(ax=ax, color=S.TYPE_COLOURS[t], edgecolor="white", lw=0.3, zorder=2)
-    nd = inside[inside.TYPE.isna()]
+    nd = pieces[pieces.TYPE.isna()]
     if len(nd):
         nd.plot(ax=ax, facecolor=S.NODATA, edgecolor="#7F7F7F", hatch=S.NODATA_HATCH, lw=0.2, zorder=2)
     target.boundary.plot(ax=ax, color="black", lw=1.1, zorder=3)
@@ -374,12 +376,11 @@ def panel_zoom(ax, w, target, inside, edge, picks, agg, cid, name):
     ax.set_xlabel(""); ax.set_ylabel("")
     scalebar(ax)
     counts = inside.TYPE.value_counts()
-    S.vertical_key(ax, ([S.TYPE_COLOURS[t] for t in S.TYPE_ORDER] + [OUTSIDE])[::-1],
-                   ([f"{s} ({counts.get(t, 0)})" for s, t in zip(S.TYPE_SHORT, S.TYPE_ORDER)]
-                    + ["ED mostly outside"])[::-1], title="EDs", where=(0.66, 0.30, 0.04, 0.56))
+    S.vertical_key(ax, [S.TYPE_COLOURS[t] for t in S.TYPE_ORDER][::-1], S.TYPE_SHORT[::-1],
+                   title="ED type", where=(0.66, 0.40, 0.04, 0.46))
     at = agg_type(agg)
-    ax.text(0.66, 0.25, f"Catchment aggregate reads as\n{S.TYPE_SHORT[S.TYPE_ORDER.index(at)]}; "
-            f"its {len(inside)} EDs span\n{counts.size} types (dairy share\n"
+    ax.text(0.66, 0.35, f"Catchment aggregate reads as\n{S.TYPE_SHORT[S.TYPE_ORDER.index(at)]}; "
+            f"the {len(inside)} EDs with\nmost of their area inside\nspan {counts.size} types (dairy share\n"
             f"P10–P90 {inside.DAIRY_SHARE_ADULT_PCT.quantile(0.1):.0f}–"
             f"{inside.DAIRY_SHARE_ADULT_PCT.quantile(0.9):.0f}%)",
             transform=ax.transAxes, fontsize=5.8, va="top", ha="left", color=S.TEXT, linespacing=1.25)

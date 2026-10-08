@@ -5,11 +5,16 @@ a  Total cattle, dairy cows, suckler cows and sheep, indexed to 2015 = 100.
 b  Composition of the whole cattle population in 2015, 2020 and 2025 (100% bars):
    dairy cows, suckler cows, bulls, and DxD, DxB and BxB followers.
 
+c  Observed change in the dairy share of adult cows by county, 2010-2020 Censuses of
+   Agriculture (sequential scale anchored at 0 pp; every county increased).
+
 Input: reporting/report_data/historical/national_year.csv
+       data/inputs/baseline/00_CSO_Census_County_Livestock_2010_2020.csv
 """
 from __future__ import annotations
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 
 import paper1_style as S
@@ -54,7 +59,7 @@ def panel_a(ax, n):
     ax.set_ylabel("Index (2015 = 100)")
     ax.yaxis.grid(True, color="#EEEEEE", lw=0.5)
     ax.set_axisbelow(True)
-    S.title(ax, "a", "Stable totals, diverging breeding herds")
+    S.title(ax, "a", "Stable totals, diverging herds")
 
 
 def panel_b(ax, n):
@@ -79,22 +84,74 @@ def panel_b(ax, n):
         ax.text(2.36, base[2] + v[2] / 2, lab, va="center", fontsize=6.4, color=S.TEXT)
         base = [b + vi for b, vi in zip(base, v)]
     ax.set_xticks(list(x))
-    ax.set_xticklabels([f"{y}\n{n.loc[y, 'TOTAL_CATTLE'] / 1e6:.2f} m cattle" for y in years])
+    ax.set_xticklabels([f"{y}\n{n.loc[y, 'TOTAL_CATTLE'] / 1e6:.2f} m" for y in years], fontsize=6.4)
     ax.set_xlim(-0.45, 3.3)
     ax.set_ylim(0, 100)
-    ax.set_ylabel("Share of all cattle (%)")
+    ax.set_ylabel("")
+    ax.set_yticks([0, 25, 50, 75, 100])
+    ax.set_yticklabels(["0%", "25%", "50%", "75%", "100%"], fontsize=6.4)
     ax.spines["bottom"].set_visible(False)
     ax.tick_params(axis="x", length=0)
-    S.title(ax, "b", "Same herd size, different composition")
+    S.title(ax, "b", "Same size, new composition")
+
+
+CTY_BREAKS = [5, 10, 15]
+CTY_COLOURS = ["#DEEBF7", "#9ECAE1", "#4292C6", "#08519C"]   # 0-5, 5-10, 10-15, >= 15 pp
+
+
+def county_change() -> pd.DataFrame:
+    c = pd.read_csv("data/inputs/baseline/00_CSO_Census_County_Livestock_2010_2020.csv")
+    c["DS"] = 100 * c.DAIRY_COW / (c.DAIRY_COW + c.OTHER_COW)
+    p = c.pivot(index="COUNTY", columns="CENSUS_YEAR", values="DS")
+    p["CHANGE_PP"] = p[2020] - p[2010]
+    if len(p) != 26 or not (p.CHANGE_PP > 0).all():
+        raise ValueError("expected 26 counties, all with a positive change")
+    p.round(2).to_csv(S.TAB / "S_county_dairy_share_change_2010_2020.csv")
+    return p
+
+
+def census_county(name: str) -> str:
+    n = name.replace(" County", "").replace(" City", "")
+    if n in ("Dún Laoghaire-Rathdown", "Fingal", "South Dublin", "Dublin"):
+        return "Dublin"
+    if "Tipperary" in n:
+        return "Tipperary"
+    return n
+
+
+def panel_c(ax, p):
+    raw, _, land = S.land_and_counties()
+    g = raw.copy()
+    g["COUNTY"] = g.COUNTYNAME.map(census_county)
+    g = g.dissolve(by="COUNTY", as_index=False).merge(p[["CHANGE_PP"]], left_on="COUNTY",
+                                                      right_index=True, how="left", validate="one_to_one")
+    if g.CHANGE_PP.isna().any():
+        raise ValueError(f"unmatched counties: {g.COUNTY[g.CHANGE_PP.isna()].tolist()}")
+    cls = np.digitize(g.CHANGE_PP, CTY_BREAKS)
+    g.plot(ax=ax, color=[CTY_COLOURS[i] for i in cls], edgecolor="white", lw=0.6)
+    S.fit_ireland(ax, right=0.30)
+    S.vertical_key(ax, CTY_COLOURS, ["0–5", "5–10", "10–15", "≥ 15"], title="pp",
+                   where=(0.80, 0.04, 0.055, 0.28), fontsize=6.0)
+    lo, hi = p.CHANGE_PP.idxmin(), p.CHANGE_PP.idxmax()
+    for name in (lo, hi):
+        r = g[g.COUNTY == name].geometry.iloc[0].representative_point()
+        ax.annotate(f"{name} {p.loc[name, 'CHANGE_PP']:+.1f}", xy=(r.x, r.y),
+                    xytext=(r.x + (-170000 if name == hi else -190000), r.y + (-170000 if name == hi else 20000)),
+                    fontsize=5.9, color=S.TEXT, arrowprops=dict(arrowstyle="-", lw=0.5, color="#555555"),
+                    bbox=dict(fc="white", ec="none", pad=0.6, alpha=0.9))
+    S.title(ax, "c", "Dairy share rose\n      in every county")
+    ax.text(0.0, -0.02, "Change in dairy share of adult cows,\n2010–2020 censuses (pp)", transform=ax.transAxes,
+            fontsize=6.0, color="#555555", va="top")
 
 
 def main():
     n = load()
     S.style()
-    fig, (a, b) = plt.subplots(1, 2, figsize=(7.4, 3.4), gridspec_kw={"width_ratios": [1.05, 1]})
+    fig, (a, b, c) = plt.subplots(1, 3, figsize=(7.4, 3.6), gridspec_kw={"width_ratios": [1.0, 0.95, 1.2]})
     panel_a(a, n)
     panel_b(b, n)
-    fig.subplots_adjust(left=0.07, right=0.98, top=0.9, bottom=0.17, wspace=0.42)
+    panel_c(c, county_change())
+    fig.subplots_adjust(left=0.065, right=0.995, top=0.87, bottom=0.14, wspace=0.56)
     S.save(fig, "Fig2_national_restructuring")
 
 

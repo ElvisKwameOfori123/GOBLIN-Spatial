@@ -1,9 +1,8 @@
 #!/usr/bin/env python
 """Figure 4 (Section 3.4). The agricultural context of local cattle systems.
 
-a  Three compact ED maps (AgriSyn map style), 2025: sheep per farmed ha, cereal share of farmed
-   area and Standard Output per farmed ha.
-b  Context profile of the six cattle-system types of Figure 3. For each context the type's
+Single panel (no maps; the context maps are in figS_context_atlas.py).
+   Context profile of the six cattle-system types of Figure 3. For each context the type's
    pooled value (ratio of type totals) is expressed relative to the same pooled value for all
    eligible EDs (= 100), on a logarithmic axis:
        sheep per farmed ha        total sheep / total farmed ha                (2025)
@@ -128,15 +127,10 @@ def main():
     table, idx = index_table(d)
     table.round(2).to_csv(S.TAB / "S_context_index_by_type_2025.csv")
     print(table.round(2).to_string())
-    eds = S.model_eds()
-    fig = plt.figure(figsize=(7.4, 6.0))
-    top = fig.add_gridspec(1, 3, wspace=0.02, left=0.005, right=0.99, top=0.955, bottom=0.45)
-    for i, (col, title, br, colours, fmt, kt) in enumerate(MAPS):
-        panel_map(fig.add_subplot(top[i]), eds, d, col, title, br, colours, fmt, kt)
-    low = fig.add_gridspec(1, 1, left=0.26, right=0.975, top=0.33, bottom=0.085)
-    panel_profile(fig.add_subplot(low[0]), idx)
-    fig.text(0.01, 0.985, "a   Agricultural geography, 2025", fontsize=8.5, fontweight="bold", va="top")
-    fig.text(0.01, 0.415, "b   Contexts of the six cattle-system types", fontsize=8.5, fontweight="bold",
+    fig = plt.figure(figsize=(7.4, 3.3))
+    gs = fig.add_gridspec(1, 1, left=0.25, right=0.975, top=0.80, bottom=0.15)
+    panel_profile(fig.add_subplot(gs[0]), idx)
+    fig.text(0.01, 0.975, "Contexts of the six cattle-system types", fontsize=8.5, fontweight="bold",
              va="top")
     S.save(fig, "Fig4_context")
 

@@ -121,6 +121,13 @@ def main():
     out = p.loc[p.STABLE, ["KEY", "County", "ED_NAME", "CATTLE_CHANGE_PCT", "DS10", "DS20",
                            "DS_CHANGE_PP", "CLASS"]].sort_values("DS_CHANGE_PP", ascending=False)
     out.round(2).to_csv(S.TAB / "S_stable_herd_eds_2010_2020.csv", index=False)
+    # observed 3 x 3 breeding-orientation transition (census only; thresholds of Figure 3)
+    cls = lambda v: pd.cut(v, [-1, 40, 60, 101], labels=["Suckler (< 40%)", "Mixed (40-60%)", "Dairy (> 60%)"])
+    tr = pd.crosstab(cls(p.DS10).rename("2010"), cls(p.DS20).rename("2020"), margins=True, margins_name="Total")
+    tr.to_csv(S.TAB / "S_orientation_transition_2010_2020.csv")
+    m = tr.iloc[:3, :3].to_numpy()
+    print(tr.to_string(), f"\nsame orientation {np.trace(m)} of {m.sum()}; toward dairy {np.triu(m, 1).sum()}; "
+          f"toward suckler {np.tril(m, -1).sum()}")
     print(out.CLASS.value_counts().to_string(), f"\nrho all {ra:.3f}, rho excl zero-dairy {rd:.3f}")
     print("mapped classes:", g.CLASS.value_counts().to_dict())
 
