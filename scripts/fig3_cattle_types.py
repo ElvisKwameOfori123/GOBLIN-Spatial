@@ -76,13 +76,29 @@ def panel_map(ax, d):
     county.boundary.plot(ax=ax, color="#4A4A4A", lw=0.35)
     ax.set_axis_off(); ax.set_aspect("equal")
     counts = d.TYPE.value_counts()
-    hs = [Patch(facecolor=S.TYPE_COLOURS[t], edgecolor="#8C8C8C", lw=0.3,
-                label=f"{s}  {t} ({counts.get(t, 0):,})") for s, t in zip(S.TYPE_SHORT, S.TYPE_ORDER)]
-    hs.append(Patch(facecolor=S.NODATA, edgecolor="#7F7F7F", hatch=S.NODATA_HATCH, lw=0.3,
-                    label=f"Below threshold ({int(d.TYPE.isna().sum())})"))
-    ax.legend(handles=hs, loc="upper center", bbox_to_anchor=(0.56, 0.03), frameon=False,
-              fontsize=5.7, handlelength=1.0, ncol=2, columnspacing=0.6,
-              title="Type (number of EDs)", title_fontsize=6.2)
+    # 3 x 2 legend matrix: rows = breeding orientation, columns = follower intensity
+    lg = ax.inset_axes([0.30, -0.215, 0.44, 0.165])
+    lg.set_xlim(0, 2); lg.set_ylim(0, 3); lg.axis("off")
+    rows = [("Suckler", "< 40% dairy"), ("Mixed", "40–60%"), ("Dairy", "> 60%")]
+    for i, (b, rule) in enumerate(rows):
+        y = 2 - i
+        for j, f in enumerate(("lower-follower", "higher-follower")):
+            t = f"{b}, {f}"
+            dark = j == 1
+            lg.add_patch(plt.Rectangle((j + 0.03, y + 0.06), 0.94, 0.88, color=S.TYPE_COLOURS[t], lw=0))
+            lg.text(j + 0.5, y + 0.5, f"{S.TYPE_SHORT[S.TYPE_ORDER.index(t)]}\n{counts.get(t, 0):,} EDs",
+                    ha="center", va="center", fontsize=5.3, linespacing=1.05,
+                    color="white" if dark else "black", fontweight="bold")
+        lg.text(-0.06, y + 0.5, f"{b}  {rule}", ha="right", va="center", fontsize=5.5,
+                linespacing=1.1, color=S.TEXT)
+    lg.text(0.5, 3.08, f"≤ {S.FOLLOWER_CUT}", ha="center", va="bottom", fontsize=5.5, color=S.TEXT)
+    lg.text(1.5, 3.08, f"> {S.FOLLOWER_CUT}", ha="center", va="bottom", fontsize=5.5, color=S.TEXT)
+    lg.text(1.0, 3.6, "Followers per adult cow", ha="center", va="bottom", fontsize=5.8,
+            fontweight="bold", color=S.TEXT)
+    lg.add_patch(plt.Rectangle((2.12, 0.06), 0.22, 0.6, facecolor=S.NODATA, edgecolor="#7F7F7F",
+                               hatch=S.NODATA_HATCH, lw=0.3, clip_on=False))
+    lg.text(2.42, 0.36, f"Below threshold\n({int(d.TYPE.isna().sum())} EDs)", va="center",
+            fontsize=5.6, color="#555555", clip_on=False)
 
 
 def panel_heat(ax, fig, H, t4):
@@ -145,11 +161,10 @@ def main():
     gs = fig.add_gridspec(1, 2, width_ratios=[1, 1.05], wspace=0.32)
     panel_map(fig.add_subplot(gs[0, 0]), d25)
     panel_heat(fig.add_subplot(gs[0, 1]), fig, H, t4)
-    fig.text(0.01, 0.005, "Thresholds: suckler < 40%, mixed 40–60%, dairy > 60% dairy share of adult cows; "
-             f"lower/higher follower intensity at {S.FOLLOWER_CUT} followers per adult cow.\n"
-             "All types contain the complete 21-cohort population; sex and 2+ year fractions follow "
-             "county age-sex margins.", fontsize=5.6, color="#555555", va="bottom")
-    fig.subplots_adjust(left=0.02, right=0.92, top=0.86, bottom=0.15)
+    fig.text(0.01, 0.005, "Below threshold: < 10 adult cows or < 20 followers. All types contain the complete "
+             "21-cohort population; sex and 2+ year fractions follow county age-sex margins.",
+             fontsize=5.6, color="#555555", va="bottom")
+    fig.subplots_adjust(left=0.02, right=0.92, top=0.86, bottom=0.17)
     for x, t in ((0.01, "a   Cattle-system types across EDs, 2025"),
                  (0.47, "b   Complete 21-cohort composition of each type")):
         fig.text(x, 0.975, t, fontsize=8.5, fontweight="bold", va="top")
