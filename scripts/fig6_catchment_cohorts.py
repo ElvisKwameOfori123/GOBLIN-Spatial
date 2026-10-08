@@ -6,7 +6,7 @@ of Figure 3 occur in it with at least six EDs each, and the dairy share of adult
 roughly 5% to 91% across its EDs (P10 to P90).
 
 a  EDs inside the catchment coloured by cattle-system type (types and colours as in Fig. 3),
-   on an Irish Transverse Mercator grid, with scale bar, north arrow and Ireland locator.
+   with scale bar and Ireland locator (paper-wide map style: no grid, no north arrow).
    Four contrasting EDs (A-D) are marked.
 b-e  The same EDs for followers per adult cow, under-1 share of followers, DxB share and
    BxB share of followers, each with the catchment aggregate.
@@ -47,8 +47,8 @@ PICK_SHARE = 0.8          # stricter share for the four example EDs
 PICK_TYPES = ["Suckler, lower-follower", "Suckler, higher-follower",
               "Dairy, lower-follower", "Dairy, higher-follower"]
 SMALL = [  # column, title, breaks, colormap, format
-    ("FOLLOWER_TO_ADULT_RATIO", "Followers per cow", [1.5, 2.0, 2.5, 3.0, 3.5], "viridis_r", "{:.2f}"),
-    ("UNDER1_SHARE_FOLLOWERS_PCT", "Under-1 share (%)", [38, 41, 44, 47, 50], "YlGn", "{:.0f}%"),
+    ("FOLLOWER_TO_ADULT_RATIO", "Followers per cow", [1.5, 2.0, 2.5, 3.0, 3.5], "Greys", "{:.2f}"),
+    ("UNDER1_SHARE_FOLLOWERS_PCT", "Under-1 share (%)", [38, 41, 44, 47, 50], "Greys", "{:.0f}%"),
     ("DXB_SHARE_FOLLOWERS_PCT", "DxB share (%)", [26, 30, 34, 38, 42], "Blues", "{:.0f}%"),
     ("BXB_SHARE_FOLLOWERS_PCT", "BxB share (%)", [20, 30, 40, 50, 60], "Oranges", "{:.0f}%"),
 ]
@@ -152,9 +152,7 @@ def base(ax, land, w, bounds, grid=True):
         ax.set_xticks([])
         ax.set_yticks([])
         for s in ax.spines.values():
-            s.set_visible(True)
-            s.set_linewidth(0.4)
-            s.set_color("#9E9E9E")
+            s.set_visible(False)
     ax.set_xlabel("")
     ax.set_ylabel("")
 
@@ -181,7 +179,7 @@ def north(ax, x, y):
 
 # ---------------------------------------------------------------- panels
 def panel_main(ax, side, land, w, target, name, cid, inside, edge, picks, agg, bounds):
-    base(ax, land, w, bounds)
+    base(ax, land, w, bounds, grid=False)
     edge.plot(ax=ax, color=OUTSIDE, edgecolor="white", lw=0.25, zorder=2)
     for t in S.TYPE_ORDER:
         part = inside[inside.TYPE == t]
@@ -201,8 +199,7 @@ def panel_main(ax, side, land, w, target, name, cid, inside, edge, picks, agg, b
                  fontweight="bold", pad=14)
 
     side.axis("off")
-    north(side, 0.16, 1.0)
-    ins = side.inset_axes([0.34, 0.70, 0.62, 0.32])
+    ins = side.inset_axes([0.0, 0.70, 0.62, 0.32])
     land.plot(ax=ins, color="#D9D9D9", edgecolor="none")
     target.plot(ax=ins, color="black", edgecolor="none")
     ins.add_patch(Rectangle((bounds[0], bounds[1]), bounds[2] - bounds[0], bounds[3] - bounds[1],
@@ -210,7 +207,7 @@ def panel_main(ax, side, land, w, target, name, cid, inside, edge, picks, agg, b
     ins.set_xticks([]); ins.set_yticks([]); ins.set_aspect("equal")
     ins.set_xlabel(""); ins.set_ylabel("")
     for sp in ins.spines.values():
-        sp.set_linewidth(0.4)
+        sp.set_visible(False)
     counts = inside.TYPE.value_counts()
     hs = [Patch(facecolor=S.TYPE_COLOURS[t], edgecolor="#8C8C8C", lw=0.3,
                 label=f"{s}  {t} ({counts.get(t, 0)})") for s, t in zip(S.TYPE_SHORT, S.TYPE_ORDER)]
@@ -374,7 +371,7 @@ def main():
                fontsize=5.8, handlelength=1.2, columnspacing=1.0)
     fig.text(0.01, 0.004, "EDs with ≥ 50% of their area inside the EPA WFD catchment boundary "
              "(WFD_Catchments_Frozen.gpkg); whole-ED 2025 values.\nPyramid: female left (solid), "
-             "male right (light). Coordinates: Irish Transverse Mercator (EPSG:2157).",
+             "male right (light).",
              fontsize=5.4, color="#555555", va="bottom")
     S.save(fig, f"Fig6_catchment_{cid}")
 

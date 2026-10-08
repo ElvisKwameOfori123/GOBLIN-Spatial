@@ -1,31 +1,34 @@
 #!/usr/bin/env python
-"""Figure 3 and Table 4. ED cattle-system types and their 21-cohort composition, 2025.
+"""Figure 3 and Table 4. Where the cattle systems are, and what they contain (2025).
 
-Typology (fixed thresholds, eligible EDs: >= 10 adult cows and >= 20 followers):
-    breeding orientation  Suckler: dairy share of adult cows < 40%
-                          Mixed:   40-60%
-                          Dairy:   > 60%
-    follower intensity    lower:  followers per adult cow <= 1.9
-                          higher: > 1.9
-a  Map of the six types across EDs.
-b  21 x 6 heatmap: share of all cattle in each type held by each cohort
-   (cohort head summed over the type's EDs / total cattle of those EDs).
+Typology (fixed thresholds; eligible EDs have >= 10 adult cows and >= 20 followers):
+    breeding orientation  Suckler: dairy share of adult cows < 40%; Mixed: 40-60%; Dairy: > 60%
+    follower intensity    lower: <= 1.9 followers per adult cow; higher: > 1.9
+
+a  The six types across EDs, with a compact legend (rows: orientation; light/dark: follower
+   intensity).
+b  21-cohort fingerprint: share of all cattle in each type held by each cohort (cohort head
+   summed over the type's EDs / total cattle of those EDs). Linear grey scale capped at 12%;
+   values are printed only for cells >= 10% (the adult cow cohorts).
 
 Writes:
     reporting/paper1/figures/Fig3_cattle_system_types.{png,pdf}
     reporting/paper1/tables/T4_cattle_system_types_2025.csv
-    reporting/paper1/tables/S_cattle_types_2020_sensitivity.csv
+    reporting/paper1/tables/S_cattle_types_2020_2025_crosstab.csv
+    reporting/paper1/tables/S_cattle_type_cohort_shares_2025.csv  (all 126 heatmap values)
 """
 from __future__ import annotations
 
-import matplotlib as mpl
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from matplotlib.patches import Patch
+from matplotlib.patches import Rectangle
 
 import paper1_style as S
+
+VMAX, LABEL_MIN = 12.0, 10.0
+HEAT_CMAP = mcolors.LinearSegmentedColormap.from_list("grey", ["#FFFFFF", "#252525"])
 
 
 def typed(year: int) -> pd.DataFrame:
@@ -46,11 +49,7 @@ def table4(d: pd.DataFrame) -> pd.DataFrame:
         "DxD share (%)": g.DXD_SHARE_FOLLOWERS_PCT.median(),
         "DxB share (%)": g.DXB_SHARE_FOLLOWERS_PCT.median(),
         "BxB share (%)": g.BXB_SHARE_FOLLOWERS_PCT.median(),
-        "Cattle per farmed ha": g.CATTLE_PER_FARMED_HA.median(),
     }).reindex(S.TYPE_ORDER)
-    rules = {"Suckler": "< 40%", "Mixed": "40–60%", "Dairy": "> 60%"}
-    t.insert(0, "Rule", [f"dairy share {rules[k.split(',')[0]]}; followers/cow "
-                         f"{'≤' if 'lower-follower' in k else '>'} {S.FOLLOWER_CUT}" for k in t.index])
     t.index.name = "Type"
     return t
 
@@ -70,75 +69,54 @@ def panel_map(ax, d):
     _, county, land = S.land_and_counties()
     g = eds.merge(d[["CSOED", "TYPE"]], on="CSOED", how="left", validate="one_to_one")
     land.plot(ax=ax, color=S.GREY_LAND, edgecolor="none")
-    g[g.TYPE.isna()].plot(ax=ax, facecolor=S.NODATA, edgecolor="#7F7F7F", hatch=S.NODATA_HATCH, lw=0.2)
+    g[g.TYPE.isna()].plot(ax=ax, facecolor=S.NODATA, edgecolor="#9E9E9E", hatch=S.NODATA_HATCH, lw=0.2)
     for t in S.TYPE_ORDER:
         g[g.TYPE == t].plot(ax=ax, color=S.TYPE_COLOURS[t], edgecolor="white", lw=0.05)
-    county.boundary.plot(ax=ax, color="#4A4A4A", lw=0.35)
+    county.boundary.plot(ax=ax, color="#8C8C8C", lw=0.3)
     ax.set_axis_off(); ax.set_aspect("equal")
-    counts = d.TYPE.value_counts()
-    # 3 x 2 legend matrix: rows = breeding orientation, columns = follower intensity
-    lg = ax.inset_axes([0.30, -0.215, 0.44, 0.165])
-    lg.set_xlim(0, 2); lg.set_ylim(0, 3); lg.axis("off")
-    rows = [("Suckler", "< 40% dairy"), ("Mixed", "40–60%"), ("Dairy", "> 60%")]
-    for i, (b, rule) in enumerate(rows):
+    ax.set_xlabel(""); ax.set_ylabel("")
+    # compact legend in the Atlantic, north-west of the island
+    lg = ax.inset_axes([0.0, 0.70, 0.30, 0.20])
+    lg.set_xlim(0, 3.6); lg.set_ylim(0, 3.9); lg.axis("off")
+    for i, b in enumerate(("Suckler", "Mixed", "Dairy")):
         y = 2 - i
+        lg.text(1.0, y + 0.45, b, ha="right", va="center", fontsize=6.2, color=S.TEXT)
         for j, f in enumerate(("lower-follower", "higher-follower")):
-            t = f"{b}, {f}"
-            dark = j == 1
-            lg.add_patch(plt.Rectangle((j + 0.03, y + 0.06), 0.94, 0.88, color=S.TYPE_COLOURS[t], lw=0))
-            lg.text(j + 0.5, y + 0.5, f"{S.TYPE_SHORT[S.TYPE_ORDER.index(t)]}\n{counts.get(t, 0):,} EDs",
-                    ha="center", va="center", fontsize=5.3, linespacing=1.05,
-                    color="white" if dark else "black", fontweight="bold")
-        lg.text(-0.06, y + 0.5, f"{b}  {rule}", ha="right", va="center", fontsize=5.5,
-                linespacing=1.1, color=S.TEXT)
-    lg.text(0.5, 3.08, f"≤ {S.FOLLOWER_CUT}", ha="center", va="bottom", fontsize=5.5, color=S.TEXT)
-    lg.text(1.5, 3.08, f"> {S.FOLLOWER_CUT}", ha="center", va="bottom", fontsize=5.5, color=S.TEXT)
-    lg.text(1.0, 3.6, "Followers per adult cow", ha="center", va="bottom", fontsize=5.8,
-            fontweight="bold", color=S.TEXT)
-    lg.add_patch(plt.Rectangle((2.12, 0.06), 0.22, 0.6, facecolor=S.NODATA, edgecolor="#7F7F7F",
-                               hatch=S.NODATA_HATCH, lw=0.3, clip_on=False))
-    lg.text(2.42, 0.36, f"Below threshold\n({int(d.TYPE.isna().sum())} EDs)", va="center",
-            fontsize=5.6, color="#555555", clip_on=False)
+            lg.add_patch(Rectangle((1.2 + j * 1.15, y + 0.08), 1.05, 0.78, lw=0,
+                                   color=S.TYPE_COLOURS[f"{b}, {f}"]))
+    lg.text(1.725, 3.05, "lower", ha="center", va="bottom", fontsize=5.8, color="#555555")
+    lg.text(2.875, 3.05, "higher", ha="center", va="bottom", fontsize=5.8, color="#555555")
+    lg.text(2.3, 3.55, "followers per cow", ha="center", va="bottom", fontsize=5.8, color="#555555")
 
 
-def panel_heat(ax, fig, H, t4):
+def panel_heat(ax, fig, H):
     labels = [lab for lab, _, _ in S.cohorts21()]
     M = H.to_numpy()
-    norm = mcolors.PowerNorm(gamma=0.5, vmin=0, vmax=40)
-    im = ax.imshow(M, aspect="auto", cmap="viridis", norm=norm)
-    for i in range(M.shape[0]):
-        for j in range(M.shape[1]):
-            v = M[i, j]
-            ax.text(j, i, f"{v:.1f}" if v < 10 else f"{v:.0f}", ha="center", va="center",
-                    fontsize=5.4, color="white" if norm(v) < 0.62 else "black")
+    im = ax.imshow(M, aspect="auto", cmap=HEAT_CMAP, vmin=0, vmax=VMAX, interpolation="nearest")
+    for i, j in zip(*np.where(M >= LABEL_MIN)):
+        ax.text(j, i, f"{M[i, j]:.0f}", ha="center", va="center", fontsize=6.0, color="white")
     ax.set_yticks(range(len(labels)))
-    ax.set_yticklabels(labels, fontsize=5.9)
+    ax.set_yticklabels(labels, fontsize=6.0)
     ax.set_xticks(range(6))
-    ax.set_xticklabels([f"{s}\n{int(t4.loc[t, 'EDs'])}\n{t4.loc[t, 'Share of cattle (%)']:.0f}%"
-                        for s, t in zip(S.TYPE_SHORT, S.TYPE_ORDER)], fontsize=5.8)
+    ax.set_xticklabels(S.TYPE_SHORT, fontsize=6.6)
     ax.xaxis.tick_top()
-    for t, lab in zip(ax.get_xticklabels(), S.TYPE_ORDER):
-        t.set_color(S.TYPE_COLOURS[lab] if "lower-follower" not in lab else "#555555")
-        t.set_fontweight("bold")
+    ax.tick_params(length=0, pad=9)
+    # type colour chips between the column labels and the matrix
+    for j, t in enumerate(S.TYPE_ORDER):
+        ax.add_patch(Rectangle((j - 0.42, -1.05), 0.84, 0.38, color=S.TYPE_COLOURS[t], lw=0,
+                               clip_on=False))
     for b in (2.5, 8.5, 14.5):
-        ax.axhline(b, color="white", lw=1.6)
-    for b in (1.5, 3.5):
-        ax.axvline(b, color="white", lw=1.6)
+        ax.axhline(b, color="white", lw=2.2)
     for y, name in ((1, "Adults"), (5.5, "DxD"), (11.5, "DxB"), (17.5, "BxB")):
-        ax.text(5.62, y, name, rotation=270, va="center", ha="left", fontsize=6.4, clip_on=False,
-                fontweight="bold", color={"Adults": "#555555", "DxD": S.DAIRY,
-                                          "DxB": "#2C7FB8", "BxB": "#B36B00"}[name])
-    ax.tick_params(length=0)
+        ax.text(5.65, y, name, rotation=270, va="center", ha="left", fontsize=6.2, clip_on=False,
+                color="#555555")
     for s in ax.spines.values():
         s.set_visible(False)
-    cax = ax.inset_axes([0.0, -0.045, 1.0, 0.016])
-    cb = fig.colorbar(im, cax=cax, orientation="horizontal", ticks=[0, 1, 5, 10, 20, 30, 40])
-    cb.set_label("% of all cattle in the type (square-root scale)", fontsize=6.2)
+    cax = ax.inset_axes([0.0, -0.05, 0.6, 0.016])
+    cb = fig.colorbar(im, cax=cax, orientation="horizontal", extend="max", ticks=[0, 4, 8, 12])
+    cb.set_label("% of all cattle in the type", fontsize=6.0, labelpad=2)
     cb.ax.tick_params(labelsize=5.8, length=2)
-    cb.outline.set_linewidth(0.4)
-    ax.annotate("Type\nEDs\n% of all cattle", xy=(-0.5, -0.5), xytext=(-4, 3.5),
-                textcoords="offset points", ha="right", va="bottom", fontsize=5.8,
-                color="#555555", fontweight="bold", annotation_clip=False)
+    cb.outline.set_linewidth(0.3)
 
 
 def main():
@@ -147,27 +125,25 @@ def main():
     t4 = table4(d25)
     H = heat(d25)
     S.TAB.mkdir(parents=True, exist_ok=True)
-    t4.round(2).to_csv(S.TAB / "T4_cattle_system_types_2025.csv")
+    t4.round(1).to_csv(S.TAB / "T4_cattle_system_types_2025.csv")
+    H.round(2).set_axis([lab for lab, _, _ in S.cohorts21()], axis=0).to_csv(
+        S.TAB / "S_cattle_type_cohort_shares_2025.csv")
     d20 = typed(2020)
     both = d25[["CSOED", "TYPE"]].merge(d20[["CSOED", "TYPE"]], on="CSOED", suffixes=("_2025", "_2020"))
     both = both.dropna()
-    sens = pd.crosstab(both.TYPE_2020, both.TYPE_2025).reindex(index=S.TYPE_ORDER, columns=S.TYPE_ORDER)
-    sens.to_csv(S.TAB / "S_cattle_types_2020_2025_crosstab.csv")
-    agree = 100 * (both.TYPE_2020 == both.TYPE_2025).mean()
+    pd.crosstab(both.TYPE_2020, both.TYPE_2025).reindex(index=S.TYPE_ORDER, columns=S.TYPE_ORDER).to_csv(
+        S.TAB / "S_cattle_types_2020_2025_crosstab.csv")
     print(t4.round(1).to_string())
-    print(f"same type 2020 and 2025 (fixed thresholds): {agree:.1f}% of {len(both):,} EDs")
+    print(f"same type 2020 and 2025: {100 * (both.TYPE_2020 == both.TYPE_2025).mean():.1f}% of {len(both):,} EDs")
 
-    fig = plt.figure(figsize=(7.4, 5.8))
-    gs = fig.add_gridspec(1, 2, width_ratios=[1, 1.05], wspace=0.32)
+    fig = plt.figure(figsize=(7.4, 5.4))
+    gs = fig.add_gridspec(1, 2, width_ratios=[1, 0.95], wspace=0.30)
     panel_map(fig.add_subplot(gs[0, 0]), d25)
-    panel_heat(fig.add_subplot(gs[0, 1]), fig, H, t4)
-    fig.text(0.01, 0.005, "Below threshold: < 10 adult cows or < 20 followers. All types contain the complete "
-             "21-cohort population; sex and 2+ year fractions follow county age-sex margins.",
-             fontsize=5.6, color="#555555", va="bottom")
-    fig.subplots_adjust(left=0.02, right=0.92, top=0.86, bottom=0.17)
-    for x, t in ((0.01, "a   Cattle-system types across EDs, 2025"),
-                 (0.47, "b   Complete 21-cohort composition of each type")):
-        fig.text(x, 0.975, t, fontsize=8.5, fontweight="bold", va="top")
+    panel_heat(fig.add_subplot(gs[0, 1]), fig, H)
+    fig.subplots_adjust(left=0.01, right=0.94, top=0.88, bottom=0.10)
+    for x, t in ((0.01, "a   Six cattle-system types across EDs"),
+                 (0.45, "b   21-cohort fingerprint of each type")):
+        fig.text(x, 0.985, t, fontsize=8.5, fontweight="bold", va="top")
     S.save(fig, "Fig3_cattle_system_types")
 
 
