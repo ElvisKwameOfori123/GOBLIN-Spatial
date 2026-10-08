@@ -170,3 +170,42 @@ def cattle_type(df: pd.DataFrame) -> pd.Series:
     f = np.where(df.FOLLOWER_TO_ADULT_RATIO > FOLLOWER_CUT, "higher-follower", "lower-follower")
     t = pd.Series([f"{x}, {y}" for x, y in zip(b, f)], index=df.index)
     return t.where(df.ELIGIBLE)
+
+
+# ---- AgriSyn-style map helpers: Ireland fills the panel, narrow vertical key ------------
+def fit_ireland(ax, pad: float = 0.01, right: float = 0.0) -> None:
+    """Tight extent on the island so Ireland fills the panel; no frame, no axes.
+    right: extra blank width east of the island (fraction of its width) to hold a key."""
+    _, _, land = land_and_counties()
+    x0, y0, x1, y1 = land.total_bounds
+    dx, dy = (x1 - x0) * pad, (y1 - y0) * pad
+    ax.set_xlim(x0 - dx, x1 + dx + (x1 - x0) * right)
+    ax.set_ylim(y0 - dy, y1 + dy)
+    ax.set_aspect("equal")
+    ax.set_axis_off()
+    ax.set_xlabel("")
+    ax.set_ylabel("")
+
+
+def vertical_key(ax, colours, labels, title: str = "", where=(0.86, 0.06, 0.045, 0.42),
+                 fontsize: float = 5.6):
+    """Narrow stacked colour key beside the map (classes bottom to top). labels: one per class."""
+    import matplotlib.pyplot as plt
+    k = ax.inset_axes(list(where))
+    n = len(colours)
+    for i, c in enumerate(colours):
+        k.add_patch(plt.Rectangle((0, i), 1, 1, facecolor=c, edgecolor="white", lw=0.4))
+        k.text(1.25, i + 0.5, labels[i], va="center", ha="left", fontsize=fontsize, color=TEXT)
+    k.set_xlim(0, 1); k.set_ylim(0, n)
+    k.axis("off")
+    if title:
+        k.text(0, n + 0.25, title, va="bottom", ha="left", fontsize=fontsize, color="#555555")
+    return k
+
+
+def class_labels(breaks, fmt=lambda v: f"{v:g}"):
+    """Labels for classes defined by inner breaks: '< b0', 'b0–b1', ..., '≥ bn'."""
+    out = [f"< {fmt(breaks[0])}"]
+    out += [f"{fmt(a)}–{fmt(b)}" for a, b in zip(breaks[:-1], breaks[1:])]
+    out.append(f"≥ {fmt(breaks[-1])}")
+    return out

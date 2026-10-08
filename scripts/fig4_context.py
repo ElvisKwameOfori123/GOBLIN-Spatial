@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 """Figure 4 (Section 3.4). The agricultural context of local cattle systems.
 
-a  Standard Output per farmed ha across EDs, 2025 (single context map).
+a  Three compact ED maps (AgriSyn map style), 2025: sheep per farmed ha, cereal share of farmed
+   area and Standard Output per farmed ha.
 b  Context profile of the six cattle-system types of Figure 3. For each context the type's
    pooled value (ratio of type totals) is expressed relative to the same pooled value for all
    eligible EDs (= 100), on a logarithmic axis:
@@ -28,8 +29,14 @@ from matplotlib.ticker import FixedLocator, NullLocator
 import paper1_style as S
 
 MIN_HA = 50
-SO_BREAKS = [1000, 1500, 2000, 2500, 3000]
-SO_COLOURS = ["#F7F7F7", "#D9D9D9", "#BDBDBD", "#969696", "#636363", "#303030"]
+MAPS = [  # column, title, inner breaks, colours (low to high), label format, key title
+    ("SHEEP_PER_FARMED_HA", "Sheep per farmed ha", [0.1, 0.5, 1, 2, 4],
+     ["#F7FCF5", "#D3EECD", "#A1D99B", "#5DB96B", "#238B45", "#00592A"], "{:g}", "head/ha"),
+    ("CEREAL_SHARE_FARMED_PCT", "Cereal share of farmed area", [1, 2.5, 5, 10, 25],
+     ["#FBF8EF", "#EFE3C2", "#DCC48C", "#C2A15A", "#9C7A2F", "#6B5214"], "{:g}", "%"),
+    ("SO_PER_FARMED_HA", "Standard Output per farmed ha", [1000, 1500, 2000, 2500, 3000],
+     ["#F7F7F7", "#D9D9D9", "#BDBDBD", "#969696", "#636363", "#303030"], "k", "€ per ha"),
+]
 ROWS = ["Sheep per farmed ha", "Cereal share of farmed area", "Average holding size (2020)",
         "Standard Output per farmed ha", "Average holder age (2020)"]
 
@@ -69,26 +76,19 @@ def index_table(d: pd.DataFrame) -> pd.DataFrame:
     return out, idx
 
 
-def panel_map(ax, d):
-    eds = S.model_eds()
-    g = eds.merge(d[["CSOED", "SO_PER_FARMED_HA", "AREA_FARMED"]], on="CSOED", how="left",
-                  validate="one_to_one")
+def panel_map(ax, eds, d, col, title, breaks, colours, fmt, key_title):
+    g = eds.merge(d[["CSOED", col, "AREA_FARMED"]], on="CSOED", how="left", validate="one_to_one")
     _, county, land = S.land_and_counties()
     land.plot(ax=ax, color=S.GREY_LAND, edgecolor="none")
-    ok = g.SO_PER_FARMED_HA.notna() & (g.AREA_FARMED >= MIN_HA)
-    cls = np.digitize(g.loc[ok, "SO_PER_FARMED_HA"], SO_BREAKS)
-    g.loc[ok].plot(ax=ax, color=[SO_COLOURS[i] for i in cls], edgecolor="none")
-    county.boundary.plot(ax=ax, color="#9E9E9E", lw=0.25)
-    ax.set_axis_off(); ax.set_aspect("equal")
-    ax.set_xlabel(""); ax.set_ylabel("")
-    cax = ax.inset_axes([0.12, -0.03, 0.76, 0.03])
-    cax.imshow(np.arange(6)[None, :], cmap=ListedColormap(SO_COLOURS), aspect="auto", extent=(0, 6, 0, 1))
-    cax.set_yticks([]); cax.set_xticks(range(1, 6))
-    cax.set_xticklabels([f"{b / 1000:g}" for b in SO_BREAKS], fontsize=5.8)
-    cax.tick_params(length=1.5, width=0.4, pad=1)
-    for s in cax.spines.values():
-        s.set_linewidth(0.3)
-    cax.set_xlabel("€ thousand per farmed ha", fontsize=5.9, labelpad=1.5)
+    ok = g[col].notna() & (g.AREA_FARMED >= MIN_HA)
+    cls = np.digitize(g.loc[ok, col], breaks)
+    g.loc[ok].plot(ax=ax, color=[colours[i] for i in cls], edgecolor="none")
+    county.boundary.plot(ax=ax, color="#A6A6A6", lw=0.25)
+    S.fit_ireland(ax, right=0.42)
+    ax.set_title(title, fontsize=7.0, loc="left", pad=2, color=S.TEXT)
+    f = (lambda v: f"{v / 1000:g}k") if fmt == "k" else (lambda v: f"{v:g}")
+    S.vertical_key(ax, colours, S.class_labels(breaks, f), title=key_title,
+                   where=(0.74, 0.05, 0.05, 0.40))
 
 
 def panel_profile(ax, idx: pd.DataFrame):
@@ -128,16 +128,15 @@ def main():
     table, idx = index_table(d)
     table.round(2).to_csv(S.TAB / "S_context_index_by_type_2025.csv")
     print(table.round(2).to_string())
-    fig = plt.figure(figsize=(7.4, 3.9))
-    gs = fig.add_gridspec(1, 2, width_ratios=[0.78, 1.22], wspace=0.06, left=0.0, right=0.975,
-                          top=0.86, bottom=0.14)
-    panel_map(fig.add_subplot(gs[0]), d)
-    axp = fig.add_subplot(gs[1])
-    panel_profile(axp, idx)
-    pos = axp.get_position()
-    axp.set_position([pos.x0 + 0.17, pos.y0, pos.width - 0.17, pos.height])
-    fig.text(0.01, 0.975, "a   Agricultural production context, 2025", fontsize=8.5, fontweight="bold", va="top")
-    fig.text(0.42, 0.975, "b   Contexts of the six cattle-system types", fontsize=8.5, fontweight="bold",
+    eds = S.model_eds()
+    fig = plt.figure(figsize=(7.4, 6.0))
+    top = fig.add_gridspec(1, 3, wspace=0.02, left=0.005, right=0.99, top=0.955, bottom=0.45)
+    for i, (col, title, br, colours, fmt, kt) in enumerate(MAPS):
+        panel_map(fig.add_subplot(top[i]), eds, d, col, title, br, colours, fmt, kt)
+    low = fig.add_gridspec(1, 1, left=0.26, right=0.975, top=0.33, bottom=0.085)
+    panel_profile(fig.add_subplot(low[0]), idx)
+    fig.text(0.01, 0.985, "a   Agricultural geography, 2025", fontsize=8.5, fontweight="bold", va="top")
+    fig.text(0.01, 0.415, "b   Contexts of the six cattle-system types", fontsize=8.5, fontweight="bold",
              va="top")
     S.save(fig, "Fig4_context")
 

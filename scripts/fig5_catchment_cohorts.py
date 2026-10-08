@@ -1,30 +1,21 @@
 #!/usr/bin/env python
-"""Figure 5 (Section 3.5). One catchment at ED resolution: what the 21-cohort reconstruction adds.
+"""Figure 5 (Section 3.5). Catchment expression and within-catchment heterogeneity.
 
-Default catchment: 25C Lower Shannon (EPA WFD), chosen because all six cattle-system types
-of Figure 3 occur in it with at least six EDs each, and the dairy share of adult cows spans
-roughly 5% to 91% across its EDs (P10 to P90).
+Map style follows AgriSyn: Ireland (or the catchment) fills the panel, narrow vertical key
+beside it, no frames, grids or north arrows.
 
-a  EDs inside the catchment coloured by cattle-system type (types and colours as in Fig. 3),
-   with scale bar and Ireland locator (paper-wide map style: no grid, no north arrow).
-   Four contrasting EDs (A-D) are marked.
-b-e  The same EDs for followers per adult cow, under-1 share of followers, DxB share and
-   BxB share of followers, each with the catchment aggregate.
-f  Complete 21-cohort structure of EDs A-D and of the catchment aggregate: a whole-herd bar
-   (adult cohorts and followers by origin) above a sex-by-age pyramid of the 18 follower
-   cohorts (% of followers).
+a  The 46 EPA WFD catchments coloured by the cattle-system type their 2025 aggregate falls into
+   (thresholds of Figure 3 applied to catchment totals). The selected catchment is outlined.
+b  The selected catchment (default 25C Lower Shannon) at ED resolution: each ED coloured by its
+   own type; four contrasting EDs (A-D) marked. EDs count as members when >= 50% of their area
+   lies inside the EPA boundary.
+c  Complete 21-cohort structure of EDs A-D and of the catchment aggregate.
 
-An ED belongs to the catchment when at least half of its area lies inside the EPA boundary;
-EDs mostly outside are drawn in grey. ED values are whole-ED 2025 GOBLIN-Spatial values.
-
-Inputs: data/inputs/spatial/WFD_Catchments_Frozen.gpkg, ED_Boundaries_Frozen.gpkg (via
-        paper1_style), reporting/report_data/historical/livestock_signature.csv and
-        wfd_catchment_year.csv.
 Writes: reporting/paper1/figures/Fig5_catchment_<ID>.{png,pdf}
         reporting/paper1/tables/S_catchment_<ID>_ed_cohorts_2025.csv
 Run from the repository root:
-    python scripts/fig6_catchment_cohorts.py              # 25C Lower Shannon
-    python scripts/fig6_catchment_cohorts.py --catchment 18
+    python scripts/fig5_catchment_cohorts.py              # 25C Lower Shannon
+    python scripts/fig5_catchment_cohorts.py --catchment 18
 """
 from __future__ import annotations
 
@@ -324,6 +315,76 @@ def panel_cohorts(fig, spec, picks, agg, cid):
     return axes
 
 
+# ---------------------------------------------------------------- AgriSyn-style panels
+def catchment_types(w: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    wy = pd.read_csv(S.H / "wfd_catchment_year.csv", dtype={"WFD_CATCHMENT_ID": str})
+    wy = wy[wy.YEAR == S.YEAR].copy()
+    wy["ID"] = wy.WFD_CATCHMENT_ID.map(_normalise_wfd_id)
+    wy["ELIGIBLE"] = True
+    wy["TYPE"] = S.cattle_type(wy)
+    g = w.merge(wy[["ID", "TYPE"]], on="ID", how="left", validate="one_to_one")
+    if g.TYPE.isna().any():
+        raise ValueError("catchment without aggregate type")
+    return g
+
+
+def panel_national(ax, w, cid):
+    _, _, land = S.land_and_counties()
+    g = catchment_types(w)
+    land.plot(ax=ax, color=S.GREY_LAND, edgecolor="none")
+    for t in S.TYPE_ORDER:
+        part = g[g.TYPE == t]
+        if len(part):
+            part.plot(ax=ax, color=S.TYPE_COLOURS[t], edgecolor="white", lw=0.5)
+    g[g.ID == cid].boundary.plot(ax=ax, color="black", lw=1.2)
+    S.fit_ireland(ax, right=0.40)
+    counts = g.TYPE.value_counts()
+    S.vertical_key(ax, [S.TYPE_COLOURS[t] for t in S.TYPE_ORDER][::-1],
+                   [f"{s} ({counts.get(t, 0)})" for s, t in zip(S.TYPE_SHORT, S.TYPE_ORDER)][::-1],
+                   title="catchments", where=(0.74, 0.05, 0.05, 0.42))
+    p = g[g.ID == cid].geometry.iloc[0].centroid
+    ax.annotate(cid, xy=(p.x, p.y), xytext=(p.x - 75000, p.y + 40000), fontsize=6.4, fontweight="bold",
+                arrowprops=dict(arrowstyle="-", color="black", lw=0.6), color=S.TEXT)
+    return g
+
+
+def panel_zoom(ax, w, target, inside, edge, picks, agg, cid, name):
+    _, _, land = S.land_and_counties()
+    tx0, ty0, tx1, ty1 = target.total_bounds
+    pad = (tx1 - tx0) * 0.03
+    land.plot(ax=ax, color=S.GREY_LAND, edgecolor="none", zorder=0)
+    w.boundary.plot(ax=ax, color="white", lw=0.8, zorder=1)
+    edge.plot(ax=ax, color=OUTSIDE, edgecolor="white", lw=0.3, zorder=2)
+    for t in S.TYPE_ORDER:
+        part = inside[inside.TYPE == t]
+        if len(part):
+            part.plot(ax=ax, color=S.TYPE_COLOURS[t], edgecolor="white", lw=0.3, zorder=2)
+    nd = inside[inside.TYPE.isna()]
+    if len(nd):
+        nd.plot(ax=ax, facecolor=S.NODATA, edgecolor="#7F7F7F", hatch=S.NODATA_HATCH, lw=0.2, zorder=2)
+    target.boundary.plot(ax=ax, color="black", lw=1.1, zorder=3)
+    for _, r in picks.iterrows():
+        q = r.geometry.representative_point()
+        ax.text(q.x, q.y, r.LETTER, ha="center", va="center", fontsize=6.6, fontweight="bold", zorder=9,
+                bbox=dict(boxstyle="circle,pad=0.18", fc="white", ec="black", lw=0.6))
+    width = tx1 - tx0
+    ax.set_xlim(tx0 - pad, tx1 + pad + width * 0.62)
+    ax.set_ylim(ty0 - pad, ty1 + pad)
+    ax.set_aspect("equal"); ax.set_axis_off()
+    ax.set_xlabel(""); ax.set_ylabel("")
+    scalebar(ax)
+    counts = inside.TYPE.value_counts()
+    S.vertical_key(ax, ([S.TYPE_COLOURS[t] for t in S.TYPE_ORDER] + [OUTSIDE])[::-1],
+                   ([f"{s} ({counts.get(t, 0)})" for s, t in zip(S.TYPE_SHORT, S.TYPE_ORDER)]
+                    + ["ED mostly outside"])[::-1], title="EDs", where=(0.66, 0.30, 0.04, 0.56))
+    at = agg_type(agg)
+    ax.text(0.66, 0.25, f"Catchment aggregate reads as\n{S.TYPE_SHORT[S.TYPE_ORDER.index(at)]}; "
+            f"its {len(inside)} EDs span\n{counts.size} types (dairy share\n"
+            f"P10–P90 {inside.DAIRY_SHARE_ADULT_PCT.quantile(0.1):.0f}–"
+            f"{inside.DAIRY_SHARE_ADULT_PCT.quantile(0.9):.0f}%)",
+            transform=ax.transAxes, fontsize=5.8, va="top", ha="left", color=S.TEXT, linespacing=1.25)
+
+
 # ---------------------------------------------------------------- main
 def main():
     ap = argparse.ArgumentParser()
@@ -344,35 +405,24 @@ def main():
     tab.to_csv(S.TAB / f"S_catchment_{cid}_ed_cohorts_2025.csv", index=False)
     print(tab[["LETTER", "ED_NAME", "TYPE", "TOTAL_CATTLE"]].to_string(index=False))
 
-    tx0, ty0, tx1, ty1 = target.total_bounds
-    pad = max(tx1 - tx0, ty1 - ty0) * 0.06
-    bounds = (tx0 - pad, ty0 - pad, tx1 + pad, ty1 + pad)
-
-    fig = plt.figure(figsize=(7.4, 9.6))
-    # explicit bands so the equal-aspect maps do not leave empty space
-    top = fig.add_gridspec(1, 2, width_ratios=[1.55, 1], wspace=0.06, left=0.075, right=0.985,
-                           top=0.955, bottom=0.655)
-    panel_main(fig.add_subplot(top[0]), fig.add_subplot(top[1]), land, w, target, name, cid,
-               inside, edge, picks, agg, bounds)
-    mid = fig.add_gridspec(1, 4, wspace=0.08, left=0.02, right=0.985, top=0.605, bottom=0.445)
-    for i, (col, title, br, cm, fmt) in enumerate(SMALL):
-        panel_small(fig, fig.add_subplot(mid[i]), land, w, target, inside, edge, agg, bounds,
-                    col, title, br, cm, fmt, "bcde"[i])
-    low = fig.add_gridspec(1, 1, left=0.075, right=0.985, top=0.335, bottom=0.085)
-    cohort_axes = panel_cohorts(fig, low[0], picks, agg, cid)
-    y = 0.395
-    fig.text(0.01, y, "f   All 21 cohorts in four contrasting EDs and in the catchment aggregate",
-             fontsize=8.5, fontweight="bold")
-    fig.text(0.01, y - 0.017, "      Bar: adult cohorts and followers by origin (% of all cattle). "
-             "Pyramid: the 18 follower cohorts by origin, age and sex (% of followers).",
-             fontsize=6.0, color="#555555")
+    fig = plt.figure(figsize=(7.4, 7.1))
+    top = fig.add_gridspec(1, 2, width_ratios=[0.78, 1.22], wspace=0.04, left=0.005, right=0.99,
+                           top=0.955, bottom=0.515)
+    panel_national(fig.add_subplot(top[0]), w, cid)
+    panel_zoom(fig.add_subplot(top[1]), w, target, inside, edge, picks, agg, cid, name)
+    low = fig.add_gridspec(1, 1, left=0.075, right=0.985, top=0.39, bottom=0.10)
+    panel_cohorts(fig, low[0], picks, agg, cid)
+    fig.text(0.01, 0.985, "a   Catchment aggregates, 2025", fontsize=8.5, fontweight="bold", va="top")
+    fig.text(0.40, 0.985, f"b   {cid} {name}: the same catchment by ED", fontsize=8.5,
+             fontweight="bold", va="top")
+    fig.text(0.01, 0.478, "c   All 21 cohorts in four contrasting EDs and in the catchment aggregate",
+             fontsize=8.5, fontweight="bold", va="top")
+    fig.text(0.01, 0.456, "Bar: adult cohorts and followers by origin (% of all cattle). Pyramid: 18 "
+             "follower cohorts by origin, age and sex (% of followers; female left, male right).",
+             fontsize=5.9, color="#555555", va="top")
     hs = [Patch(facecolor=c, edgecolor="white", hatch=h, label=lab) for lab, _, c, h in HERD]
-    fig.legend(handles=hs, loc="lower center", bbox_to_anchor=(0.5, 0.022), ncol=6, frameon=False,
+    fig.legend(handles=hs, loc="lower center", bbox_to_anchor=(0.5, 0.005), ncol=6, frameon=False,
                fontsize=5.8, handlelength=1.2, columnspacing=1.0)
-    fig.text(0.01, 0.004, "EDs with ≥ 50% of their area inside the EPA WFD catchment boundary "
-             "(WFD_Catchments_Frozen.gpkg); whole-ED 2025 values.\nPyramid: female left (solid), "
-             "male right (light).",
-             fontsize=5.4, color="#555555", va="bottom")
     S.save(fig, f"Fig5_catchment_{cid}")
 
 
