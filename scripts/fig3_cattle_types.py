@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Figure 3 (Section 3.3). Cattle-system differentiation and observed restructuring.
+"""Figure 3 (Section 3.3). Cattle-system differentiation across EDs.
 
 Typology (fixed thresholds; eligible EDs have >= 10 adult cows and >= 20 followers):
     breeding orientation  Suckler: dairy share of adult cows < 40%; Mixed: 40-60%; Dairy: > 60%
@@ -12,8 +12,6 @@ c  Complete 21-cohort profile of each type (columns: suckler, mixed, dairy; rows
    higher follower intensity), one common x-axis for all six profiles:
      --profile-scale cap   (version A) axis capped at 14%; bars beyond carry a break and value
      --profile-scale full  (version B) full common axis; adult cows drawn as outlined bars
-d  Observed 2010-2020 census change: cattle-number change against change in the dairy share
-   of adult cows (panel a of figS_stable_herd_restructuring.py).
 
 Values in b and c are cohort head summed over the type's EDs divided by total cattle of
 those EDs.
@@ -33,7 +31,6 @@ import pandas as pd
 from matplotlib.patches import Patch, Rectangle
 
 import paper1_style as S
-import figS_stable_herd_restructuring as R
 
 XCAP = 14.0
 GROUPS = [  # (label, column or origin, colour, hatch, text colour on bar)
@@ -252,28 +249,22 @@ def main():
         S.TAB / "S_cattle_types_2020_2025_crosstab.csv")
     print(t4.round(1).to_string())
 
-    fig = plt.figure(figsize=(7.4, 9.8))
+    fig = plt.figure(figsize=(7.4, 7.6))
     top = fig.add_gridspec(1, 2, width_ratios=[1, 1], wspace=0.10, left=0.0, right=0.975,
-                           top=0.925, bottom=0.645)
+                           top=0.905, bottom=0.545)
     axm = fig.add_subplot(top[0])
     panel_map(axm, d25)
     axb = fig.add_subplot(top[1])
     panel_bars(axb, G)
-    mid = fig.add_gridspec(1, 1, left=0.10, right=0.975, top=0.578, bottom=0.30)
+    mid = fig.add_gridspec(1, 1, left=0.10, right=0.975, top=0.455, bottom=0.06)
     axes_c = panel_profiles(fig, mid[0], P, mode)
-    low = fig.add_gridspec(1, 1, left=0.10, right=0.975, top=0.225, bottom=0.045)
-    axd = fig.add_subplot(low[0])
-    R.panel_a(axd, R.load(), letter="d", title="Stable cattle numbers, changing systems (2010–2020 censuses)")
-    axd.title.set_x(-0.11)
-    axd.set_ylabel("Change in dairy share\nof adult cows (pp)")
-
     fig.text(0.01, 0.985, "a   Cattle-system types across EDs, 2025", fontsize=8.5, fontweight="bold", va="top")
     fig.text(0.50, 0.985, "b   Whole-herd composition of the six types", fontsize=8.5,
              fontweight="bold", va="top")
-    fig.text(0.01, 0.622, "c   Complete 21-cohort profiles", fontsize=8.5, fontweight="bold", va="top")
+    fig.text(0.01, 0.51, "c   Complete 21-cohort profiles", fontsize=8.5, fontweight="bold", va="top")
     note = ("Female solid; male light. Values > 14% labelled." if mode == "cap"
             else "Female solid; male light. Adult cows outlined.")
-    fig.text(0.01, 0.604, note, fontsize=5.9, color="#555555", va="top")
+    fig.text(0.01, 0.487, note, fontsize=5.9, color="#555555", va="top")
     S.save(fig, "Fig3_cattle_systems" + ("" if mode == "cap" else "_B"))
 
 
