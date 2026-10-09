@@ -8,6 +8,15 @@ Model EDs (2,857) are matched with the release's own selector.
 """
 from __future__ import annotations
 
+# -----------------------------------------------------------------------------
+# PAPER 1 REPORTING CODE
+# This script is a reporting/visualisation layer only. It does not modify the
+# GOBLIN-Spatial reconstruction or any frozen model inputs. All quantities are
+# read from the release tables and are transformed only for plotting or tabular
+# reporting. Comments below distinguish observed/control data from reconstructed
+# quantities where that distinction matters for interpretation.
+# -----------------------------------------------------------------------------
+
 from functools import lru_cache
 from pathlib import Path
 
@@ -17,6 +26,8 @@ import numpy as np
 import pandas as pd
 import shapely
 
+# Repository-relative locations. These helpers assume scripts are run from the
+# repository root so the reporting layer remains reproducible and path-stable.
 H = Path("reporting/report_data/historical")
 FIG = Path("reporting/paper1/figures")
 TAB = Path("reporting/paper1/tables")
@@ -24,21 +35,24 @@ CRS = 2157
 YEAR = 2025
 MIN_COWS, MIN_FOLLOWERS = 10, 20
 
-# Okabe-Ito
-DAIRY = "#0072B2"      # dairy cows, DxD
-DXB = "#56B4E9"        # dairy dam x beef sire
-SUCKLER = "#E69F00"    # suckler cows, BxB
+# Okabe-Ito-based semantic palette used consistently across all Paper 1 figures.
+# Blue = dairy/DxD, light blue = DxB, orange = suckler/BxB, green = sheep.
+# Type colours below preserve breeding orientation by hue and follower intensity
+# by lightness.
+DAIRY = "#0072B2"
+DXB = "#56B4E9"
+SUCKLER = "#E69F00"
 SHEEP = "#009E73"
 BULL = "#999999"
 DARK_DAIRY = "#004C7A"
 DARK_SUCKLER = "#8C4A00"
 GREY_LAND = "#F2F2F2"
-NODATA = "#FFFFFF"        # drawn with NODATA_HATCH so it differs from non-model land
+NODATA = "#FFFFFF"
 NODATA_HATCH = "xxxxx"
 TEXT = "#333333"
 
 ORIGINS = ("DxD", "DxB", "BxB")
-FOLLOWER_KEYS = [  # (age label, female column, male column)
+FOLLOWER_KEYS = [
     ("<1 yr", "{o}_calves_f", "{o}_calves_m"),
     ("1-2 yr", "{o}_heifers_less_2_yr", "{o}_steers_less_2_yr"),
     ("2+ yr", "{o}_heifers_more_2_yr", "{o}_steers_more_2_yr"),
@@ -58,6 +72,7 @@ def cohorts21() -> list[tuple[str, str, str]]:
 
 
 def style() -> None:
+    """Apply one publication style to every Paper 1 figure."""
     mpl.rcParams.update({
         "font.family": "sans-serif", "font.sans-serif": ["Arial", "DejaVu Sans"],
         "font.size": 7.5, "axes.titlesize": 8.5, "axes.labelsize": 7.5,
@@ -69,10 +84,12 @@ def style() -> None:
 
 
 def title(ax, letter: str, text: str, **kw) -> None:
+    """Apply the shared left-aligned panel-title convention."""
     ax.set_title(f"{letter}   {text}", loc="left", fontweight="bold", **kw)
 
 
 def save(fig, name: str, out: Path | None = None) -> Path:
+    """Save matched high-resolution PNG and vector PDF outputs."""
     path = (out or FIG / name)
     path.parent.mkdir(parents=True, exist_ok=True)
     for ext in ("png", "pdf"):
@@ -83,6 +100,7 @@ def save(fig, name: str, out: Path | None = None) -> Path:
 
 
 def _simplify(gdf: gpd.GeoDataFrame, tol: float) -> gpd.GeoDataFrame:
+    """Simplify plotting geometry only; model accounting never uses simplified shapes."""
     out = gdf.copy()
     if hasattr(shapely, "coverage_simplify"):
         out["geometry"] = shapely.coverage_simplify(out.geometry.values, tol)
@@ -94,6 +112,7 @@ def _simplify(gdf: gpd.GeoDataFrame, tol: float) -> gpd.GeoDataFrame:
 
 @lru_cache(maxsize=1)
 def _raw_eds() -> gpd.GeoDataFrame:
+    """Read and validate the frozen CSO ED boundary file once per run."""
     raw = gpd.read_file("data/inputs/spatial/ED_Boundaries_Frozen.gpkg")
     raw["geometry"] = raw.geometry.make_valid()
     return raw
@@ -101,7 +120,7 @@ def _raw_eds() -> gpd.GeoDataFrame:
 
 @lru_cache(maxsize=1)
 def model_eds(simplify_m: float = 60) -> gpd.GeoDataFrame:
-    """2,857 model ED polygons keyed by CSOED (as in the release tables)."""
+    """Return the exact 2,857-ED model universe matched by the release selector."""
     from goblin_spatial.soil.overlay import canonical_csoed, select_baseline_ed_geometries
     keys = pd.read_csv(H / "ed_year.csv", usecols=["CSOED"]).drop_duplicates()
     keys["CSOED"] = keys.CSOED.astype(str)
@@ -118,6 +137,7 @@ def model_eds(simplify_m: float = 60) -> gpd.GeoDataFrame:
 
 @lru_cache(maxsize=1)
 def land_and_counties(simplify_m: float = 60):
+    """Return plotting layers for national land and county boundaries."""
     raw = _raw_eds()[["COUNTYNAME", "geometry"]].to_crs(CRS)
     raw = _simplify(raw, simplify_m)
     county = raw.dissolve(by="COUNTYNAME", as_index=False)
@@ -127,6 +147,7 @@ def land_and_counties(simplify_m: float = 60):
 
 @lru_cache(maxsize=1)
 def wfd(simplify_m: float = 120) -> gpd.GeoDataFrame:
+    """Return the 46 frozen WFD catchment geometries for plotting."""
     from goblin_spatial.aggregation.catchments import _normalise_wfd_id
     g = gpd.read_file("data/inputs/spatial/WFD_Catchments_Frozen.gpkg").to_crs(CRS)
     g["ID"] = g.CATCHMENTI.map(_normalise_wfd_id)
@@ -139,6 +160,7 @@ def wfd(simplify_m: float = 120) -> gpd.GeoDataFrame:
 
 
 def ed_signatures(year: int = YEAR) -> pd.DataFrame:
+    """Load ED livestock signatures and attach the common biological eligibility flag."""
     s = pd.read_csv(H / "livestock_signature.csv")
     s = s[(s.GEOGRAPHY_TYPE == "ED") & (s.YEAR == year)].copy()
     s["CSOED"] = s.GEOGRAPHY_ID.astype(str)
@@ -153,9 +175,8 @@ TYPE_ORDER = ["Suckler, lower-follower", "Suckler, higher-follower",
               "Mixed, lower-follower", "Mixed, higher-follower",
               "Dairy, lower-follower", "Dairy, higher-follower"]
 TYPE_SHORT = ["S-L", "S-H", "M-L", "M-H", "D-L", "D-H"]
-TYPE_COLOURS = {  # orange = suckler, lilac = mixed, blue = dairy; min CVD deltaE >= 14
-    # (deutan, protan, tritan simulated with colorspacious, incl. hatched white no-data)
-    "Suckler, lower-follower": "#F3C77A",   # light = lower-follower, dark = higher
+TYPE_COLOURS = {
+    "Suckler, lower-follower": "#F3C77A",
     "Suckler, higher-follower": "#B35806",
     "Mixed, lower-follower": "#B8A2D4",
     "Mixed, higher-follower": "#8A6BB0",
@@ -165,6 +186,12 @@ TYPE_COLOURS = {  # orange = suckler, lilac = mixed, blue = dairy; min CVD delta
 
 
 def cattle_type(df: pd.DataFrame) -> pd.Series:
+    """Apply the fixed two-dimensional cattle-system classification.
+
+    Breeding orientation: suckler <40%, mixed 40-60%, dairy >60% dairy share
+    of adult cows. Follower intensity: lower <=1.9, higher >1.9 followers/cow.
+    Ineligible EDs are returned as missing rather than forced into a class.
+    """
     b = np.select([df.DAIRY_SHARE_ADULT_PCT < DAIRY_CUTS[0],
                    df.DAIRY_SHARE_ADULT_PCT <= DAIRY_CUTS[1]], ["Suckler", "Mixed"], "Dairy")
     f = np.where(df.FOLLOWER_TO_ADULT_RATIO > FOLLOWER_CUT, "higher-follower", "lower-follower")
@@ -172,10 +199,9 @@ def cattle_type(df: pd.DataFrame) -> pd.Series:
     return t.where(df.ELIGIBLE)
 
 
-# ---- AgriSyn-style map helpers: Ireland fills the panel, narrow vertical key ------------
+# ---- compact map helpers ------------------------------------------------------
 def fit_ireland(ax, pad: float = 0.01, right: float = 0.0) -> None:
-    """Tight extent on the island so Ireland fills the panel; no frame, no axes.
-    right: extra blank width east of the island (fraction of its width) to hold a key."""
+    """Fit Ireland tightly in a map panel while reserving optional legend space."""
     _, _, land = land_and_counties()
     x0, y0, x1, y1 = land.total_bounds
     dx, dy = (x1 - x0) * pad, (y1 - y0) * pad
@@ -189,7 +215,7 @@ def fit_ireland(ax, pad: float = 0.01, right: float = 0.0) -> None:
 
 def vertical_key(ax, colours, labels, title: str = "", where=(0.86, 0.06, 0.045, 0.42),
                  fontsize: float = 5.6):
-    """Narrow stacked colour key beside the map (classes bottom to top). labels: one per class."""
+    """Draw a narrow stacked colour key beside a compact map."""
     import matplotlib.pyplot as plt
     k = ax.inset_axes(list(where))
     n = len(colours)
@@ -204,7 +230,7 @@ def vertical_key(ax, colours, labels, title: str = "", where=(0.86, 0.06, 0.045,
 
 
 def class_labels(breaks, fmt=lambda v: f"{v:g}"):
-    """Labels for classes defined by inner breaks: '< b0', 'b0–b1', ..., '≥ bn'."""
+    """Convert numeric class breaks into human-readable interval labels."""
     out = [f"< {fmt(breaks[0])}"]
     out += [f"{fmt(a)}–{fmt(b)}" for a, b in zip(breaks[:-1], breaks[1:])]
     out.append(f"≥ {fmt(breaks[-1])}")
