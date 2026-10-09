@@ -86,3 +86,12 @@ jobs:
           path: reporting/report_data/historical/
           if-no-files-found: error
           retention-days: 30
+
+
+      - name: Upload clean workbook
+        uses: actions/upload-artifact@v4
+        with:
+          name: goblin-spatial-final-clean-workbook
+          path: data/processed/GOBLIN_Spatial_Final_Clean_Data_2015_2025.xlsx
+          if-no-files-found: error
+          retention-days: 30
