@@ -1,0 +1,11 @@
+feedstock,resource_group,goblin_spatial_use,methane_yield_m3_ch4_per_t_dm,dm_fraction,total_n_kg_per_t_dm,nh4_n_percent_of_total_n,p2o5_kg_per_t_dm,k2o_kg_per_t_dm,total_carbon_kg_per_t_dm,specific_heat_kwh_per_t_c
+Cattle slurry,livestock_manure,direct_candidate_requires_housing_recovery,140,0.10,40.7,75,18,40,452.38095238095235,1.0835277777777779
+Farmyard manure,livestock_manure,candidate_requires_manure_management_data,176,0.25,24,75,12.8,37.6,531.2,0.9143611111111111
+Grass,grassland,direct_candidate_from_grass_resource,306,0.25,21.5,37,8,25,428.46212700841625,0.9143611111111111
+Grass clover,grassland,scenario_or_external_grass_clover_share,306,0.25,21.5,37,8,25,428.46212700841625,0.9143611111111111
+Maize,crop,candidate_requires_crop_area_or_mass,337,0.30,14.1,37,4.6,14.6,506.3,0.8579722222222221
+Crop waste,crop_residue,candidate_requires_crop_residue_quantity,240,0.17,26,59,8,25,456.376872780283,1.0045833333333332
+Spring barley,crop,candidate_requires_crop_area_or_mass,323,0.33,18.6,37,9.9,12.2,486.815415821501,0.8241388888888889
+Wholecrop cereal silage,crop,candidate_requires_crop_area_or_mass,323,0.33,18.6,37,9.9,12.2,477.21245666564454,0.8241388888888889
+Miscanthus,energy_crop,scenario_only,200,0.91,3.9,1.5,5.2,56,480,0.17002777777777778
+Willow,energy_crop,scenario_only,200,0.89,12,2,4.8,29,485,0.19258333333333333

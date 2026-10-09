@@ -145,3 +145,14 @@ datasets:
     path: "data/inputs/spatial/WFD_Catchments_Frozen.gpkg"
     sha256: "d9b00e1732f4f6a711c7edfb9d4d3348efe8150efd60280361f217d8a2602b65"
     required: true
+
+  lcad_2026_feedstock_reference:
+    stage: "REFERENCE"
+    module: [synthesis]
+    description: "Optional agricultural feedstock characteristics extracted from LCAD 2.02 (March 2026) for transparent technical-potential calculations. Not used by the historical baseline pipeline and does not infer recoverability, adoption, transport or AD plant configuration."
+    source: "LCAD 2.02 workbook"
+    path: "data/inputs/reference/lcad_feedstock_characteristics.csv"
+    sha256: "2493add41924909f85e0daeddb6fa8bf98a2cc6d17ebedc91f0e411a9f3ab715"
+    citation: "Martinez-Arce, A., O'Flaherty, V., & Styles, D. (2026). Resources, Conservation and Recycling 231, 108907. https://doi.org/10.1016/j.resconrec.2026.108907"
+    required: false
+
