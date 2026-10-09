@@ -1,0 +1,20 @@
+category,material,dry_matter_fraction,gross_calorific_value_mj_per_kg,protein_fraction,carbon_fraction,nitrogen_fraction,phosphorus_fraction,potassium_fraction,stability_class,use_status,source_note
+Straw,Winter wheat straw,0.9155,14.4,0.045,0.4791,0.0039,0.001,0.0101,2,reference_ok,InformBio D2.1 BioRes Factors
+Straw,Spring wheat straw,0.9155,14.4,0.045,0.4682,0.0077,0.001,0.0101,2,reference_ok,InformBio D2.1 BioRes Factors
+Straw,Winter barley straw,0.879,14.7,0.038,0.4751,0.0048,0.0021,0.0138,2,reference_ok,InformBio D2.1 BioRes Factors
+Straw,Spring barley straw,0.879,14.7,0.038,0.4848,0.0056,0.0021,0.0138,2,reference_ok,InformBio D2.1 BioRes Factors
+Straw,Winter oat straw,0.918,18.09,0.036,0.4684,0.0040,0.0012,0.0147,2,reference_ok,InformBio D2.1 BioRes Factors
+Straw,Spring oat straw,0.918,18.09,0.036,0.4838,0.0041,0.0012,0.0147,2,reference_ok,InformBio D2.1 BioRes Factors
+Tillage,Maize silage,0.37,0.191,0.068,0.43965,0.0102,0.0017,0.0103,1,reference_check_energy_units,InformBio D2.1 BioRes Factors; verify GCV units/source before operational use
+Grass,Grass from grasslands which purpose is silage only,0.171,19.0033333333,0.1513333333,,0.0266666667,0.004,0.0307375,3,reference_ok,InformBio D2.1 BioRes Factors
+Grass,Grass from grasslands which purpose is intensive farming only (Season yield methodology),0.3,11,0.135,,,0.0042,0.0334,2,reference_only,InformBio D2.1 BioRes Factors; N and C unavailable
+Energy,Miscanthus,0.6,19.07,,0.4792,0.0054,,,3,reference_ok,InformBio D2.1 BioRes Factors
+Energy,Willow woody stems (including bark),0.932,18.56,,0.5019,0.001,,,3,reference_ok,InformBio D2.1 BioRes Factors
+Energy,Willow leaves,0.332,19.3933333333,0.1167,,0.2046666667,0.0017,0.0098,3,reference_check,InformBio D2.1 BioRes Factors; very high N fraction requires source verification
+Manure,Slurry - Pigs,0.873,17.84,0.151,0.434,0.036,0.0061,0.0146,1,do_not_use_for_baseline,Composition reference only; wet-basis representativeness not established
+Manure,Chicken manure,0.8075,14.51,0.4687,0.4118,0.0402,0.01729,0.024867,1,do_not_use_for_baseline,DataRefs provenance indicates chicken litter source; not generic fresh manure
+Manure,Slurry - Dairy Cattle,0.754,11.3,0.117,0.431,0.017,0.0085,0.0053,1,do_not_use_for_baseline,Same composition copied across cattle classes; verify reporting basis
+Manure,Slurry - Other cows/sucklers,0.754,11.3,0.117,0.431,0.017,0.0085,0.0053,1,do_not_use_for_baseline,Same composition copied across cattle classes; verify reporting basis
+Manure,Slurry - Bulls,0.754,11.3,0.117,0.431,0.017,0.0085,0.0053,1,do_not_use_for_baseline,Same composition copied across cattle classes; verify reporting basis
+Manure,Slurry - Cattle rearing/dry stock (0-3 years),0.754,11.3,0.117,0.431,0.017,0.0085,0.0053,1,do_not_use_for_baseline,Same composition copied across cattle classes; verify reporting basis
+Manure,Manure - Sheep,0.522,16.02,,0.406,0.021,0.018,0.006,1,do_not_use_for_baseline,Composition reference only; use independent excretion/arisings basis
