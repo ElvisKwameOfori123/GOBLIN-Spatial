@@ -19,28 +19,31 @@ Writes: reporting/paper1/figures/Fig4_context.{png,pdf}
 """
 from __future__ import annotations
 
+# -----------------------------------------------------------------------------
+# PAPER 1 REPORTING CODE
+# This script is a reporting/visualisation layer only. It does not modify the
+# GOBLIN-Spatial reconstruction or any frozen model inputs. All quantities are
+# read from the release tables and are transformed only for plotting or tabular
+# reporting. Comments below distinguish observed/control data from reconstructed
+# quantities where that distinction matters for interpretation.
+# -----------------------------------------------------------------------------
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from matplotlib.colors import ListedColormap
 from matplotlib.ticker import FixedLocator, NullLocator
 
 import paper1_style as S
 
+# Very small farmed-area denominators can create unstable per-hectare ratios, so
+# the context comparison uses the same biological eligibility plus >= 50 farmed ha.
 MIN_HA = 50
-MAPS = [  # column, title, inner breaks, colours (low to high), label format, key title
-    ("SHEEP_PER_FARMED_HA", "Sheep per farmed ha", [0.1, 0.5, 1, 2, 4],
-     ["#F7FCF5", "#D3EECD", "#A1D99B", "#5DB96B", "#238B45", "#00592A"], "{:g}", "head/ha"),
-    ("CEREAL_SHARE_FARMED_PCT", "Cereal share of farmed area", [1, 2.5, 5, 10, 25],
-     ["#FBF8EF", "#EFE3C2", "#DCC48C", "#C2A15A", "#9C7A2F", "#6B5214"], "{:g}", "%"),
-    ("SO_PER_FARMED_HA", "Standard Output per farmed ha", [1000, 1500, 2000, 2500, 3000],
-     ["#F7F7F7", "#D9D9D9", "#BDBDBD", "#969696", "#636363", "#303030"], "k", "€ per ha"),
-]
 ROWS = ["Sheep per farmed ha", "Cereal share of farmed area", "Average holding size (2020)",
         "Standard Output per farmed ha", "Average holder age (2020)"]
 
 
 def load() -> pd.DataFrame:
+    """Load 2025 ED context and attach the last observed 2020 census farm variables."""
     e = pd.read_csv(S.H / "ed_year.csv", low_memory=False)
     d = e[e.YEAR == S.YEAR].set_index("CSOED").copy()
     d20 = e[e.YEAR == 2020].set_index("CSOED")
@@ -55,6 +58,12 @@ def load() -> pd.DataFrame:
 
 
 def pooled(x: pd.DataFrame) -> pd.Series:
+    """Calculate pooled type-level context indicators from totals.
+
+    Pooled values are intentional: cereal area is zero in many EDs, so a median
+    ED cereal share would collapse to zero and would not describe the type's total
+    cereal presence. Holder age is holdings-weighted.
+    """
     h = x.AGRICULTURAL_HOLDINGS_2020
     return pd.Series({
         ROWS[0]: x.TOTAL_SHEEP.sum() / x.AREA_FARMED.sum(),
@@ -66,6 +75,7 @@ def pooled(x: pd.DataFrame) -> pd.Series:
 
 
 def index_table(d: pd.DataFrame) -> pd.DataFrame:
+    """Express each type's pooled context relative to all eligible EDs (= 100)."""
     e = d[d.TYPE.notna()]
     ref = pooled(e)
     vals = pd.DataFrame({t: pooled(x) for t, x in e.groupby("TYPE")})[S.TYPE_ORDER]
@@ -75,22 +85,12 @@ def index_table(d: pd.DataFrame) -> pd.DataFrame:
     return out, idx
 
 
-def panel_map(ax, eds, d, col, title, breaks, colours, fmt, key_title):
-    g = eds.merge(d[["CSOED", col, "AREA_FARMED"]], on="CSOED", how="left", validate="one_to_one")
-    _, county, land = S.land_and_counties()
-    land.plot(ax=ax, color=S.GREY_LAND, edgecolor="none")
-    ok = g[col].notna() & (g.AREA_FARMED >= MIN_HA)
-    cls = np.digitize(g.loc[ok, col], breaks)
-    g.loc[ok].plot(ax=ax, color=[colours[i] for i in cls], edgecolor="none")
-    county.boundary.plot(ax=ax, color="#A6A6A6", lw=0.25)
-    S.fit_ireland(ax, right=0.42)
-    ax.set_title(title, fontsize=7.0, loc="left", pad=2, color=S.TEXT)
-    f = (lambda v: f"{v / 1000:g}k") if fmt == "k" else (lambda v: f"{v:g}")
-    S.vertical_key(ax, colours, S.class_labels(breaks, f), title=key_title,
-                   where=(0.74, 0.05, 0.05, 0.40))
-
-
 def panel_profile(ax, idx: pd.DataFrame):
+    """Draw the single main Figure 4 profile on a log-relative scale.
+
+    The vertical reference at 100 is the pooled value across all eligible EDs.
+    Six coloured dots per row use the same type colours as Figure 3.
+    """
     n = len(ROWS)
     offsets = np.linspace(0.27, -0.27, len(S.TYPE_ORDER))
     for i, row in enumerate(ROWS):
@@ -122,6 +122,7 @@ def panel_profile(ax, idx: pd.DataFrame):
 
 
 def main():
+    """Build the final map-free Figure 4 and export the indexed context table."""
     S.style()
     d = load()
     table, idx = index_table(d)
