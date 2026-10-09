@@ -16,10 +16,19 @@ c  Complete 21-cohort structure of EDs A-D and of the catchment aggregate.
 Writes: reporting/paper1/figures/Fig5_catchment_<ID>.{png,pdf}
         reporting/paper1/tables/S_catchment_<ID>_ed_cohorts_2025.csv
 Run from the repository root:
-    python scripts/fig5_catchment_cohorts.py              # 25C Lower Shannon
+    python scripts/fig5_catchment_cohorts.py
     python scripts/fig5_catchment_cohorts.py --catchment 18
 """
 from __future__ import annotations
+
+# -----------------------------------------------------------------------------
+# PAPER 1 REPORTING CODE
+# This script is a reporting/visualisation layer only. It does not modify the
+# GOBLIN-Spatial reconstruction or any frozen model inputs. All quantities are
+# read from the release tables and are transformed only for plotting or tabular
+# reporting. Comments below distinguish observed/control data from reconstructed
+# quantities where that distinction matters for interpretation.
+# -----------------------------------------------------------------------------
 
 import argparse
 
@@ -35,11 +44,16 @@ import paper1_style as S
 from goblin_spatial.aggregation.catchments import _normalise_wfd_id
 
 OUTSIDE = "#DCDCDC"
-INSIDE_SHARE = 0.5        # ED area share inside the catchment to count as a member
-PICK_SHARE = 0.8          # stricter share for the four example EDs
+
+# IMPORTANT: these thresholds affect only the descriptive zoom and selection of
+# illustrative EDs. They do NOT determine catchment totals. Catchment accounting
+# comes from the release's frozen fractional ED-to-catchment area crosswalk.
+INSIDE_SHARE = 0.5
+PICK_SHARE = 0.8
 PICK_TYPES = ["Suckler, lower-follower", "Suckler, higher-follower",
               "Dairy, lower-follower", "Dairy, higher-follower"]
-SMALL = [  # column, title, breaks, colormap, format
+
+SMALL = [
     ("FOLLOWER_TO_ADULT_RATIO", "Followers per cow", [1.5, 2.0, 2.5, 3.0, 3.5], "Greys", "{:.2f}"),
     ("UNDER1_SHARE_FOLLOWERS_PCT", "Under-1 share (%)", [38, 41, 44, 47, 50], "Greys", "{:.0f}%"),
     ("DXB_SHARE_FOLLOWERS_PCT", "DxB share (%)", [26, 30, 34, 38, 42], "Blues", "{:.0f}%"),
@@ -56,7 +70,11 @@ HERD = [("Dairy cows", "dairy_cows", S.DARK_DAIRY, None),
 
 
 # ---------------------------------------------------------------- data
+# Data preparation keeps two concepts separate:
+#   1) whole-ED cattle-system attributes used to colour clipped ED pieces;
+#   2) fractional catchment aggregates read from the frozen release tables.
 def follower_cols():
+    """List the 18 follower cohort columns as origin x age x sex pairs."""
     out = []
     for o in S.ORIGINS:
         for age, f, m in S.FOLLOWER_KEYS:
@@ -65,6 +83,7 @@ def follower_cols():
 
 
 def add_origin_totals(df: pd.DataFrame) -> pd.DataFrame:
+    """Add DxD, DxB and BxB follower totals without changing cohort detail."""
     df = df.copy()
     for o in S.ORIGINS:
         df[o.upper()] = sum(df[c] for oo, _, f, m in follower_cols() if oo == o for c in (f, m))
@@ -72,6 +91,11 @@ def add_origin_totals(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def load(cid: str):
+    """Load one catchment, intersecting ED pieces and the canonical aggregate.
+
+    Geometry clipping is for display. The catchment aggregate itself is read from
+    the released fractional aggregation and is not recomputed from majority EDs.
+    """
     w = S.wfd()
     target = w[w.ID == cid]
     if target.empty:
@@ -87,6 +111,9 @@ def load(cid: str):
     clip["SHARE_IN"] = clip.geometry.area / clip.ED_AREA
     inside = clip[clip.SHARE_IN >= INSIDE_SHARE].copy()
     edge = clip[clip.SHARE_IN < INSIDE_SHARE].copy()
+
+    # Canonical WFD totals are already produced by the model's fractional
+    # ED-to-catchment crosswalk. The majority rule above is display only.
     wy = pd.read_csv(S.H / "wfd_catchment_year.csv", dtype={"WFD_CATCHMENT_ID": str})
     wy = wy[wy.YEAR == S.YEAR].copy()
     wy["ID"] = wy.WFD_CATCHMENT_ID.map(_normalise_wfd_id)
@@ -95,7 +122,11 @@ def load(cid: str):
 
 
 def pick_examples(inside: pd.DataFrame) -> pd.DataFrame:
-    """One representative ED per type: closest to the type's within-catchment median."""
+    """Select four representative EDs, one from each contrasting corner type.
+
+    Selection is restricted to EDs with >=80% of their area inside the catchment
+    so the examples are visually and geographically representative of the zoom.
+    """
     keys = ["DAIRY_SHARE_ADULT_PCT", "FOLLOWER_TO_ADULT_RATIO", "UNDER1_SHARE_FOLLOWERS_PCT",
             "BXB_SHARE_FOLLOWERS_PCT"]
     e = inside[inside.ELIGIBLE & (inside.SHARE_IN >= PICK_SHARE)]
@@ -115,12 +146,15 @@ def pick_examples(inside: pd.DataFrame) -> pd.DataFrame:
 
 
 def agg_type(agg: pd.Series) -> str:
+    """Classify the catchment aggregate using the same fixed thresholds as EDs."""
     one = pd.DataFrame({"DAIRY_SHARE_ADULT_PCT": [agg.DAIRY_SHARE_ADULT_PCT],
                         "FOLLOWER_TO_ADULT_RATIO": [agg.FOLLOWER_TO_ADULT_RATIO], "ELIGIBLE": [True]})
     return S.cattle_type(one).iloc[0]
 
 
 # ---------------------------------------------------------------- map helpers
+# Generic helpers retained for consistent map styling. The final main figure uses
+# the AgriSyn-style national and zoom panels defined later in this file.
 def base(ax, land, w, bounds, grid=True):
     land.plot(ax=ax, color=S.GREY_LAND, edgecolor="none", zorder=0)
     w.boundary.plot(ax=ax, color="white", linewidth=0.6, zorder=1)
@@ -151,13 +185,15 @@ def base(ax, land, w, bounds, grid=True):
 
 
 def scalebar(ax, km=10):
+    """Draw a compact alternating black/white scale bar in projected metres."""
     x0, x1 = ax.get_xlim()
     y0, y1 = ax.get_ylim()
     x = x1 - (x1 - x0) * 0.05 - km * 1000
     y = y0 + (y1 - y0) * 0.04
     h = (y1 - y0) * 0.012
     for i in range(2):
-        ax.add_patch(Rectangle((x + i * km * 500, y), km * 500, h, facecolor="black" if i == 0 else "white",
+        ax.add_patch(Rectangle((x + i * km * 500, y), km * 500, h,
+                               facecolor="black" if i == 0 else "white",
                                edgecolor="black", lw=0.5, zorder=8))
     for v, xx in ((0, x), (km // 2, x + km * 500), (km, x + km * 1000)):
         ax.text(xx, y + h * 1.6, f"{v}", ha="center", va="bottom", fontsize=5.8, zorder=8)
@@ -165,6 +201,7 @@ def scalebar(ax, km=10):
 
 
 def north(ax, x, y):
+    """Legacy helper retained for supplementary/older layouts; not used in final Fig. 5."""
     ax.annotate("N", xy=(x, y), xytext=(x, y - 0.12), xycoords="axes fraction",
                 ha="center", va="center", fontsize=8, fontweight="bold", zorder=9,
                 arrowprops=dict(facecolor="black", edgecolor="black", width=3, headwidth=9))
@@ -172,6 +209,7 @@ def north(ax, x, y):
 
 # ---------------------------------------------------------------- panels
 def panel_main(ax, side, land, w, target, name, cid, inside, edge, picks, agg, bounds):
+    """Legacy detailed catchment panel retained for reproducibility of earlier drafts."""
     base(ax, land, w, bounds, grid=False)
     edge.plot(ax=ax, color=OUTSIDE, edgecolor="white", lw=0.25, zorder=2)
     for t in S.TYPE_ORDER:
@@ -225,6 +263,7 @@ def panel_main(ax, side, land, w, target, name, cid, inside, edge, picks, agg, b
 
 
 def panel_small(fig, ax, land, w, target, inside, edge, agg, bounds, col, title, breaks, cm, fmt, letter):
+    """Legacy small-map helper retained for supplementary/detail variants."""
     base(ax, land, w, bounds, grid=False)
     basecm = mpl.colormaps[cm]
     cmap = mcolors.ListedColormap([basecm(p) for p in np.linspace(0.18, 0.95, len(breaks) + 1)])
@@ -249,10 +288,12 @@ def panel_small(fig, ax, land, w, target, inside, edge, agg, bounds, col, title,
 
 
 def cohort_column(fig, spec, row, head, sub, xmax, first):
+    """Draw one ED/catchment column: whole-herd bar plus follower pyramid."""
     g = spec.subgridspec(2, 1, height_ratios=[0.13, 1], hspace=0.12)
     axb = fig.add_subplot(g[0])
     axp = fig.add_subplot(g[1])
-    # whole-herd bar: three adult cohorts and followers by origin, % of all cattle
+
+    # Whole-herd bar: adults + followers by origin, as share of all cattle.
     left = 0.0
     tot = float(sum(row[c] for _, c, _, _ in HERD))
     plt.rcParams["hatch.color"] = "#1F4E79"
@@ -263,7 +304,8 @@ def cohort_column(fig, spec, row, head, sub, xmax, first):
     axb.set_xlim(0, 100); axb.set_ylim(-0.5, 0.5); axb.axis("off")
     axb.set_title(head, fontsize=6.8, fontweight="bold", loc="center", pad=10)
     axb.text(50, 0.62, sub, ha="center", va="bottom", fontsize=5.5, color="#555555")
-    # follower pyramid, % of followers
+
+    # Follower pyramid: sex-specific cohorts as share of followers only.
     fols = follower_cols()
     ftot = float(sum(row[f] + row[m] for _, _, f, m in fols))
     ys, labels = [], []
@@ -296,6 +338,7 @@ def cohort_column(fig, spec, row, head, sub, xmax, first):
 
 
 def panel_cohorts(fig, spec, picks, agg, cid):
+    """Panel c: compare four ED populations with the catchment aggregate."""
     cols = [(r, f"{r.LETTER}   {str(r.ED_NAME).title()}",
              f"{S.TYPE_SHORT[S.TYPE_ORDER.index(r.TYPE)]} · {int(r.TOTAL_CATTLE):,} cattle · "
              f"{r.FOLLOWER_TO_ADULT_RATIO:.1f} fol./cow") for _, r in picks.iterrows()]
@@ -310,15 +353,17 @@ def panel_cohorts(fig, spec, picks, agg, cid):
     axes = []
     for k, (r, head, s) in enumerate(cols):
         axes.append(cohort_column(fig, sub[k], r, head, s, xmax, k == 0))
-    for k, (axb, axp) in enumerate(axes):
+    for axb, axp in axes:
         axp.set_xlabel("% of followers", fontsize=5.8, labelpad=1)
-    # aggregate column set apart
     axes[-1][1].set_facecolor("#F5F5F5")
     return axes
 
 
 # ---------------------------------------------------------------- AgriSyn-style panels
+# The national panel shows classification after aggregation. The zoom then
+# re-opens one catchment to the ED systems contributing to that aggregate.
 def catchment_types(w: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """Classify all 46 released catchment aggregates using Figure 3 thresholds."""
     wy = pd.read_csv(S.H / "wfd_catchment_year.csv", dtype={"WFD_CATCHMENT_ID": str})
     wy = wy[wy.YEAR == S.YEAR].copy()
     wy["ID"] = wy.WFD_CATCHMENT_ID.map(_normalise_wfd_id)
@@ -331,6 +376,7 @@ def catchment_types(w: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
 
 
 def panel_national(ax, w, cid):
+    """Panel a: national map of aggregate catchment cattle-system types."""
     _, _, land = S.land_and_counties()
     g = catchment_types(w)
     land.plot(ax=ax, color=S.GREY_LAND, edgecolor="none")
@@ -351,12 +397,21 @@ def panel_national(ax, w, cid):
 
 
 def panel_zoom(ax, w, target, inside, edge, picks, agg, cid, name):
+    """Panel b: clip every intersecting ED piece and colour by whole-ED type.
+
+    The displayed ED count uses the >=50% descriptive rule only. It must not be
+    interpreted as the accounting rule for catchment totals.
+    """
     _, _, land = S.land_and_counties()
     tx0, ty0, tx1, ty1 = target.total_bounds
     pad = (tx1 - tx0) * 0.03
     land.plot(ax=ax, color=S.GREY_LAND, edgecolor="none", zorder=0)
     w.boundary.plot(ax=ax, color="white", lw=0.8, zorder=1)
-    pieces = pd.concat([inside, edge])  # every ED piece intersecting the catchment, clipped
+
+    # Every intersecting ED piece is coloured by its whole-ED cattle-system type.
+    # We no longer grey partial EDs; inside/edge is used only for descriptive
+    # counting and example selection.
+    pieces = pd.concat([inside, edge])
     for t in S.TYPE_ORDER:
         part = pieces[pieces.TYPE == t]
         if len(part):
@@ -364,6 +419,7 @@ def panel_zoom(ax, w, target, inside, edge, picks, agg, cid, name):
     nd = pieces[pieces.TYPE.isna()]
     if len(nd):
         nd.plot(ax=ax, facecolor=S.NODATA, edgecolor="#7F7F7F", hatch=S.NODATA_HATCH, lw=0.2, zorder=2)
+
     target.boundary.plot(ax=ax, color="black", lw=1.1, zorder=3)
     for _, r in picks.iterrows():
         q = r.geometry.representative_point()
@@ -375,6 +431,7 @@ def panel_zoom(ax, w, target, inside, edge, picks, agg, cid, name):
     ax.set_aspect("equal"); ax.set_axis_off()
     ax.set_xlabel(""); ax.set_ylabel("")
     scalebar(ax)
+
     counts = inside.TYPE.value_counts()
     S.vertical_key(ax, [S.TYPE_COLOURS[t] for t in S.TYPE_ORDER][::-1], S.TYPE_SHORT[::-1],
                    title="ED type", where=(0.66, 0.40, 0.04, 0.46))
@@ -386,20 +443,21 @@ def panel_zoom(ax, w, target, inside, edge, picks, agg, cid, name):
             transform=ax.transAxes, fontsize=5.8, va="top", ha="left", color=S.TEXT, linespacing=1.25)
 
 
-# ---------------------------------------------------------------- main
 def main():
+    """Build Figure 5 and export the selected-ED cohort table."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--catchment", default="25C")
     a = ap.parse_args()
     cid = _normalise_wfd_id(a.catchment)
+
     S.style()
     w, target, name, inside, edge, agg = load(cid)
     picks = pick_examples(inside)
+
     ed_year = pd.read_csv(S.H / "ed_year.csv", usecols=["YEAR", "CSOED", "ED"])
     ed_year = ed_year[ed_year.YEAR == S.YEAR].assign(CSOED=lambda x: x.CSOED.astype(str))
     picks = picks.merge(ed_year[["CSOED", "ED"]].rename(columns={"ED": "ED_NAME"}), on="CSOED", how="left")
     picks = gpd.GeoDataFrame(picks, geometry="geometry", crs=inside.crs)
-    _, _, land = S.land_and_counties()
 
     keep = ["CSOED", "ED_NAME", "TYPE", "TOTAL_CATTLE"] + [c for _, _, c in S.cohorts21()]
     tab = picks[["LETTER"] + keep].copy()
@@ -413,6 +471,7 @@ def main():
     panel_zoom(fig.add_subplot(top[1]), w, target, inside, edge, picks, agg, cid, name)
     low = fig.add_gridspec(1, 1, left=0.075, right=0.985, top=0.39, bottom=0.10)
     panel_cohorts(fig, low[0], picks, agg, cid)
+
     fig.text(0.01, 0.985, "a   Catchment aggregates, 2025", fontsize=8.5, fontweight="bold", va="top")
     fig.text(0.40, 0.985, f"b   {cid} {name}: the same catchment by ED", fontsize=8.5,
              fontweight="bold", va="top")
