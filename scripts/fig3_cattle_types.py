@@ -23,6 +23,15 @@ Writes:
 """
 from __future__ import annotations
 
+# -----------------------------------------------------------------------------
+# PAPER 1 REPORTING CODE
+# This script is a reporting/visualisation layer only. It does not modify the
+# GOBLIN-Spatial reconstruction or any frozen model inputs. All quantities are
+# read from the release tables and are transformed only for plotting or tabular
+# reporting. Comments below distinguish observed/control data from reconstructed
+# quantities where that distinction matters for interpretation.
+# -----------------------------------------------------------------------------
+
 import argparse
 
 import matplotlib.pyplot as plt
@@ -32,8 +41,10 @@ from matplotlib.patches import Patch, Rectangle
 
 import paper1_style as S
 
+# Display cap used only in the compact 21-cohort mini-profiles. Values above the
+# cap are explicitly broken and labelled, so the cap changes display, not data.
 XCAP = 14.0
-GROUPS = [  # (label, column or origin, colour, hatch, text colour on bar)
+GROUPS = [
     ("Dairy cows", "dairy_cows", S.DARK_DAIRY, None, "white"),
     ("Suckler cows", "suckler_cows", S.DARK_SUCKLER, None, "white"),
     ("Bulls", "bulls", S.BULL, None, "black"),
@@ -43,16 +54,17 @@ GROUPS = [  # (label, column or origin, colour, hatch, text colour on bar)
 ]
 ORIGIN_COLOUR = {"DxD": (S.DAIRY, None), "DxB": (S.DXB, "////"), "BxB": (S.SUCKLER, None)}
 ADULT_COLOUR = {"dairy_cows": S.DARK_DAIRY, "suckler_cows": S.DARK_SUCKLER, "bulls": S.BULL}
-SHORT_LABEL = {"Dairy cows": "Dairy cows", "Suckler cows": "Suckler cows", "Bulls": "Bulls"}
 
 
 def typed(year: int) -> pd.DataFrame:
+    """Attach the fixed rule-based cattle-system type to each eligible ED."""
     d = S.ed_signatures(year)
     d["TYPE"] = S.cattle_type(d)
     return d
 
 
 def table4(d: pd.DataFrame) -> pd.DataFrame:
+    """Build Table 4 from ED medians plus each type's share of national cattle."""
     e = d[d.TYPE.notna()]
     g = e.groupby("TYPE")
     t = pd.DataFrame({
@@ -70,7 +82,11 @@ def table4(d: pd.DataFrame) -> pd.DataFrame:
 
 
 def profiles(d: pd.DataFrame) -> pd.DataFrame:
-    """Rows = 21 cohorts (display order), columns = six types, values = % of the type's cattle."""
+    """Return complete 21-cohort profiles for the six cattle-system types.
+
+    Values are population-weighted shares: cohort head summed over all EDs in a
+    type divided by total cattle in those EDs. This is not a median ED profile.
+    """
     e = d[d.TYPE.notna()]
     cols = [c for _, _, c in S.cohorts21()]
     tot = e.groupby("TYPE")[cols].sum()
@@ -81,7 +97,7 @@ def profiles(d: pd.DataFrame) -> pd.DataFrame:
 
 
 def herd_groups(P: pd.DataFrame) -> pd.DataFrame:
-    """Six broad groups (% of cattle) from the 21-cohort profile."""
+    """Collapse 21 cohorts into six broad whole-herd groups for panel b."""
     out = {}
     for lab, key, *_ in GROUPS:
         if key in ADULT_COLOUR:
@@ -89,11 +105,13 @@ def herd_groups(P: pd.DataFrame) -> pd.DataFrame:
         else:
             rows = [c for _, grp, c in S.cohorts21() if grp == key]
             out[lab] = P.loc[rows].sum()
-    return pd.DataFrame(out)  # index = types
+    return pd.DataFrame(out)
 
 
-# ------------------------------------------------------------------ panels
+# Panel a answers WHERE the six systems occur. Panels b-c then explain WHAT
+# those mapped classes contain, first broadly and then at full cohort detail.
 def panel_map(ax, d):
+    """Panel a: categorical ED map using hue for orientation and tone for followers."""
     eds = S.model_eds()
     _, county, land = S.land_and_counties()
     g = eds.merge(d[["CSOED", "TYPE"]], on="CSOED", how="left", validate="one_to_one")
@@ -118,6 +136,7 @@ def panel_map(ax, d):
 
 
 def panel_bars(ax, G):
+    """Panel b: six 100% bars summarising whole-herd composition by type."""
     plt.rcParams["hatch.color"] = "#1F4E79"
     y = np.arange(len(S.TYPE_ORDER))[::-1]
     left = np.zeros(len(y))
@@ -133,7 +152,7 @@ def panel_bars(ax, G):
     ax.set_yticks(y)
     ax.set_yticklabels(S.TYPE_SHORT, fontsize=6.4)
     ax.tick_params(axis="y", length=0, pad=9)
-    for yi, t in zip(y, S.TYPE_ORDER):  # type colour chip beside each label
+    for yi, t in zip(y, S.TYPE_ORDER):
         ax.add_patch(Rectangle((-3.2, yi - 0.3), 2.2, 0.6, color=S.TYPE_COLOURS[t], lw=0,
                                clip_on=False))
     ax.set_xticks([0, 25, 50, 75, 100])
@@ -146,7 +165,7 @@ def panel_bars(ax, G):
 
 
 def profile_layout():
-    """y position of each of the 21 cohorts: F/M pairs touch, ages and origins are separated."""
+    """Return the cohort ordering used consistently in all six mini-profiles."""
     pos, y, prev_grp, prev_age = [], 0.0, None, None
     for lab, grp, col in S.cohorts21():
         age = lab.split()[-2] if grp != "Adults" else lab
@@ -162,6 +181,7 @@ def profile_layout():
 
 
 def mini_profile(ax, values: pd.Series, title: str, colour: str, labels: bool, mode: str, xmax: float):
+    """Draw one type's 21-cohort profile on the shared panel-c scale."""
     rows = S.cohorts21()
     ypos = profile_layout()
     for (lab, grp, col), yy in zip(rows, ypos):
@@ -194,7 +214,7 @@ def mini_profile(ax, values: pd.Series, title: str, colour: str, labels: bool, m
     if labels:
         tr = ax.get_yaxis_transform()
         for (lab, grp, col), yy in zip(rows, ypos):
-            if " female " in lab:  # one age label per F/M pair
+            if " female " in lab:
                 age = lab.split()[-2].replace("-", "–")
                 ax.text(-0.02, yy - 0.5, f"{age} yr", transform=tr, ha="right", va="center",
                         fontsize=5.3, color=S.TEXT)
@@ -208,7 +228,7 @@ def mini_profile(ax, values: pd.Series, title: str, colour: str, labels: bool, m
 
 
 def panel_profiles(fig, spec, P, mode: str):
-    """Six profiles: columns = suckler, mixed, dairy; rows = lower, higher follower intensity."""
+    """Panel c: 3 x 2 grid of complete cohort profiles for the six types."""
     xmax = XCAP if mode == "cap" else float(np.ceil(P.values.max() / 5) * 5)
     sub = spec.subgridspec(2, 3, hspace=0.22, wspace=0.10)
     axes = []
@@ -227,6 +247,7 @@ def panel_profiles(fig, spec, P, mode: str):
 
 
 def main():
+    """Build Figure 3, Table 4 and supplementary cohort-share tables."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--profile-scale", choices=["cap", "full"], default="cap",
                     help="cap = version A (chosen); full = version B (comparison only)")
@@ -257,7 +278,7 @@ def main():
     axb = fig.add_subplot(top[1])
     panel_bars(axb, G)
     mid = fig.add_gridspec(1, 1, left=0.10, right=0.975, top=0.455, bottom=0.06)
-    axes_c = panel_profiles(fig, mid[0], P, mode)
+    panel_profiles(fig, mid[0], P, mode)
     fig.text(0.01, 0.985, "a   Cattle-system types across EDs, 2025", fontsize=8.5, fontweight="bold", va="top")
     fig.text(0.50, 0.985, "b   Whole-herd composition of the six types", fontsize=8.5,
              fontweight="bold", va="top")
