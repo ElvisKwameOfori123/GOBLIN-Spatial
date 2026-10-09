@@ -9,11 +9,22 @@ Run from the repository root after scripts/build_historical_release.py.
 """
 from __future__ import annotations
 
+# -----------------------------------------------------------------------------
+# PAPER 1 REPORTING CODE
+# This script is a reporting/visualisation layer only. It does not modify the
+# GOBLIN-Spatial reconstruction or any frozen model inputs. All quantities are
+# read from the release tables and are transformed only for plotting or tabular
+# reporting. Comments below distinguish observed/control data from reconstructed
+# quantities where that distinction matters for interpretation.
+# -----------------------------------------------------------------------------
+
 import matplotlib.pyplot as plt
 from matplotlib.patches import FancyArrowPatch, FancyBboxPatch, Patch
 
 import paper1_style as S
 
+# Panel a uses colour only to distinguish the *role* of each evidence source.
+# These colours do not imply relative importance or data quality.
 ROLE = {  # role colour (light fills, colour-blind safe)
     "Spatial anchor": "#CFE3F2",
     "Annual control": "#FCE2B8",
@@ -43,6 +54,7 @@ OUTPUTS = [
 
 
 def box(ax, x, y, w, h, text, fc, fs=6.2, bold=False, ec="#7F7F7F"):
+    """Draw one rounded schematic box; presentation helper only."""
     ax.add_patch(FancyBboxPatch((x, y), w, h, boxstyle="round,pad=0.006,rounding_size=0.012",
                                 fc=fc, ec=ec, lw=0.5))
     ax.text(x + w / 2, y + h / 2, text, ha="center", va="center", fontsize=fs,
@@ -50,11 +62,13 @@ def box(ax, x, y, w, h, text, fc, fs=6.2, bold=False, ec="#7F7F7F"):
 
 
 def arrow(ax, x0, y0, x1, y1):
+    """Draw a directional arrow between reconstruction stages."""
     ax.add_patch(FancyArrowPatch((x0, y0), (x1, y1), arrowstyle="-|>", mutation_scale=7,
                                  lw=0.6, color="#555555", shrinkA=0, shrinkB=0))
 
 
 def panel_a(ax):
+    """Panel a: evidence sources -> reconstruction stages -> reporting outputs."""
     ax.set_xlim(0, 1); ax.set_ylim(0, 1); ax.axis("off")
     S.title(ax, "a", "Evidence, reconstruction and outputs")
     cols = [(0.01, 0.30, "Evidence"), (0.36, 0.33, "Reconstruction"), (0.75, 0.235, "Outputs")]
@@ -95,6 +109,7 @@ def panel_a(ax):
 
 
 def panel_b(ax):
+    """Panel b: schematic of the complete 21-cohort cattle representation."""
     eds = S.model_eds()
     raw, county, land = S.land_and_counties()
     w = S.wfd()
@@ -116,6 +131,7 @@ def panel_b(ax):
 
 
 def panel_c(ax):
+    """Panel c: study geography, showing model EDs and WFD catchments."""
     ax.set_xlim(0, 1); ax.set_ylim(0, 1); ax.axis("off")
     S.title(ax, "b", "21 cattle cohorts in every ED")
     # adults
@@ -150,6 +166,7 @@ def panel_c(ax):
 
 
 def main():
+    """Assemble and save Figure 1. No model quantities are recalculated here."""
     S.style()
     fig = plt.figure(figsize=(7.4, 7.2))
     gs = fig.add_gridspec(2, 2, width_ratios=[1.1, 1], height_ratios=[0.62, 1],
