@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 """Supplementary figure. Stable cattle numbers do not imply a stable cattle system (observed, 2010-2020).
 
-Panel a is reused as Figure 3d (fig3_cattle_types.py); panel b (the map) is supplementary.
+Both panels are supplementary in the final Paper 1 architecture. Figure 3 in the main
+text is limited to the 2025 system map, whole-herd bars and 21-cohort profiles.
 
 Uses only census cells published in both the 2010 and 2020 Censuses of Agriculture, for EDs
 with >= 10 adult cows in both years (S5_observed_restructuring_ed.csv). No reconstructed
@@ -19,6 +20,15 @@ Writes: reporting/paper1/figures/FigS_stable_herd_restructuring.{png,pdf}
 """
 from __future__ import annotations
 
+# -----------------------------------------------------------------------------
+# PAPER 1 REPORTING CODE
+# This script is a reporting/visualisation layer only. It does not modify the
+# GOBLIN-Spatial reconstruction or any frozen model inputs. All quantities are
+# read from the release tables and are transformed only for plotting or tabular
+# reporting. Comments below distinguish observed/control data from reconstructed
+# quantities where that distinction matters for interpretation.
+# -----------------------------------------------------------------------------
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -27,6 +37,7 @@ from matplotlib.patches import Patch
 import paper1_style as S
 from goblin_spatial.soil.overlay import canonical_csoed
 
+# Observed change thresholds used in the manuscript text and Supplement.
 STABLE_PCT, SHIFT_PP = 5.0, 10.0
 TO_DAIRY, TO_SUCKLER, LIMITED = S.DAIRY, S.SUCKLER, "#8C8C8C"
 BACKGROUND = "#EBEBEB"
@@ -38,10 +49,15 @@ def ed_key(k: str) -> str:
 
 
 def spearman(x, y) -> float:
+    """Spearman correlation computed as Pearson correlation of ranks."""
     return pd.Series(x).rank().corr(pd.Series(y).rank())
 
 
 def load() -> pd.DataFrame:
+    """Load the observed 2010-2020 census comparison and classify stable-herd EDs.
+
+    No reconstructed annual ED values enter this supplementary analysis.
+    """
     p = pd.read_csv(S.TAB / "S5_observed_restructuring_ed.csv", dtype={"KEY": str})
     p["STABLE"] = p.CATTLE_CHANGE_PCT.abs() <= STABLE_PCT
     p["CLASS"] = np.select(
@@ -55,6 +71,7 @@ def load() -> pd.DataFrame:
 
 
 def panel_a(ax, p, letter: str = "a", title: str = "Stable herds, shifting systems"):
+    """Scatter observed cattle-number change against change in dairy orientation."""
     rho_all = spearman(p.CATTLE_CHANGE_PCT, p.DS_CHANGE_PP)
     q = p[~p.ZERO_DAIRY_BOTH]
     rho_dairy = spearman(q.CATTLE_CHANGE_PCT, q.DS_CHANGE_PP)
@@ -86,6 +103,7 @@ def panel_a(ax, p, letter: str = "a", title: str = "Stable herds, shifting syste
 
 
 def panel_b(ax, p):
+    """Map only the observed stable-herd restructuring classes."""
     eds = S.model_eds().copy()
     eds["KEY_C"] = eds.CSOED.map(ed_key)
     g = eds.merge(p[["KEY_C", "CLASS"]].drop_duplicates("KEY_C"), on="KEY_C", how="left")
@@ -110,6 +128,7 @@ def panel_b(ax, p):
 
 
 def main():
+    """Build the supplementary observed-restructuring figure and ED output table."""
     S.style()
     p = load()
     fig = plt.figure(figsize=(7.4, 3.8))
@@ -121,9 +140,14 @@ def main():
     out = p.loc[p.STABLE, ["KEY", "County", "ED_NAME", "CATTLE_CHANGE_PCT", "DS10", "DS20",
                            "DS_CHANGE_PP", "CLASS"]].sort_values("DS_CHANGE_PP", ascending=False)
     out.round(2).to_csv(S.TAB / "S_stable_herd_eds_2010_2020.csv", index=False)
-    # observed 3 x 3 breeding-orientation transition (census only; thresholds of Figure 3)
-    cls = lambda v: pd.cut(v, [-1, 40, 60, 101], labels=["Suckler (< 40%)", "Mixed (40-60%)", "Dairy (> 60%)"])
-    tr = pd.crosstab(cls(p.DS10).rename("2010"), cls(p.DS20).rename("2020"), margins=True, margins_name="Total")
+
+    # Observed 3 x 3 breeding-orientation transition (census only; thresholds of Figure 3).
+    # A six-type transition is deliberately not attempted because census totals do
+    # not independently separate followers from bulls.
+    cls = lambda v: pd.cut(v, [-1, 40, 60, 101],
+                           labels=["Suckler (< 40%)", "Mixed (40-60%)", "Dairy (> 60%)"])
+    tr = pd.crosstab(cls(p.DS10).rename("2010"), cls(p.DS20).rename("2020"),
+                     margins=True, margins_name="Total")
     tr.to_csv(S.TAB / "S_orientation_transition_2010_2020.csv")
     m = tr.iloc[:3, :3].to_numpy()
     print(tr.to_string(), f"\nsame orientation {np.trace(m)} of {m.sum()}; toward dairy {np.triu(m, 1).sum()}; "
