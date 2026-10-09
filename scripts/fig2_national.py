@@ -13,16 +13,27 @@ Input: reporting/report_data/historical/national_year.csv
 """
 from __future__ import annotations
 
+# -----------------------------------------------------------------------------
+# PAPER 1 REPORTING CODE
+# This script is a reporting/visualisation layer only. It does not modify the
+# GOBLIN-Spatial reconstruction or any frozen model inputs. All quantities are
+# read from the release tables and are transformed only for plotting or tabular
+# reporting. Comments below distinguish observed/control data from reconstructed
+# quantities where that distinction matters for interpretation.
+# -----------------------------------------------------------------------------
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
 import paper1_style as S
 
+# 2020 is shown as the census anchor, but the figure tells the full 2015-2025 story.
 START, CENSUS, END = 2015, 2020, 2025
 
 
 def load() -> pd.DataFrame:
+    """Load national annual release data and assert whole-herd accounting closure."""
     n = pd.read_csv(S.H / "national_year.csv").set_index("YEAR").loc[START:END]
     parts = n[["dairy_cows", "suckler_cows", "bulls", "DXD_FOLLOWERS", "DXB_FOLLOWERS",
                "BXB_FOLLOWERS"]].sum(axis=1)
@@ -32,6 +43,11 @@ def load() -> pd.DataFrame:
 
 
 def panel_a(ax, n):
+    """Panel a: official annual livestock controls indexed to 2015 = 100.
+
+    Indexing makes divergent trajectories directly comparable without implying
+    that species have similar absolute population sizes.
+    """
     series = [("TOTAL_CATTLE", "Total cattle", "black", "-", "o"),
               ("DAIRY_COW", "Dairy cows", S.DAIRY, "-", "s"),
               ("OTHER_COW", "Suckler cows", S.SUCKLER, "-", "^"),
@@ -63,6 +79,11 @@ def panel_a(ax, n):
 
 
 def panel_b(ax, n):
+    """Panel b: whole-cattle composition in 2015, 2020 and 2025.
+
+    Adult cow and bull totals close to the national account; DxD/DxB/BxB follower
+    origin is the reconstructed component. Each annual bar sums to 100%.
+    """
     groups = [("Dairy cows", "dairy_cows", S.DARK_DAIRY, None, "white"),
               ("DxD followers", "DXD_FOLLOWERS", S.DAIRY, None, "white"),
               ("DxB followers", "DXB_FOLLOWERS", S.DXB, "////", "black"),
@@ -80,7 +101,6 @@ def panel_b(ax, n):
             if v[i] >= 3.5:
                 ax.text(i, base[i] + v[i] / 2, f"{v[i]:.0f}%", ha="center", va="center",
                         fontsize=6.3, color=tc, fontweight="bold")
-        # label groups at the right of the last bar
         ax.text(2.36, base[2] + v[2] / 2, lab, va="center", fontsize=6.4, color=S.TEXT)
         base = [b + vi for b, vi in zip(base, v)]
     ax.set_xticks(list(x))
@@ -96,10 +116,11 @@ def panel_b(ax, n):
 
 
 CTY_BREAKS = [5, 10, 15]
-CTY_COLOURS = ["#DEEBF7", "#9ECAE1", "#4292C6", "#08519C"]   # 0-5, 5-10, 10-15, >= 15 pp
+CTY_COLOURS = ["#DEEBF7", "#9ECAE1", "#4292C6", "#08519C"]
 
 
 def county_change() -> pd.DataFrame:
+    """Return *observed* county change in dairy share between the two censuses."""
     c = pd.read_csv("data/inputs/baseline/00_CSO_Census_County_Livestock_2010_2020.csv")
     c["DS"] = 100 * c.DAIRY_COW / (c.DAIRY_COW + c.OTHER_COW)
     p = c.pivot(index="COUNTY", columns="CENSUS_YEAR", values="DS")
@@ -111,6 +132,7 @@ def county_change() -> pd.DataFrame:
 
 
 def census_county(name: str) -> str:
+    """Normalise county names so census data join cleanly to frozen geometry."""
     n = name.replace(" County", "").replace(" City", "")
     if n in ("Dún Laoghaire-Rathdown", "Fingal", "South Dublin", "Dublin"):
         return "Dublin"
@@ -120,6 +142,7 @@ def census_county(name: str) -> str:
 
 
 def panel_c(ax, p):
+    """Panel c: map observed county restructuring, not reconstructed ED change."""
     raw, _, land = S.land_and_counties()
     g = raw.copy()
     g["COUNTY"] = g.COUNTYNAME.map(census_county)
@@ -145,6 +168,7 @@ def panel_c(ax, p):
 
 
 def main():
+    """Assemble Figure 2 and save the county-change data used by panel c."""
     n = load()
     S.style()
     fig, (a, b, c) = plt.subplots(1, 3, figsize=(7.4, 3.6), gridspec_kw={"width_ratios": [1.0, 0.95, 1.2]})
